@@ -1,0 +1,225 @@
+/**
+ * vivimusic Project (C) 2026
+ * Licensed under GPL-3.0 | See git history for contributors
+ */
+package com.music.vivi.ui.screens
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import coil3.compose.AsyncImage
+import com.music.innertube.utils.parseCookieString
+import com.music.vivi.R
+import com.music.vivi.constants.AccountEmailKey
+import com.music.vivi.constants.InnerTubeCookieKey
+import com.music.vivi.utils.rememberPreference
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
+import com.music.vivi.utils.listItemShape
+import com.music.vivi.viewmodels.AccountSettingsViewModel
+import com.music.vivi.utils.SyncStatus
+import com.music.vivi.viewmodels.HomeViewModel
+import kotlinx.coroutines.flow.map
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun SettingsDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onNavigate: (String) -> Unit,
+    homeViewModel: HomeViewModel,
+    accountSettingsViewModel: AccountSettingsViewModel = hiltViewModel(),
+) {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    
+    val (innerTubeCookie, _) = rememberPreference(InnerTubeCookieKey, "")
+    val isLoggedIn = remember(innerTubeCookie) {
+        innerTubeCookie.isNotEmpty() && "SAPISID" in parseCookieString(innerTubeCookie)
+    }
+
+    val (accountEmail, _) = rememberPreference(AccountEmailKey, "")
+    val accountName by homeViewModel.accountName.collectAsState()
+    val accountImageUrl by homeViewModel.accountImageUrl.collectAsState()
+
+    val syncState by accountSettingsViewModel.syncState.collectAsState()
+    val isSyncing = syncState.overallStatus is SyncStatus.Syncing
+    
+    val itemContainerColor = if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        offset = DpOffset(x = 0.dp, y = (-48).dp),
+        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier
+            .width(280.dp) // Ensures consistent wide size inspired by Chrome menus
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        // --- Section 1: Account, Sync & Integrations ---
+        val section1Count = if (isLoggedIn) 3 else 2
+        Surface(
+            shape = listItemShape(0, section1Count, 16.dp),
+            color = itemContainerColor,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 1.dp)
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = if (isLoggedIn) {
+                            accountName.ifEmpty { accountEmail.ifEmpty { "Account" } }
+                        } else {
+                            stringResource(R.string.account)
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                leadingIcon = {
+                    if (isLoggedIn && !accountImageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = accountImageUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.account),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+                onClick = {
+                    onDismissRequest()
+                    if (isLoggedIn) {
+                        onNavigate("settings/account")
+                    } else {
+                        onNavigate("login")
+                    }
+                },
+                modifier = Modifier.height(48.dp)
+            )
+        }
+        
+        if (isLoggedIn) {
+            DropdownMenuIconItem(
+                title = if (isSyncing) stringResource(R.string.library_syncing) else stringResource(R.string.library_force_sync),
+                icon = R.drawable.sync,
+                shape = listItemShape(1, section1Count, 16.dp),
+                containerColor = itemContainerColor,
+                onClick = {
+                    if (!isSyncing) accountSettingsViewModel.forceSyncLibrary()
+                }
+            )
+        }
+        
+        DropdownMenuIconItem(
+            title = stringResource(R.string.integrations),
+            icon = R.drawable.extension,
+            shape = listItemShape(section1Count - 1, section1Count, 16.dp),
+            containerColor = itemContainerColor,
+            onClick = {
+                onDismissRequest()
+                onNavigate("settings/integrations")
+            }
+        )
+
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // --- Section 3: Settings ---
+        DropdownMenuIconItem(
+            title = stringResource(R.string.settings),
+            icon = R.drawable.settings,
+            shape = listItemShape(0, 1, 16.dp),
+            containerColor = itemContainerColor,
+            onClick = {
+                onDismissRequest()
+                onNavigate("settings")
+            }
+        )
+    }
+}
+
+@Composable
+fun DropdownMenuIconItem(
+    title: String,
+    icon: Int,
+    trailingText: String? = null,
+    shape: Shape = RectangleShape,
+    containerColor: Color = Color.Transparent,
+    onClick: () -> Unit = {}
+) {
+    Surface(
+        shape = shape,
+        color = containerColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 1.dp)
+    ) {
+        DropdownMenuItem(
+            text = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = icon),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            trailingIcon = trailingText?.let {
+                {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            onClick = onClick,
+            modifier = Modifier.height(48.dp)
+        )
+    }
+}
