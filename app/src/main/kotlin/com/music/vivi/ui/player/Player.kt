@@ -959,7 +959,8 @@ fun BottomSheetPlayer(
                                 wanderEpoch++
                             }
                         }
-                        val wanderMaxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight)
+                        // Zoom y recorrido moderados: con zoom 2.4 solo se veía el centro de la carátula (un solo color).
+                        val wanderMaxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight) * 0.35f
                         val blurWander = rememberBlurWanderDrift(
                             // Se congela al cerrar: la salida solo deshace el zoom, sin seguir moviéndose.
                             active = usePlayerV2 && lyricsOpen,
@@ -971,12 +972,14 @@ fun BottomSheetPlayer(
                                 width = maxWidth,
                                 height = maxHeight,
                                 restScale = 1.2f,
-                                driftScale = 2.4f,
+                                driftScale = 1.5f,
                                 maxDriftDp = wanderMaxDrift
                             )
                         }
+                        // Mientras la canción real no ha cargado, se usa la carátula guardada de la última vez.
+                        val lastSavedThumb = remember { com.music.vivi.lyrics.LastLyricsCache.thumbnail(context) }
                         AnimatedContent(
-                            targetState = mediaMetadata?.thumbnailUrl,
+                            targetState = mediaMetadata?.thumbnailUrl ?: lastSavedThumb,
                             transitionSpec = {
                                 fadeIn(tween(800)).togetherWith(fadeOut(tween(800)))
                             },
@@ -1030,7 +1033,7 @@ fun BottomSheetPlayer(
                                                     .requiredSize(backdropFootprint)
                                                     .graphicsLayer {
                                                         val progress = lyricsProgress
-                                                        val scale = 1.2f + (2.4f - 1.2f) * progress
+                                                        val scale = 1.2f + (1.5f - 1.2f) * progress
                                                         scaleX = scale
                                                         scaleY = scale
                                                         // Entrada (sin cambios): primero el zoom desde el centro; el

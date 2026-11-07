@@ -13,11 +13,17 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Bundle
 import android.widget.RemoteViews
+import androidx.core.graphics.ColorUtils
+import androidx.palette.graphics.Palette
 import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
@@ -138,7 +144,7 @@ class vivimusicWidgetManager @Inject constructor(
             }
             else -> {
                 // Full layout
-                createRemoteViews(title, artist, albumArt, isPlaying, isLiked, duration, currentPosition)
+                createRemoteViews(title, artist, albumArt, isPlaying, isLiked, duration, currentPosition, minWidth, minHeight)
             }
         }
     }
@@ -150,7 +156,9 @@ class vivimusicWidgetManager @Inject constructor(
         isPlaying: Boolean,
         isLiked: Boolean,
         duration: Long = 0,
-        currentPosition: Long = 0
+        currentPosition: Long = 0,
+        widthDp: Int = 250,
+        heightDp: Int = 110
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_music_player)
 
@@ -159,11 +167,16 @@ class vivimusicWidgetManager @Inject constructor(
         views.setTextViewText(R.id.widget_artist_name, artist)
 
         // Portada de fondo (estilo notificación)
-        if (albumArt != null) {
-            views.setImageViewBitmap(R.id.widget_background_art, albumArt)
-        } else {
-            views.setImageViewBitmap(R.id.widget_background_art, getRoundedDefaultIcon(48f))
-        }
+        views.setImageViewBitmap(
+            R.id.widget_background_art,
+            buildNotificationStyleBackground(albumArt, widthDp, heightDp)
+        )
+
+        // Barra de progreso con un color claro sacado de la carátula (como en la notificación)
+        val accent = pickAccentColor(albumArt)
+        views.setInt(R.id.widget_progress_fill, "setColorFilter", accent)
+        views.setInt(R.id.widget_progress_track, "setColorFilter", Color.WHITE)
+        views.setInt(R.id.widget_progress_track, "setImageAlpha", 80)
 
         // Set play/pause icon
         val playPauseIcon = if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
@@ -191,6 +204,86 @@ class vivimusicWidgetManager @Inject constructor(
         views.setOnClickPendingIntent(R.id.widget_next_button, getNextIntent())
 
         return views
+    }
+
+    /**
+     * Fondo del widget estilo notificación: la carátula recortada al tamaño del widget, suavizada,
+     * con esquinas redondeadas y un oscurecido leve para que el texto blanco se lea.
+     */
+    private var bgCacheArt: Bitmap? = null
+    private var bgCacheSize: Pair<Int, Int>? = null
+    private var bgCacheBitmap: Bitmap? = null
+
+    private fun buildNotificationStyleBackground(art: Bitmap?, widthDp: Int, heightDp: Int): Bitmap {
+        // El widget se actualiza seguido (progreso): el fondo solo se vuelve a dibujar si cambia la carátula o el tamaño.
+        val cached = bgCacheBitmap
+        if (cached != null && art === bgCacheArt && bgCacheSize == (widthDp to heightDp)) return cached
+        val built = drawNotificationStyleBackground(art, widthDp, heightDp)
+        bgCacheArt = art
+        bgCacheSize = widthDp to heightDp
+        bgCacheBitmap = built
+        return built
+    }
+
+    private fun drawNotificationStyleBackground(art: Bitmap?, widthDp: Int, heightDp: Int): Bitmap {
+        val density = context.resources.displayMetrics.density
+        var w = (widthDp.coerceAtLeast(180) * density).toInt()
+        var h = (heightDp.coerceAtLeast(110) * density).toInt()
+        val k = minOf(1f, 640f / maxOf(w, h))
+        w = (w * k).toInt().coerceAtLeast(1)
+        h = (h * k).toInt().coerceAtLeast(1)
+
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val radius = 28f * density * k
+        val clip = Path().apply {
+            addRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), radius, radius, Path.Direction.CW)
+        }
+        canvas.clipPath(clip)
+
+        if (art != null) {
+            // Recorte central de la carátula con la misma proporción que el widget
+            val aspect = w.toFloat() / h
+            val side = minOf(art.width, art.height)
+            val srcW = if (aspect >= 1f) side else (side * aspect).toInt().coerceAtLeast(1)
+            val srcH = if (aspect >= 1f) (side / aspect).toInt().coerceAtLeast(1) else side
+            val left = (art.width - srcW) / 2
+            val top = (art.height - srcH) / 2
+            val src = Rect(left, top, left + srcW, top + srcH)
+            // Suavizado: se dibuja pequeña y se vuelve a agrandar
+            val tiny = Bitmap.createBitmap((w / 10).coerceAtLeast(2), (h / 10).coerceAtLeast(2), Bitmap.Config.ARGB_8888)
+            Canvas(tiny).drawBitmap(art, src, Rect(0, 0, tiny.width, tiny.height), Paint(Paint.FILTER_BITMAP_FLAG))
+            canvas.drawBitmap(tiny, null, RectF(0f, 0f, w.toFloat(), h.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG))
+            tiny.recycle()
+        } else {
+            canvas.drawColor(0xFF2B2B2B.toInt())
+        }
+
+        val shade = Paint().apply {
+            shader = LinearGradient(
+                0f, 0f, 0f, h.toFloat(),
+                0x40000000, 0x75000000,
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shade)
+        return out
+    }
+
+    private var accentSourceArt: Bitmap? = null
+    private var accentColor: Int = Color.WHITE
+
+    /** Color claro de la carátula para la barra de progreso (blanco si no hay carátula). */
+    private fun pickAccentColor(art: Bitmap?): Int {
+        if (art == null) return Color.WHITE
+        if (art === accentSourceArt) return accentColor
+        val palette = Palette.from(art).maximumColorCount(12).generate()
+        val base = palette.getLightVibrantColor(
+            palette.getVibrantColor(palette.getDominantColor(Color.WHITE))
+        )
+        accentColor = ColorUtils.blendARGB(base, Color.WHITE, 0.45f)
+        accentSourceArt = art
+        return accentColor
     }
 
     private fun formatTime(ms: Long): String {

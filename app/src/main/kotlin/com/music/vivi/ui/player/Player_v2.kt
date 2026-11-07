@@ -348,7 +348,8 @@ fun PlayerV2(
         if (!isCasting) {
             val rawDuration = playerConnection.player.duration
             position = playerConnection.player.currentPosition.coerceAtLeast(0L)
-            duration = if (rawDuration == C.TIME_UNSET || rawDuration < 0) 0L else rawDuration
+            // Si el reproductor aún no sabe la duración (cola restaurándose), se usa la de la canción guardada.
+            duration = if (rawDuration == C.TIME_UNSET || rawDuration < 0) (mediaMetadata?.duration ?: 0) * 1000L else rawDuration
         }
     }
 

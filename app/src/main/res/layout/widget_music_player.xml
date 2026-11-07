@@ -17,13 +17,6 @@
         android:src="@mipmap/ic_launcher"
         android:contentDescription="@string/album_art" />
 
-    <!-- Capa oscura (ImageView: un View simple no se permite en widgets) -->
-    <ImageView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#99000000"
-        android:importantForAccessibility="no" />
-
     <!-- Contenido -->
     <LinearLayout
         android:layout_width="match_parent"

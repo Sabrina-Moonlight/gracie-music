@@ -205,7 +205,11 @@ fun LyricsV2(
             exitSelection()
         }
     }
-    val currentLyrics by playerConnection.currentLyrics.collectAsState(initial = null)
+    val cacheContext = LocalContext.current
+    // Empieza con la letra guardada de la última canción: así no sale el círculo de carga al abrir la app.
+    val currentLyrics by playerConnection.currentLyrics.collectAsState(
+        initial = remember { com.music.vivi.lyrics.LastLyricsCache.lyricsFor(cacheContext, mediaMetadata?.id) }
+    )
     
     val isGuest = false
 
@@ -249,6 +253,14 @@ fun LyricsV2(
         }
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    LaunchedEffect(currentLyrics, mediaMetadata?.id) {
+        val entry = currentLyrics
+        val meta = mediaMetadata
+        if (entry != null && meta != null && entry.id == meta.id) {
+            com.music.vivi.lyrics.LastLyricsCache.save(cacheContext, entry.id, entry.lyrics, entry.provider, meta.thumbnailUrl)
         }
     }
 

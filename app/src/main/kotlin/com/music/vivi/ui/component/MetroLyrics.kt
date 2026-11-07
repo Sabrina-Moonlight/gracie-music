@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
@@ -61,6 +62,7 @@ import com.music.vivi.constants.LyricsRomanizeAsMainKey
 import com.music.vivi.lyrics.LyricsEntry
 import com.music.vivi.ui.screens.settings.LyricsPosition
 import com.music.vivi.utils.rememberPreference
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.cos
@@ -360,8 +362,28 @@ private fun WordLevelCanvasLyrics(
 
     var smoothPosition by remember { mutableLongStateOf(effectivePlaybackPosition + lyricsOffset) }
     
+    // Si la línea termina con una palabra con guiones ("lo-lo-love"), se sigue animando un momento
+    // después de que termina para que la última sílaba haga su rebote final.
+    val endsWithHyphenGroup = words.size >= 2 && words[words.size - 2].text.endsWith("-")
+    var lingerAfterEnd by remember { mutableStateOf(false) }
+    var wasActive by remember { mutableStateOf(false) }
     LaunchedEffect(isActiveLine) {
-        if (isActiveLine && playerConnection != null) {
+        if (isActiveLine) {
+            wasActive = true
+            lingerAfterEnd = false
+        } else if (wasActive) {
+            wasActive = false
+            if (endsWithHyphenGroup) {
+                lingerAfterEnd = true
+                delay(700L)
+                lingerAfterEnd = false
+            }
+        }
+    }
+    val animateLine = isActiveLine || lingerAfterEnd
+
+    LaunchedEffect(animateLine) {
+        if (animateLine && playerConnection != null) {
             var lastPlayerPos = playerConnection.player.currentPosition
             var lastUpdateTime = System.currentTimeMillis()
             
@@ -383,8 +405,8 @@ private fun WordLevelCanvasLyrics(
         }
     }
 
-    LaunchedEffect(effectivePlaybackPosition, isActiveLine) {
-        if (!isActiveLine) {
+    LaunchedEffect(effectivePlaybackPosition, animateLine) {
+        if (!animateLine) {
             smoothPosition = effectivePlaybackPosition
         }
     }
@@ -528,7 +550,7 @@ private fun WordLevelCanvasLyrics(
             )
         ) {
             if (mainText.isEmpty()) return@Canvas
-            if (!isActiveLine) {
+            if (!animateLine) {
                 drawText(layoutResult, color = lineColor)
             } else {
                 if (isRtlText) {

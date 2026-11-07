@@ -27,11 +27,15 @@ import com.music.vivi.playback.queues.Queue
 import com.music.vivi.playback.queues.YouTubeQueue
 import com.music.innertube.pages.RadioChip
 import com.music.vivi.utils.reportException
+import com.music.vivi.models.MediaMetadata
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -131,7 +135,32 @@ class PlayerConnection(
         player.playbackState != STATE_ENDED && player.playWhenReady
     )
     
-    val mediaMetadata = MutableStateFlow(player.currentMetadata)
+    private val appContext = context.applicationContext
+
+    // Al abrir la app la cola tarda en restaurarse: mientras tanto se usa la última canción guardada
+    // para que el reproductor se vea ya cargado (carátula, título, artista...).
+    private val cachedMetadata: MediaMetadata? =
+        if (player.currentMetadata == null) LastMetadataCache.load(appContext) else null
+    private var showingCachedMetadata = cachedMetadata != null
+
+    val mediaMetadata = MutableStateFlow(player.currentMetadata ?: cachedMetadata)
+
+    init {
+        scope.launch(Dispatchers.IO) {
+            mediaMetadata.filterNotNull().distinctUntilChanged().collect { LastMetadataCache.save(appContext, it) }
+        }
+    }
+
+    // Una canción real reemplaza a la guardada; un "nada" no la borra hasta que haya habido una real.
+    private fun setMetadata(real: MediaMetadata?) {
+        if (real != null) {
+            showingCachedMetadata = false
+            mediaMetadata.value = real
+        } else if (!showingCachedMetadata) {
+            mediaMetadata.value = null
+        }
+    }
+
     val currentSong =
         mediaMetadata.flatMapLatest {
             database.song(it?.id)
@@ -199,7 +228,7 @@ class PlayerConnection(
         // Refresh all state from new player
         playbackState.value = newPlayer.playbackState
         playWhenReady.value = newPlayer.playWhenReady
-        mediaMetadata.value = newPlayer.currentMetadata
+        setMetadata(newPlayer.currentMetadata)
         queueTitle.value = service.queueTitle
         queueWindows.value = newPlayer.getQueueWindows()
         currentWindowIndex.value = newPlayer.getCurrentQueueIndex()
@@ -442,7 +471,7 @@ class PlayerConnection(
         mediaItem: MediaItem?,
         reason: Int,
     ) {
-        mediaMetadata.value = mediaItem?.metadata
+        setMetadata(mediaItem?.metadata)
         currentMediaItemIndex.value = player.currentMediaItemIndex
         currentWindowIndex.value = player.getCurrentQueueIndex()
         updateCanSkipPreviousAndNext()
@@ -456,7 +485,7 @@ class PlayerConnection(
         timeline: Timeline,
         reason: Int,
     ) {
-        mediaMetadata.value = player.currentMetadata
+        setMetadata(player.currentMetadata)
         queueWindows.value = player.getQueueWindows()
         queueTitle.value = service.queueTitle
         currentMediaItemIndex.value = player.currentMediaItemIndex
