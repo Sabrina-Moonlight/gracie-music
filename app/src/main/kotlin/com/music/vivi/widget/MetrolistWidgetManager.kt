@@ -185,16 +185,16 @@ class vivimusicWidgetManager @Inject constructor(
         )
 
         // Set play/pause icon
-        val playPauseIcon = if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
+        val playPauseIcon = if (isPlaying) R.drawable.ic_widget_n_pause else R.drawable.ic_widget_n_play
         views.setImageViewResource(R.id.widget_play_pause, playPauseIcon)
 
         // Set like icon - using nav style (purple) for main widget
-        val likeIcon = if (isLiked) R.drawable.ic_widget_heart_nav else R.drawable.ic_widget_heart_outline_nav
+        val likeIcon = if (isLiked) R.drawable.ic_widget_n_heart_filled else R.drawable.ic_widget_n_heart_outline
         views.setImageViewResource(R.id.widget_like_button, likeIcon)
 
         // Repetir: apagado = tenue, todo = blanco, una = blanco con "1"
         val repeatOne = repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE
-        views.setImageViewResource(R.id.widget_repeat_button, if (repeatOne) R.drawable.repeat_one else R.drawable.repeat)
+        views.setImageViewResource(R.id.widget_repeat_button, if (repeatOne) R.drawable.ic_widget_n_repeat_one else R.drawable.ic_widget_n_repeat)
         views.setInt(
             R.id.widget_repeat_button,
             "setImageAlpha",
@@ -214,16 +214,19 @@ class vivimusicWidgetManager @Inject constructor(
         return views
     }
 
-    /** Barra de progreso: línea con onda suave en lo reproducido, resto tenue y círculo al final. */
+    /**
+     * Barra de progreso como la de la notificación: barra recta (lo reproducido en color, el resto tenue),
+     * con una ola suave que se levanta encima de lo reproducido y un círculo al final.
+     */
     private fun drawProgressBar(widthDp: Int, fraction: Float, color: Int): Bitmap {
         val d = context.resources.displayMetrics.density
         val w = ((widthDp - 36).coerceAtLeast(120) * d).toInt()
         val h = (24 * d).toInt()
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        val cy = h / 2f
-        val stroke = 6f * d
-        val thumbR = 8f * d
+        val cy = h * 0.68f
+        val stroke = 5f * d
+        val thumbR = 7f * d
         val x0 = thumbR
         val x1 = w - thumbR
         val xe = x0 + fraction * (x1 - x0)
@@ -238,17 +241,30 @@ class vivimusicWidgetManager @Inject constructor(
 
         line.color = color
         if (xe > x0 + 1f) {
-            val amp = 1.6f * d
-            val wave = 26f * d
+            c.drawLine(x0, cy, xe, cy, line)
+
+            // Ola: relleno translúcido sobre la barra; la altura crece y baja suave (como una loma).
+            val span = xe - x0
+            val amp = 9f * d * (span / (24f * d)).coerceAtMost(1f)
+            val wave = 64f * d
             val path = Path().apply {
                 moveTo(x0, cy)
                 var x = x0
                 while (x < xe) {
                     x = minOf(x + 2f, xe)
-                    lineTo(x, cy + amp * kotlin.math.sin(((x - x0) / wave) * 2.0 * Math.PI).toFloat())
+                    val t = (x - x0) / span
+                    val envelope = kotlin.math.sin(Math.PI * t).toFloat()
+                    val crest = 0.5f + 0.5f * kotlin.math.sin(((x - x0) / wave) * 2.0 * Math.PI - Math.PI / 2).toFloat()
+                    lineTo(x, cy - stroke / 2f - amp * envelope * crest)
                 }
+                lineTo(xe, cy)
+                close()
             }
-            c.drawPath(path, line)
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                this.color = ColorUtils.setAlphaComponent(color, 120)
+            }
+            c.drawPath(path, fill)
         }
 
         val thumb = Paint(Paint.ANTI_ALIAS_FLAG).apply {

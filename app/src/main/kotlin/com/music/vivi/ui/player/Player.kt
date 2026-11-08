@@ -789,8 +789,8 @@ fun BottomSheetPlayer(
                             blurBackdropFootprint(
                                 width = maxWidth,
                                 height = maxHeight,
-                                restScale = 1.2f,
-                                driftScale = 1.5f,
+                                restScale = 1.1f,
+                                driftScale = 1.35f,
                                 maxDriftDp = wanderMaxDrift
                             )
                         }
@@ -811,12 +811,31 @@ fun BottomSheetPlayer(
                                         .graphicsLayer { clip = true }
                                 ) {
                                     if (usePlayerV2) {
-                                        // Fondo de manchas: colores principales de la carátula en
-                                        // posiciones aleatorias (fijas por canción), sin deformar la imagen.
-                                        PaletteBlobBackdrop(
-                                            thumbnailUrl = thumbnailUrl,
-                                            moving = lyricsOpen,
-                                            progress = lyricsProgress
+                                        // Carátula difuminada que se acerca y se mueve despacio al abrir
+                                        // las letras. Zoom pequeño para que se vean más colores; sin giro.
+                                        // La imagen ocupa TODA la pantalla (toda la carátula, no solo el centro),
+                                        // así se ven todos sus colores. El movimiento nunca deja huecos en los bordes.
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(thumbnailUrl)
+                                                .size(100, 100)
+                                                .allowHardware(false)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.FillBounds,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .graphicsLayer {
+                                                    val p = lyricsProgress
+                                                    val s = 1.1f + 0.1f * p
+                                                    scaleX = s
+                                                    scaleY = s
+                                                    val nx = (blurWander.xDp.floatValue / wanderMaxDrift).coerceIn(-1f, 1f)
+                                                    val ny = (blurWander.yDp.floatValue / wanderMaxDrift).coerceIn(-1f, 1f)
+                                                    translationX = nx * (s - 1f) / 2f * size.width * p
+                                                    translationY = ny * (s - 1f) / 2f * size.height * p
+                                                }
+                                                .blur(64.dp)
                                         )
                                         Box(
                                             modifier = Modifier
