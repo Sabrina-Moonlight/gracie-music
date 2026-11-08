@@ -3663,7 +3663,7 @@ class MusicService :
                 if (player.isPlaying) {
                     updateWidgetUI(true)
                 }
-                delay(200)
+                delay(125) // ~8 veces por segundo
             }
         }
     }

@@ -782,7 +782,7 @@ fun BottomSheetPlayer(
                         val wanderMaxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight) * 0.6f
                         val blurWander = rememberBlurWanderDrift(
                             // Se congela al cerrar: la salida solo deshace el zoom, sin seguir moviéndose.
-                            active = usePlayerV2 && lyricsOpen,
+                            active = false,
                             maxDriftDp = wanderMaxDrift,
                             resetKey = wanderEpoch
                         )
@@ -830,17 +830,9 @@ fun BottomSheetPlayer(
                                                 modifier = Modifier
                                                     .requiredSize(backdropFootprint.width, backdropFootprint.height)
                                                     .graphicsLayer {
-                                                        val p = lyricsProgress
-                                                        val s = 1.2f + (1.8f - 1.2f) * p
-                                                        scaleX = s
-                                                        scaleY = s
-                                                        if (p > 0f) {
-                                                            translationX = blurWander.xDp.floatValue * density * p
-                                                            translationY = blurWander.yDp.floatValue * density * p
-                                                            rotationZ = 30f * kotlin.math.sin(
-                                                                blurWander.rotationDeg.floatValue * 2f * Math.PI.toFloat() / 180f
-                                                            ) * p
-                                                        }
+                                                        // Fondo quieto: igual con o sin letras (sin zoom ni movimiento).
+                                                        scaleX = 1.2f
+                                                        scaleY = 1.2f
                                                         compositingStrategy = CompositingStrategy.Offscreen
                                                     }
                                                     .blur(64.dp)

@@ -224,7 +224,7 @@ class vivimusicWidgetManager @Inject constructor(
         val h = (24 * d).toInt()
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        val cy = h * 0.68f
+        val cy = h - 8f * d
         val stroke = 5f * d
         val thumbR = 7f * d
         val x0 = thumbR
@@ -250,8 +250,8 @@ class vivimusicWidgetManager @Inject constructor(
             val grow = (span / (24f * d)).coerceAtMost(1f)
             val waves = arrayOf(
                 // longitud (dp), velocidad lateral, velocidad de subida/bajada, fase, altura (dp), alpha
-                doubleArrayOf(70.0, 1.3, 1.1, 0.0, 9.0, 110.0),
-                doubleArrayOf(46.0, -1.8, 0.8, 2.1, 7.0, 90.0)
+                doubleArrayOf(70.0, 1.3, 1.1, 0.0, 12.0, 110.0),
+                doubleArrayOf(46.0, -1.8, 0.8, 2.1, 9.5, 90.0)
             )
             for (wv in waves) {
                 val lambda = wv[0] * d
