@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="local_music_title">Downloads</string>
+    <string name="local_music_play">Play</string>
+    <string name="local_music_shuffle">Shuffle</string>
+    <string name="local_music_refresh">Refresh</string>
+    <string name="local_music_search_hint">Search your music</string>
+    <string name="local_music_empty">No music found on this device.</string>
+    <string name="local_music_permission_needed">Gracie needs permission to read the music saved on your phone.</string>
+    <string name="local_music_grant">Allow access</string>
+    <string name="local_music_open_settings">Open settings</string>
+    <plurals name="local_music_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
+</resources>

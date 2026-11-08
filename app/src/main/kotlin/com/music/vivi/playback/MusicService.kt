@@ -46,6 +46,8 @@ import androidx.media3.common.Timeline
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -70,6 +72,12 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.amr.AmrExtractor
+import androidx.media3.extractor.flac.FlacExtractor
+import androidx.media3.extractor.mp3.Mp3Extractor
+import androidx.media3.extractor.ogg.OggExtractor
+import androidx.media3.extractor.ts.AdtsExtractor
+import androidx.media3.extractor.wav.WavExtractor
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.media3.extractor.mp4.Mp4Extractor
@@ -156,6 +164,8 @@ import com.music.vivi.eq.EqualizerService
 import com.music.vivi.eq.audio.CustomEqualizerAudioProcessor
 import com.music.vivi.eq.data.EQProfileRepository
 import com.music.vivi.extensions.SilentHandler
+import com.music.vivi.localmedia.isLocalMediaId
+import com.music.vivi.localmedia.isLocalMediaUri
 import com.music.vivi.extensions.collect
 import com.music.vivi.extensions.collectLatest
 import com.music.vivi.extensions.toggleRepeatMode
@@ -2278,6 +2288,16 @@ class MusicService :
         }
         previousMediaItemIndex = player.currentMediaItemIndex
 
+        // Música local: se guarda la canción en la base (sin ponerla en la biblioteca) para que
+        // las letras y el resto de funciones del reproductor la encuentren.
+        mediaItem?.takeIf { it.mediaId.isLocalMediaId() }?.metadata?.let { localMetadata ->
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    database.query { insert(localMetadata) { song -> song.copy(isLocal = true) } }
+                }
+            }
+        }
+
         lastPlaybackSpeed = -1.0f // force update song
 
         setupLoudnessEnhancer()
@@ -2370,6 +2390,9 @@ class MusicService :
         if (nextIndex == C.INDEX_UNSET) return  // no next track (end of queue / repeat-one)
 
         val nextMediaId = player.getMediaItemAt(nextIndex).mediaId
+
+        // Los archivos locales no necesitan resolver ninguna dirección en YouTube
+        if (nextMediaId.isLocalMediaId()) return
 
         // Nothing to do — URL is already cached and hasn't expired
         val cachedEntry = songUrlCache[nextMediaId]
@@ -3206,7 +3229,53 @@ class MusicService :
         }
     }
 
+    /**
+     * Música local (content:// o file://): se lee el archivo tal cual, sin YouTube y sin caché,
+     * así el audio llega sin ninguna conversión. Todo lo demás sigue el camino de siempre.
+     */
     private fun createDataSourceFactory(): DataSource.Factory {
+        val remoteFactory = createRemoteDataSourceFactory()
+        val localFactory = DefaultDataSource.Factory(this)
+        return DataSource.Factory {
+            LocalRoutingDataSource { dataSpec ->
+                if (dataSpec.uri.isLocalMediaUri()) localFactory else remoteFactory
+            }
+        }
+    }
+
+    private class LocalRoutingDataSource(
+        private val selectFactory: (DataSpec) -> DataSource.Factory,
+    ) : DataSource {
+        private val transferListeners = mutableListOf<TransferListener>()
+        private var delegate: DataSource? = null
+
+        override fun addTransferListener(transferListener: TransferListener) {
+            transferListeners += transferListener
+            delegate?.addTransferListener(transferListener)
+        }
+
+        override fun open(dataSpec: DataSpec): Long {
+            val selected = selectFactory(dataSpec).createDataSource()
+            transferListeners.forEach(selected::addTransferListener)
+            delegate = selected
+            return selected.open(dataSpec)
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+            checkNotNull(delegate).read(buffer, offset, length)
+
+        override fun getUri(): android.net.Uri? = delegate?.uri
+
+        override fun getResponseHeaders(): Map<String, List<String>> = delegate?.responseHeaders ?: emptyMap()
+
+        override fun close() {
+            val selected = delegate
+            delegate = null
+            selected?.close()
+        }
+    }
+
+    private fun createRemoteDataSourceFactory(): DataSource.Factory {
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
 
@@ -3327,6 +3396,13 @@ class MusicService :
                     MatroskaExtractor(),        // .webm / Opus
                     FragmentedMp4Extractor(),   // fragmented .mp4 / AAC (YouTube)
                     Mp4Extractor(),             // regular .mp4 / AAC (JioSaavn)
+                    // Archivos de música locales
+                    FlacExtractor(),
+                    WavExtractor(),
+                    OggExtractor(),
+                    Mp3Extractor(),
+                    AdtsExtractor(),
+                    AmrExtractor(),
                 )
             },
         )
@@ -3428,7 +3504,7 @@ class MusicService :
             }
         }
 
-        if (playbackStats.totalPlayTimeMs >= historyDurationMs) {
+        if (playbackStats.totalPlayTimeMs >= historyDurationMs && !mediaItem.mediaId.isLocalMediaId()) {
             CoroutineScope(Dispatchers.IO).launch {
                 // Must fetch a FRESH playback tracking object. Cached `playbackUrl`s from the database
                 // have expired security nonces/signatures and will result in YouTube silently ignoring the
@@ -3663,7 +3739,7 @@ class MusicService :
                 if (player.isPlaying) {
                     updateWidgetUI(true)
                 }
-                delay(125) // ~8 veces por segundo
+                delay(200)
             }
         }
     }

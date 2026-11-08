@@ -31,6 +31,7 @@ import com.music.vivi.ui.screens.artist.ArtistScreen
 import com.music.vivi.ui.screens.artist.ArtistSongsScreen
 import com.music.vivi.ui.screens.equalizer.EqScreen
 import com.music.vivi.ui.screens.library.LibraryScreen
+import com.music.vivi.ui.screens.library.LocalMusicScreen
 import com.music.vivi.ui.screens.playlist.LocalPlaylistScreen
 import com.music.vivi.ui.screens.playlist.OnlinePlaylistScreen
 import com.music.vivi.ui.screens.search.OnlineSearchResult
@@ -91,6 +92,10 @@ fun NavGraphBuilder.navigationBuilder(
 
     composable(Screens.Library.route) {
         LibraryScreen(navController)
+    }
+
+    composable(Screens.Local.route) {
+        LocalMusicScreen(navController)
     }
 
 

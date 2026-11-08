@@ -13,6 +13,7 @@ import com.music.vivi.constants.LyricsProviderOrderKey
 import com.music.vivi.constants.PreferredLyricsProvider
 import com.music.vivi.constants.PreferredLyricsProviderKey
 import com.music.vivi.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
+import com.music.vivi.localmedia.isLocalMediaId
 import com.music.vivi.extensions.toEnum
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.utils.NetworkConnectivityObserver
@@ -107,7 +108,10 @@ constructor(
                     val channel = kotlinx.coroutines.channels.Channel<Triple<Int, String, String>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
                     
                     val jobs = providers.mapIndexedNotNull { index, provider ->
-                        if (provider.isEnabled(context)) {
+                        // Los proveedores de YouTube buscan por id de video: no aplican a archivos locales.
+                        val needsVideoId = provider === YouTubeLyricsProvider ||
+                            provider === YouTubeSubtitleLyricsProvider
+                        if (provider.isEnabled(context) && !(needsVideoId && mediaMetadata.id.isLocalMediaId())) {
                             launch {
                                 try {
                                     val result = provider.getLyrics(
