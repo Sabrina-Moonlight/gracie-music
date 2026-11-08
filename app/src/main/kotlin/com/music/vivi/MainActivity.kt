@@ -995,11 +995,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val onSearchLongClick: () -> Unit = remember(navController) {
-                                {
-                                    navController.navigate("recognition") {
-                                        launchSingleTop = true
-                                    }
-                                }
+                                { }
                             }
 
                             // Pre-calculate values for graphicsLayer to avoid reading state during composition
@@ -1151,11 +1147,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val onRailSearchLongClick: () -> Unit = remember(navController) {
-                                {
-                                    navController.navigate("recognition") {
-                                        launchSingleTop = true
-                                    }
-                                }
+                                { }
                             }
 
                             if (showRail && currentRoute != "wrapped" && currentRoute != "update") {

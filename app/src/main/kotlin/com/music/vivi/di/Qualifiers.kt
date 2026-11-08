@@ -13,10 +13,6 @@ annotation class PlayerCache
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
-annotation class SpotifyCanvasCache
-
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
 annotation class DownloadCache
 
 @Qualifier

@@ -15,10 +15,7 @@ import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.utils.completed
 import com.music.innertube.utils.parseCookieString
-import com.music.lastfm.LastFM
-import com.music.lastfm.models.PendingFavorite
 import com.music.vivi.constants.InnerTubeCookieKey
-import com.music.vivi.constants.LastFMUseSendLikes
 import com.music.vivi.constants.LastFullSyncKey
 import com.music.vivi.constants.SYNC_COOLDOWN
 import com.music.vivi.db.MusicDatabase
@@ -113,8 +110,6 @@ class SyncUtils @Inject constructor(
     private val _syncState = MutableStateFlow(SyncState())
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
 
-    private var lastfmSendLikes = false
-
     companion object {
         private const val MAX_RETRIES = 3
         private const val INITIAL_RETRY_DELAY_MS = 1000L
@@ -122,13 +117,6 @@ class SyncUtils @Inject constructor(
     }
 
     init {
-        context.dataStore.data
-            .map { it[LastFMUseSendLikes] ?: false }
-            .distinctUntilChanged()
-            .collectLatest(syncScope) {
-                lastfmSendLikes = it
-            }
-
         startProcessingQueue()
     }
 
@@ -415,26 +403,6 @@ class SyncUtils @Inject constructor(
             Timber.e(e, "Failed to like song on YouTube: ${s.id}")
         }
 
-        if (lastfmSendLikes) {
-            try {
-                val dbSong = database.song(s.id).firstOrNull()
-                val artist = dbSong?.artists?.joinToString { a -> a.name } ?: ""
-                
-                val result = LastFM.setLoveStatus(
-                    artist = artist,
-                    track = s.title,
-                    love = s.liked
-                )
-                if (result.isFailure) {
-                    FavoriteCache.save(
-                        context,
-                        PendingFavorite(artist, s.title, s.liked)
-                    )
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to update LastFM love status")
-            }
-        }
     }
 
     private suspend fun executeSyncLikedSongs() = withContext(Dispatchers.IO) {

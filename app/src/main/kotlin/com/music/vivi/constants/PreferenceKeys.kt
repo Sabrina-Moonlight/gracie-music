@@ -96,7 +96,6 @@ val EnableLrcLibKey = booleanPreferencesKey("enableLrclib")
 val EnableLrcRedKey = booleanPreferencesKey("enableLrcRed")
 val EnableBetterLyricsKey = booleanPreferencesKey("enableBetterLyrics")
 val EnableMusixmatchKey = booleanPreferencesKey("enableMusixmatch")
-val EnableSpotifyLyricsKey = booleanPreferencesKey("enableSpotifyLyrics")
 
 val EnableYouLyPlusKey = booleanPreferencesKey("enableYouLyPlus")
 val EnablePaxsenixKey = booleanPreferencesKey("enablePaxsenix")
@@ -222,45 +221,18 @@ enum class CrossfadeCurve {
 
 val MaxImageCacheSizeKey = intPreferencesKey("maxImageCacheSize")
 val MaxSongCacheSizeKey = intPreferencesKey("maxSongCacheSize")
-val MaxSpotifyCanvasCacheSizeKey = intPreferencesKey("maxSpotifyCanvasCacheSize")
 
 
 val PauseListenHistoryKey = booleanPreferencesKey("pauseListenHistory")
 val PauseSearchHistoryKey = booleanPreferencesKey("pauseSearchHistory")
 val DisableScreenshotKey = booleanPreferencesKey("disableScreenshot")
 
-val DiscordTokenKey = stringPreferencesKey("discordToken")
-val DiscordInfoDismissedKey = booleanPreferencesKey("discordInfoDismissed")
-val DiscordUsernameKey = stringPreferencesKey("discordUsername")
-val DiscordNameKey = stringPreferencesKey("discordName")
-val EnableDiscordRPCKey = booleanPreferencesKey("discordRPCEnable")
-val DiscordUseDetailsKey = booleanPreferencesKey("discordUseDetails")
-val DiscordAvatarKey = stringPreferencesKey("discordAvatar")
-val DiscordStatusKey = stringPreferencesKey("discordStatus")
-val DiscordButton1TextKey = stringPreferencesKey("discordButton1Text")
-val DiscordButton1VisibleKey = booleanPreferencesKey("discordButton1Visible")
-val DiscordButton2TextKey = stringPreferencesKey("discordButton2Text")
-val DiscordButton2VisibleKey = booleanPreferencesKey("discordButton2Visible")
-val DiscordActivityTypeKey = stringPreferencesKey("discordActivityType")
-val DiscordActivityNameKey = stringPreferencesKey("discordActivityName")
-val DiscordAdvancedModeKey = booleanPreferencesKey("discordAdvancedMode")
 
 // Google Cast
 val EnableGoogleCastKey = booleanPreferencesKey("enableGoogleCast")
 
-val LastFMSessionKey = stringPreferencesKey("lastfmSession")
-val LastFMUsernameKey = stringPreferencesKey("lastfmUsername")
-val LastFMAvatarUrlKey = stringPreferencesKey("lastfmAvatarUrl")
-val LastFMScrobbleCountKey = stringPreferencesKey("lastfmScrobbleCount")
-val SpotifySessionKey = stringPreferencesKey("spotifySession")
-val EnableLastFMScrobblingKey = booleanPreferencesKey("lastfmScrobblingEnable")
-val LastFMUseNowPlaying = booleanPreferencesKey("lastfmUseNowPlaying")
 
-val LastFMUseSendLikes = booleanPreferencesKey("lastfmUseSendLikes")
 
-val ScrobbleDelayPercentKey = floatPreferencesKey("scrobbleDelayPercent")
-val ScrobbleMinSongDurationKey = intPreferencesKey("scrobbleMinSongDuration")
-val ScrobbleDelaySecondsKey = intPreferencesKey("scrobbleDelaySeconds")
 
 val ChipSortTypeKey = stringPreferencesKey("chipSortType")
 val LibraryMixFilterKey = stringPreferencesKey("libraryMixFilter")
@@ -450,7 +422,6 @@ val RotatingThumbnailKey = booleanPreferencesKey("rotatingThumbnail")
 val CanvasThumbnailAnimationKey = booleanPreferencesKey("canvasThumbnailAnimation")
 val MotionartworkSourceKey = stringPreferencesKey("canvasSource")
 val CanvasLoadOnlyWifiKey = booleanPreferencesKey("canvasLoadOnlyWifi")
-val SpotifyCanvasEnabledKey = booleanPreferencesKey("spotifyCanvasEnabled")
 
 // Data Saver
 val DataSaverKey = booleanPreferencesKey("dataSaver")

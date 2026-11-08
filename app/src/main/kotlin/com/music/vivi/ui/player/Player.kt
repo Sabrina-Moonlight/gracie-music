@@ -111,6 +111,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -244,21 +245,8 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.music.vivi.Motionartwork.apple.AppleMusicMotionartworkProvider
-import com.music.vivi.Motionartwork.Motionartwork
-import com.music.vivi.Motionartwork.tidal.TidalMotionartworkProvider
-import com.music.vivi.Motionartwork.vivimusic.ViviMusicMotionartworkProvider
-import com.music.vivi.constants.MotionartworkSource
-import com.music.vivi.constants.MotionartworkSourceKey
-import com.music.vivi.constants.CanvasThumbnailAnimationKey
-import com.music.vivi.constants.SpotifyCanvasEnabledKey
-import com.music.spotify.Spotify
-import com.music.spotify.SpotifyCanvasProvider
-import com.music.vivi.constants.CanvasLoadOnlyWifiKey
 import com.music.vivi.extensions.metadata
-import com.music.vivi.ui.player.MotionartworkPlaybackCache
 import com.music.vivi.utils.isWifiConnected
-import com.music.vivi.utils.SpotifySessionManager
 import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -298,10 +286,6 @@ fun BottomSheetPlayer(
         if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
     }
 
-    val enableCanvas by rememberPreference(CanvasThumbnailAnimationKey, true)
-    val (motionartworkSource) = rememberEnumPreference(MotionartworkSourceKey, defaultValue = MotionartworkSource.AUTO)
-    val canvasLoadOnlyWifi by rememberPreference(CanvasLoadOnlyWifiKey, defaultValue = false)
-    val spotifyCanvasEnabled by rememberPreference(SpotifyCanvasEnabledKey, false)
     val usePlayerV2 by rememberPreference(UsePlayerV2Key, false)
 
     val shouldUseDarkButtonColors = remember(playerBackground, useDarkTheme) {
@@ -565,146 +549,8 @@ fun BottomSheetPlayer(
     )
 
     val albumTitle = mediaMetadata?.album?.title
-    var canvasArtwork by remember(mediaMetadata?.id, albumTitle) { mutableStateOf<Motionartwork?>(null) }
-    var canvasFetchInFlight by remember(mediaMetadata?.id, albumTitle) { mutableStateOf(false) }
-    var spotifyCanvasUrl by remember(mediaMetadata?.id, albumTitle) { mutableStateOf<String?>(null) }
     
     val isNetworkConnected by (LocalPlayerConnection.current?.service?.connectivityObserver?.networkStatus ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState(initial = false)
-
-    LaunchedEffect(mediaMetadata?.id, albumTitle, playerBackground, motionartworkSource, spotifyCanvasEnabled, Spotify.accessToken, isNetworkConnected) {
-        val item = mediaMetadata ?: return@LaunchedEffect
-        
-        if (!spotifyCanvasEnabled) {
-            spotifyCanvasUrl = null
-        } else {
-            val prefs = context.getSharedPreferences("spotify_canvas_url_map", android.content.Context.MODE_PRIVATE)
-            val cachedUrl = prefs.getString(item.id, null)
-            if (cachedUrl != null) {
-                spotifyCanvasUrl = cachedUrl
-                timber.log.Timber.d("SpotifyCanvas: Loaded url from local SharedPreferences cache for offline bypass - ID: ${item.id}")
-            } else {
-                val accessToken = SpotifySessionManager.getValidAccessToken(context)
-                if (accessToken != null && (!canvasLoadOnlyWifi || isWifiConnected(context))) {
-                    timber.log.Timber.d("SpotifyCanvas: Triggering Canvas fetch for track: ${item.title}")
-                    withContext(Dispatchers.IO) {
-                        // Try REST API first as it's more reliable
-                        val trackId = Spotify.searchTrackRest("${item.title} ${item.artists.joinToString { it.name }}") 
-                            ?: Spotify.searchTrack("${item.title} ${item.artists.joinToString { it.name }}")?.id
-
-                        timber.log.Timber.d("SpotifyCanvas: Resolved Track ID from search: $trackId")
-
-                        if (trackId != null) {
-                            val canvasRes = SpotifyCanvasProvider.getCanvasUrl(trackId, accessToken)
-                            timber.log.Timber.d("SpotifyCanvas: Canvas URL extraction result: $canvasRes")
-                            val fetchedUrl = canvasRes.getOrNull()
-                            if (fetchedUrl != null) {
-                                prefs.edit().putString(item.id, fetchedUrl).apply()
-                            }
-                            withContext(Dispatchers.Main) {
-                                spotifyCanvasUrl = fetchedUrl
-                            }
-                        }
-                    }
-                } else {
-                    timber.log.Timber.d("SpotifyCanvas: Conditions not met to fetch. canvasEnabled=$spotifyCanvasEnabled, tokenReady=${Spotify.accessToken != null}, itemReady=${item != null}")
-                }
-            }
-        }
-
-        if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC || !enableCanvas) {
-            canvasArtwork = null
-            return@LaunchedEffect
-        }
-        if (canvasLoadOnlyWifi && !isWifiConnected(context)) {
-            canvasArtwork = null
-            return@LaunchedEffect
-        }
-        
-        val cacheKey = "${item.id}:${motionartworkSource.name}"
-        // Use cached artwork if available
-        MotionartworkPlaybackCache.get(cacheKey)?.let { cached ->
-            canvasArtwork = cached
-            spotifyCanvasUrl = null // Prioritize Motionartwork, disable Spotify Canvas
-            return@LaunchedEffect
-        }
-
-        if (canvasFetchInFlight) return@LaunchedEffect
-        canvasFetchInFlight = true
-        
-        withContext(Dispatchers.IO) {
-            val storefront = Locale.getDefault().country.lowercase(Locale.ROOT).takeIf { it.length == 2 } ?: "us"
-            val requestedTitle = item.title
-            val requestedArtist = item.artists.joinToString { it.name }
-            val requestedAlbum = item.album?.title ?: ""
-
-            val s = requestedTitle
-            val a = requestedArtist
-
-            android.util.Log.d("CanvasDebug", "=== Canvas Fetch START ===")
-            android.util.Log.d("CanvasDebug", "Source     : $motionartworkSource")
-            android.util.Log.d("CanvasDebug", "Storefront : $storefront")
-            android.util.Log.d("CanvasDebug", "Title      : '$requestedTitle'")
-            android.util.Log.d("CanvasDebug", "Artist     : '$requestedArtist'")
-            android.util.Log.d("CanvasDebug", "Album      : '$requestedAlbum' (blank=${requestedAlbum.isBlank()})")
-
-            val fetched = when (motionartworkSource) {
-                MotionartworkSource.AUTO -> {
-                    AppleMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum, storefront)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
-                        ?: TidalMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
-                        ?: ViviMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
-                }
-                MotionartworkSource.APPLE_MUSIC -> {
-                    AppleMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum, storefront)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
-                MotionartworkSource.VIVIMUSIC -> {
-                    ViviMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
-                MotionartworkSource.TIDAL -> {
-                    TidalMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
-            }
-
-            android.util.Log.d("CanvasDebug", "Fetched artwork: ${if (fetched == null) "NULL" else "non-null"}")
-            if (fetched != null) {
-                android.util.Log.d("CanvasDebug", "  artwork.name      : '${fetched.name}'")
-                android.util.Log.d("CanvasDebug", "  artwork.artist    : '${fetched.artist}'")
-                android.util.Log.d("CanvasDebug", "  artwork.albumName : '${fetched.albumName}'")
-                android.util.Log.d("CanvasDebug", "  artwork.animUrl   : '${fetched.preferredAnimationUrl}'")
-            }
-
-            val validated = fetched?.let { artwork ->
-                // For AUTO mode validation is already done per-provider inside takeIf.
-                // For single-source modes this block acts as the safety net.
-                val passes = validateMotionartworkMatch(artwork, requestedTitle, requestedArtist, requestedAlbum)
-
-                android.util.Log.d("CanvasDebug", "Validation:")
-                android.util.Log.d("CanvasDebug", "  artistMatches  : ${artwork.artist.orEmpty().trim().equals(requestedArtist.trim(), ignoreCase = true)}  ('${artwork.artist?.trim()}' vs '${requestedArtist.trim()}')")
-                android.util.Log.d("CanvasDebug", "  songMatches    : ${artwork.name.orEmpty().trim().equals(requestedTitle.trim(), ignoreCase = true)}  ('${artwork.name?.trim()}' vs '${requestedTitle.trim()}')")
-                android.util.Log.d("CanvasDebug", "  albumMatches   : ${artwork.albumName.orEmpty().trim().equals(requestedAlbum.trim(), ignoreCase = true)}  ('${artwork.albumName?.trim()}' vs '${requestedAlbum.trim()}')")
-                android.util.Log.d("CanvasDebug", "  RESULT         : $passes")
-
-                if (passes) artwork else null
-            }
-
-            android.util.Log.d("CanvasDebug", "Final validated: ${if (validated == null) "NULL (canvas will NOT show)" else "OK (canvas will show)"}")
-            android.util.Log.d("CanvasDebug", "=== Canvas Fetch END ===")
-
-            withContext(Dispatchers.Main) {
-                canvasArtwork = validated
-                if (validated != null) {
-                    MotionartworkPlaybackCache.put(cacheKey, validated)
-                    spotifyCanvasUrl = null // Prioritize Motionartwork, disable Spotify Canvas
-                }
-                canvasFetchInFlight = false
-            }
-        }
-    }
 
     val (textButtonColor, iconButtonColor) = when {
         playerBackground == PlayerBackgroundStyle.BLUR || 
@@ -901,35 +747,7 @@ fun BottomSheetPlayer(
                     .fillMaxSize()
                     .background(bottomSheetBackgroundColor)
             ) {
-                if (spotifyCanvasUrl != null && !usePlayerV2) {
-                    val overlayAlpha by animateFloatAsState(
-                        targetValue = if (showInlineLyrics) 0.85f else 0.4f,
-                        label = "canvasDimmer"
-                    )
-                    androidx.compose.animation.AnimatedContent(
-                        targetState = spotifyCanvasUrl,
-                        transitionSpec = { fadeIn(tween(800)) togetherWith fadeOut(tween(800)) },
-                        label = "spotifyCanvasBackground"
-                    ) { url ->
-                        if (url != null) {
-                            Box(modifier = Modifier.fillMaxSize().alpha(backgroundAlpha)) {
-                                if (backgroundAlpha > 0.01f) {
-                                    BackgroundVideoView(
-                                        videoUrl = url,
-                                        isPlaying = isPlaying,
-                                        resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = overlayAlpha))
-                                )
-                            }
-                        }
-                    }
-                } else when (playerBackground) {
+                when (playerBackground) {
                     PlayerBackgroundStyle.BLUR -> {
                       BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                         // Apple Music v17: al abrir las letras, la carátula difuminada se acerca y
@@ -993,71 +811,13 @@ fun BottomSheetPlayer(
                                         .graphicsLayer { clip = true }
                                 ) {
                                     if (usePlayerV2) {
-                                        // Apple Music v17: fondo estilo Natune. Carátula recortada y
-                                        // ampliada 1.2x, blur 64dp y degradado oscuro (más claro arriba)
-                                        // para que los colores de la carátula "iluminen" los bordes.
-                                        Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            // Capa en reposo (zoom 1.2x, sin giro). Solo existe mientras
-                                            // se cierran las letras: queda debajo y la otra se funde sobre ella.
-                                            if (exitingBackdrop) {
-                                                AsyncImage(
-                                                    model = ImageRequest.Builder(context)
-                                                        .data(thumbnailUrl)
-                                                        .size(256, 256)
-                                                        .allowHardware(false)
-                                                        .build(),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier
-                                                        .requiredSize(backdropFootprint)
-                                                        .graphicsLayer {
-                                                            scaleX = 1.2f
-                                                            scaleY = 1.2f
-                                                            compositingStrategy = CompositingStrategy.Offscreen
-                                                        }
-                                                        .blur(64.dp)
-                                                )
-                                            }
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(context)
-                                                    .data(thumbnailUrl)
-                                                    .size(256, 256)
-                                                    .allowHardware(false)
-                                                    .build(),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .requiredSize(backdropFootprint)
-                                                    .graphicsLayer {
-                                                        val progress = lyricsProgress
-                                                        val scale = 1.2f + (1.5f - 1.2f) * progress
-                                                        scaleX = scale
-                                                        scaleY = scale
-                                                        // Entrada (sin cambios): primero el zoom desde el centro; el
-                                                        // movimiento y el giro entran después (a partir del 35 % del
-                                                        // recorrido), de forma lineal.
-                                                        // Salida: el movimiento queda congelado y la capa se funde
-                                                        // sobre el fondo en reposo mientras el zoom se deshace.
-                                                        val closing = !lyricsOpen && progress > 0f
-                                                        val motion = if (closing) {
-                                                            motionAtClose
-                                                        } else {
-                                                            ((progress - 0.35f) / 0.65f).coerceIn(0f, 1f)
-                                                        }
-                                                        if (motion > 0f) {
-                                                            translationX = blurWander.xDp.floatValue * density * motion
-                                                            translationY = blurWander.yDp.floatValue * density * motion
-                                                            rotationZ = blurWander.rotationDeg.floatValue * motion
-                                                        }
-                                                        alpha = if (closing) progress else 1f
-                                                        compositingStrategy = CompositingStrategy.Offscreen
-                                                    }
-                                                    .blur(64.dp)
-                                            )
-                                        }
+                                        // Fondo de manchas: colores principales de la carátula en
+                                        // posiciones aleatorias (fijas por canción), sin deformar la imagen.
+                                        PaletteBlobBackdrop(
+                                            thumbnailUrl = thumbnailUrl,
+                                            moving = lyricsOpen,
+                                            progress = lyricsProgress
+                                        )
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
@@ -1350,14 +1110,6 @@ fun BottomSheetPlayer(
                                             modifier = Modifier.fillMaxSize()
                                         )
 
-                                        if (enableCanvas && canvasArtwork != null && backgroundAlpha > 0.01f) {
-                                            BackgroundVideoView(
-                                                videoUrl = canvasArtwork?.animatedTall ?: canvasArtwork?.animated ?: canvasArtwork?.videoUrl ?: "",
-                                                isPlaying = isPlaying,
-                                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        }
                                     }
                                     
                                     // Layer 3: Dynamic overlay for depth
@@ -1550,7 +1302,7 @@ fun BottomSheetPlayer(
                     .padding(horizontal = PlayerHorizontalPadding),
             ) {
                 AnimatedContent(
-                    targetState = showInlineLyrics || spotifyCanvasUrl != null,
+                    targetState = showInlineLyrics,
                     label = "ThumbnailAnimation"
                 ) { showSmallThumbnail ->
                     if (showSmallThumbnail) {
@@ -2851,7 +2603,7 @@ fun BottomSheetPlayer(
                                     showLyrics = showLyrics,
                                     positionProvider = { sliderPosition ?: effectivePosition }
                                 )
-                            } else if (spotifyCanvasUrl == null && playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
+                            } else if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
                                 Thumbnail(
                                     sliderPositionProvider = sliderPositionProvider,
                                     modifier = Modifier.animateContentSize(),
@@ -2913,7 +2665,7 @@ fun BottomSheetPlayer(
                                     showLyrics = showLyrics,
                                     positionProvider = { sliderPosition ?: effectivePosition }
                                 )
-                            } else if (spotifyCanvasUrl == null && playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
+                            } else if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
                                 Thumbnail(
                                     sliderPositionProvider = sliderPositionProvider,
                                     modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection),
@@ -3058,20 +2810,8 @@ private fun BackgroundVideoView(
         }
     }
 
-    val spotifyCanvasCache = LocalPlayerConnection.current?.service?.spotifyCanvasCache
-
     val exoPlayer = remember {
-        val defaultDataSourceFactory = DefaultDataSource.Factory(context)
-        val mediaSourceFactory = if (spotifyCanvasCache != null) {
-            val cacheDataSourceFactory = CacheDataSource.Factory()
-                .setCache(spotifyCanvasCache)
-                .setUpstreamDataSourceFactory(defaultDataSourceFactory)
-                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-            DefaultMediaSourceFactory(context)
-                .setDataSourceFactory(cacheDataSourceFactory)
-        } else {
-            DefaultMediaSourceFactory(context)
-        }
+        val mediaSourceFactory = DefaultMediaSourceFactory(context)
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -3164,5 +2904,126 @@ private fun BackgroundVideoView(
             }
         },
         modifier = modifier.alpha(alpha)
+    )
+}
+
+
+private val backdropPaletteCache = HashMap<String, List<Color>>()
+
+private fun backdropBrighten(rgb: Int): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(rgb, hsv)
+    hsv[2] = hsv[2].coerceAtLeast(0.6f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
+}
+
+private suspend fun extractBackdropColors(context: Context, url: String): List<Color> {
+    val request = ImageRequest.Builder(context)
+        .data(url)
+        .size(128, 128)
+        .allowHardware(false)
+        .build()
+    val bitmap = runCatching { context.imageLoader.execute(request).image?.toBitmap() }
+        .getOrNull() ?: return emptyList()
+    val palette = withContext(Dispatchers.Default) {
+        Palette.from(bitmap)
+            .maximumColorCount(24)
+            .resizeBitmapArea(128 * 128)
+            .generate()
+    }
+    val picked = ArrayList<Int>()
+    for (swatch in palette.swatches.sortedByDescending { it.population }) {
+        val c = swatch.rgb
+        val far = picked.none { o ->
+            val dr = android.graphics.Color.red(o) - android.graphics.Color.red(c)
+            val dg = android.graphics.Color.green(o) - android.graphics.Color.green(c)
+            val db = android.graphics.Color.blue(o) - android.graphics.Color.blue(c)
+            dr * dr + dg * dg + db * db < 60 * 60
+        }
+        if (far) picked.add(c)
+        if (picked.size == 6) break
+    }
+    return picked.map { backdropBrighten(it) }
+}
+
+/**
+ * Fondo de las letras: manchas suaves con los colores principales de la carátula, en posiciones
+ * aleatorias (siempre las mismas para la misma canción). Al abrir las letras se mueven despacio.
+ */
+@Composable
+private fun PaletteBlobBackdrop(
+    thumbnailUrl: String,
+    moving: Boolean,
+    progress: Float
+) {
+    val context = LocalContext.current
+    val colors by produceState(
+        initialValue = backdropPaletteCache[thumbnailUrl] ?: emptyList(),
+        key1 = thumbnailUrl
+    ) {
+        val cached = backdropPaletteCache[thumbnailUrl]
+        if (cached != null) {
+            value = cached
+        } else {
+            val extracted = extractBackdropColors(context, thumbnailUrl)
+            if (extracted.isNotEmpty()) backdropPaletteCache[thumbnailUrl] = extracted
+            value = extracted
+        }
+    }
+    val fade by animateFloatAsState(
+        targetValue = if (colors.isNotEmpty()) 1f else 0f,
+        animationSpec = tween(600),
+        label = "blobBackdropFade"
+    )
+    val animate = moving || progress > 0f
+    val t = if (animate) {
+        rememberInfiniteTransition(label = "blobBackdropDrift").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(40_000, easing = LinearEasing)),
+            label = "blobBackdropT"
+        ).value
+    } else 0f
+
+    // Posiciones, tamaños y fases al azar, pero fijos para esta canción.
+    val blobs = remember(thumbnailUrl) {
+        val rnd = java.util.Random(thumbnailUrl.hashCode().toLong())
+        List(6) {
+            floatArrayOf(
+                rnd.nextFloat(),                    // x base (0..1)
+                rnd.nextFloat(),                    // y base (0..1)
+                0.55f + rnd.nextFloat() * 0.35f,    // radio (fracción del lado largo)
+                rnd.nextFloat(),                    // fase
+                1f + rnd.nextInt(3)                 // velocidad (vueltas)
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .alpha(fade)
+            .drawBehind {
+                if (colors.isEmpty()) return@drawBehind
+                val w = size.width
+                val h = size.height
+                val longSide = max(w, h)
+                drawRect(androidx.compose.ui.graphics.lerp(colors.last(), Color.Black, 0.55f))
+                blobs.forEachIndexed { i, b ->
+                    val color = colors[i % colors.size]
+                    val ang = 2f * Math.PI.toFloat() * (t * b[4] + b[3])
+                    val dx = kotlin.math.sin(ang) * 0.18f * progress
+                    val dy = kotlin.math.cos(ang) * 0.18f * progress
+                    val center = Offset((b[0] + dx) * w, (b[1] + dy) * h)
+                    val radius = b[2] * longSide * (1f + 0.12f * progress * kotlin.math.sin(ang))
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(color.copy(alpha = 0.9f), color.copy(alpha = 0f)),
+                            center = center,
+                            radius = radius
+                        )
+                    )
+                }
+            }
     )
 }

@@ -376,11 +376,6 @@ fun PlayerV2Landscape(
                             },
                         contentScale = if (cropAlbumArt) ContentScale.Crop else ContentScale.Fit
                     )
-                    PlayerV2Motionartowek(
-                        mediaMetadata = mediaMetadata,
-                        isPlaying = isPlaying,
-                        modifier = Modifier.fillMaxSize()
-                    )
                 }
             }
 

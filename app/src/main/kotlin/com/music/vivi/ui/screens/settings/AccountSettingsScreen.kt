@@ -495,11 +495,6 @@ fun AccountSettingsScreen(
                                 else if (!showToken) showToken = true
                                 else showTokenEditor = true
                             }
-                        ),
-                        Material3SettingsItem(
-                            icon = painterResource(R.drawable.integration),
-                            title = { Text(stringResource(R.string.integrations)) },
-                            onClick = { navController.navigate("settings/integrations") }
                         )
                     )
                 )

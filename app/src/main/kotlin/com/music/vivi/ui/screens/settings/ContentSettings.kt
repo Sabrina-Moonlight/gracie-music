@@ -78,8 +78,6 @@ import com.music.vivi.constants.EnableYouLyPlusKey
 import com.music.vivi.constants.EnablePaxsenixKey
 import com.music.vivi.constants.EnableUnisonKey
 import com.music.vivi.constants.EnableBiniLyricsKey
-import com.music.vivi.constants.EnableSpotifyLyricsKey
-import com.music.vivi.constants.SpotifySessionKey
 import com.music.vivi.constants.HideExplicitKey
 import com.music.vivi.constants.HideVideoSongsKey
 import com.music.vivi.constants.HideYoutubeShortsKey
@@ -183,8 +181,6 @@ fun ContentSettings(
     val (hideYoutubeShorts, onHideYoutubeShortsChange) = rememberPreference(key = HideYoutubeShortsKey, defaultValue = false)
     val (showArtistSubscriberCount, onShowArtistSubscriberCountChange) = rememberPreference(key = ShowArtistSubscriberCountKey, defaultValue = true)
     val (showMonthlyListeners, onShowMonthlyListenersChange) = rememberPreference(key = ShowMonthlyListenersKey, defaultValue = true)
-    val (showArtistVideo, onShowArtistVideoChange) = rememberPreference(key = ShowArtistVideoKey, defaultValue = true)
-    val (showArtistBackgroundVideo, onShowArtistBackgroundVideoChange) = rememberPreference(key = ShowArtistBackgroundVideoKey, defaultValue = true)
     val (proxyEnabled, onProxyEnabledChange) = rememberPreference(key = ProxyEnabledKey, defaultValue = false)
     val (proxyType, onProxyTypeChange) = rememberEnumPreference(key = ProxyTypeKey, defaultValue = Proxy.Type.HTTP)
     val (proxyUrl, onProxyUrlChange) = rememberPreference(key = ProxyUrlKey, defaultValue = "host:port")
@@ -199,9 +195,6 @@ fun ContentSettings(
     val (enablePaxsenix, onEnablePaxsenixChange) = rememberPreference(key = EnablePaxsenixKey, defaultValue = true)
     val (enableUnison, onEnableUnisonChange) = rememberPreference(key = EnableUnisonKey, defaultValue = true)
     val (enableBiniLyrics, onEnableBiniLyricsChange) = rememberPreference(key = EnableBiniLyricsKey, defaultValue = true)
-    val (enableSpotifyLyrics, onEnableSpotifyLyricsChange) = rememberPreference(key = EnableSpotifyLyricsKey, defaultValue = false)
-    val (spotifySessionJson, _) = rememberPreference(key = SpotifySessionKey, defaultValue = "")
-    val isSpotifySignedIn = spotifySessionJson.isNotBlank()
     val (lyricsProviderOrder, onLyricsProviderOrderChange) = rememberPreference(
         key = LyricsProviderOrderKey,
         defaultValue = "",
@@ -218,7 +211,6 @@ fun ContentSettings(
         IpVersionKey,
         defaultValue = IpVersion.AUTO
     )
-    val (albumCanvasEnabled, onAlbumCanvasEnabledChange) = rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = false)
 
     var showPlaybackLogsDialog by rememberSaveable { mutableStateOf(false) }
     var showSuggestionSheet by rememberSaveable { mutableStateOf(false) }
@@ -414,7 +406,7 @@ fun ContentSettings(
     if (showProviderPriorityDialog) {
         val defaultOrder = LyricsProviderRegistry.getDefaultProviderOrder()
         // User-toggleable provider names (excludes always-on YouTube providers)
-        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "Musixmatch", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics", "Spotify")
+        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "Musixmatch", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics")
         val enabledProviders = setOfNotNull(
             "LrcLib".takeIf { enableLrclib },
             "LrcRed".takeIf { enableLrcRed },
@@ -425,7 +417,6 @@ fun ContentSettings(
             "Paxsenix".takeIf { enablePaxsenix },
             "Unison".takeIf { enableUnison },
             "BiniLyrics".takeIf { enableBiniLyrics },
-            "Spotify".takeIf { enableSpotifyLyrics },
         )
 
         // Build a normalized order: saved order first (only known providers), then any missing ones
@@ -828,75 +819,6 @@ fun ContentSettings(
                     },
                     onClick = { onShowMonthlyListenersChange(!showMonthlyListeners) }
                 ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.slow_motion_video),
-                    title = { Text(stringResource(R.string.show_artist_video)) },
-                    description = { Text(stringResource(R.string.show_artist_video_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = showArtistVideo,
-                            onCheckedChange = onShowArtistVideoChange,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (showArtistVideo) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onShowArtistVideoChange(!showArtistVideo) }
-                ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.slow_motion_video),
-                    title = { Text(stringResource(R.string.show_artist_background_video)) },
-                    description = { Text(stringResource(R.string.show_artist_background_video_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = showArtistBackgroundVideo,
-                            onCheckedChange = onShowArtistBackgroundVideoChange,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (showArtistBackgroundVideo) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onShowArtistBackgroundVideoChange(!showArtistBackgroundVideo) }
-                )
-            )
-        )
-
-        ExpressiveSettingGroup(
-            title = stringResource(R.string.album_text),
-            items = listOf(
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.slow_motion_video),
-                    title = { Text(stringResource(R.string.show_album_canvas)) },
-                    description = { Text(stringResource(R.string.show_album_canvas_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = albumCanvasEnabled,
-                            onCheckedChange = onAlbumCanvasEnabledChange,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (albumCanvasEnabled) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onAlbumCanvasEnabledChange(!albumCanvasEnabled) }
-                )
             )
         )
 
@@ -1104,29 +1026,6 @@ fun ContentSettings(
                         )
                     },
                     onClick = { onEnableMusixmatchChange(!enableMusixmatch) }
-                ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.spotify),
-                    title = { Text("Spotify Lyrics") },
-                    description = { Text("Requires Spotify account login (via sp_dc cookie)") },
-                    enabled = isSpotifySignedIn,
-                    trailingContent = {
-                        Switch(
-                            checked = enableSpotifyLyrics && isSpotifySignedIn,
-                            onCheckedChange = onEnableSpotifyLyricsChange,
-                            enabled = isSpotifySignedIn,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (enableSpotifyLyrics) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onEnableSpotifyLyricsChange(!enableSpotifyLyrics) }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),

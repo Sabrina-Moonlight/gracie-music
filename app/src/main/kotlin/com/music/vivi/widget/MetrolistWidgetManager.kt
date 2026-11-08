@@ -61,7 +61,8 @@ class vivimusicWidgetManager @Inject constructor(
         isPlaying: Boolean,
         isLiked: Boolean,
         duration: Long = 0,
-        currentPosition: Long = 0
+        currentPosition: Long = 0,
+        repeatMode: Int = 0
     ) {
         val appWidgetManager = AppWidgetManager.getInstance(context)
 
@@ -73,7 +74,7 @@ class vivimusicWidgetManager @Inject constructor(
             albumArt = cachedAlbumArt
             circularAlbumArt = cachedCircularAlbumArt
         } else {
-            albumArt = artworkUri?.let { loadAlbumArt(it, 300) }
+            albumArt = artworkUri?.let { loadAlbumArt(it, 600) }
             circularAlbumArt = albumArt?.let { getCircularBitmap(it) }
             // Update cache
             cachedArtworkUri = artworkUri
@@ -95,7 +96,8 @@ class vivimusicWidgetManager @Inject constructor(
                     isPlaying,
                     isLiked,
                     duration,
-                    currentPosition
+                    currentPosition,
+                    repeatMode
                 )
                 appWidgetManager.updateAppWidget(widgetId, views)
             }
@@ -124,7 +126,8 @@ class vivimusicWidgetManager @Inject constructor(
         isPlaying: Boolean,
         isLiked: Boolean,
         duration: Long,
-        currentPosition: Long
+        currentPosition: Long,
+        repeatMode: Int
     ): RemoteViews {
         val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
         val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
@@ -144,7 +147,7 @@ class vivimusicWidgetManager @Inject constructor(
             }
             else -> {
                 // Full layout
-                createRemoteViews(title, artist, albumArt, isPlaying, isLiked, duration, currentPosition, minWidth, minHeight)
+                createRemoteViews(title, artist, albumArt, isPlaying, isLiked, duration, currentPosition, minWidth, minHeight, repeatMode)
             }
         }
     }
@@ -158,7 +161,8 @@ class vivimusicWidgetManager @Inject constructor(
         duration: Long = 0,
         currentPosition: Long = 0,
         widthDp: Int = 250,
-        heightDp: Int = 110
+        heightDp: Int = 110,
+        repeatMode: Int = 0
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_music_player)
 
@@ -172,11 +176,13 @@ class vivimusicWidgetManager @Inject constructor(
             buildNotificationStyleBackground(albumArt, widthDp, heightDp)
         )
 
-        // Barra de progreso con un color claro sacado de la carátula (como en la notificación)
+        // Barra de progreso con onda y círculo, color claro sacado de la carátula (como en la notificación)
         val accent = pickAccentColor(albumArt)
-        views.setInt(R.id.widget_progress_fill, "setColorFilter", accent)
-        views.setInt(R.id.widget_progress_track, "setColorFilter", Color.WHITE)
-        views.setInt(R.id.widget_progress_track, "setImageAlpha", 80)
+        val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+        views.setImageViewBitmap(
+            R.id.widget_progress_track,
+            drawProgressBar(widthDp, fraction, accent)
+        )
 
         // Set play/pause icon
         val playPauseIcon = if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
@@ -186,13 +192,14 @@ class vivimusicWidgetManager @Inject constructor(
         val likeIcon = if (isLiked) R.drawable.ic_widget_heart_nav else R.drawable.ic_widget_heart_outline_nav
         views.setImageViewResource(R.id.widget_like_button, likeIcon)
 
-        // Set Progress Level
-        if (duration > 0) {
-            val level = ((currentPosition.toDouble() / duration.toDouble()) * 10000).toInt()
-            views.setInt(R.id.widget_progress_fill, "setImageLevel", level)
-        } else {
-            views.setInt(R.id.widget_progress_fill, "setImageLevel", 0)
-        }
+        // Repetir: apagado = tenue, todo = blanco, una = blanco con "1"
+        val repeatOne = repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE
+        views.setImageViewResource(R.id.widget_repeat_button, if (repeatOne) R.drawable.repeat_one else R.drawable.repeat)
+        views.setInt(
+            R.id.widget_repeat_button,
+            "setImageAlpha",
+            if (repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) 130 else 255
+        )
         views.setTextViewText(R.id.widget_time_current, formatTime(currentPosition))
         views.setTextViewText(R.id.widget_time_total, formatTime(duration))
 
@@ -202,8 +209,54 @@ class vivimusicWidgetManager @Inject constructor(
         views.setOnClickPendingIntent(R.id.widget_like_button, getLikeIntent())
         views.setOnClickPendingIntent(R.id.widget_prev_button, getPreviousIntent())
         views.setOnClickPendingIntent(R.id.widget_next_button, getNextIntent())
+        views.setOnClickPendingIntent(R.id.widget_repeat_button, getRepeatIntent())
 
         return views
+    }
+
+    /** Barra de progreso: línea con onda suave en lo reproducido, resto tenue y círculo al final. */
+    private fun drawProgressBar(widthDp: Int, fraction: Float, color: Int): Bitmap {
+        val d = context.resources.displayMetrics.density
+        val w = ((widthDp - 36).coerceAtLeast(120) * d).toInt()
+        val h = (24 * d).toInt()
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        val cy = h / 2f
+        val stroke = 6f * d
+        val thumbR = 8f * d
+        val x0 = thumbR
+        val x1 = w - thumbR
+        val xe = x0 + fraction * (x1 - x0)
+
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeWidth = stroke
+        }
+        line.color = ColorUtils.setAlphaComponent(Color.WHITE, 80)
+        c.drawLine(x0, cy, x1, cy, line)
+
+        line.color = color
+        if (xe > x0 + 1f) {
+            val amp = 1.6f * d
+            val wave = 26f * d
+            val path = Path().apply {
+                moveTo(x0, cy)
+                var x = x0
+                while (x < xe) {
+                    x = minOf(x + 2f, xe)
+                    lineTo(x, cy + amp * kotlin.math.sin(((x - x0) / wave) * 2.0 * Math.PI).toFloat())
+                }
+            }
+            c.drawPath(path, line)
+        }
+
+        val thumb = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = color
+        }
+        c.drawCircle(xe, cy, thumbR, thumb)
+        return out
     }
 
     /**
@@ -250,11 +303,11 @@ class vivimusicWidgetManager @Inject constructor(
             val left = (art.width - srcW) / 2
             val top = (art.height - srcH) / 2
             val src = Rect(left, top, left + srcW, top + srcH)
-            // Suavizado: se dibuja pequeña y se vuelve a agrandar
-            val tiny = Bitmap.createBitmap((w / 10).coerceAtLeast(2), (h / 10).coerceAtLeast(2), Bitmap.Config.ARGB_8888)
-            Canvas(tiny).drawBitmap(art, src, Rect(0, 0, tiny.width, tiny.height), Paint(Paint.FILTER_BITMAP_FLAG))
-            canvas.drawBitmap(tiny, null, RectF(0f, 0f, w.toFloat(), h.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG))
-            tiny.recycle()
+            // Carátula nítida (sin agrandar una versión diminuta, que salía en bloques)
+            canvas.drawBitmap(art, src, RectF(0f, 0f, w.toFloat(), h.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG))
+            // Tinte con el color dominante de la carátula, como en la notificación
+            val dominant = Palette.from(art).maximumColorCount(8).generate().getDominantColor(0xFF2B2B2B.toInt())
+            canvas.drawColor(ColorUtils.setAlphaComponent(dominant, 0x66))
         } else {
             canvas.drawColor(0xFF2B2B2B.toInt())
         }
@@ -262,7 +315,7 @@ class vivimusicWidgetManager @Inject constructor(
         val shade = Paint().apply {
             shader = LinearGradient(
                 0f, 0f, 0f, h.toFloat(),
-                0x40000000, 0x75000000,
+                0x26000000, 0x66000000,
                 Shader.TileMode.CLAMP
             )
         }
@@ -511,6 +564,18 @@ class vivimusicWidgetManager @Inject constructor(
         return PendingIntent.getBroadcast(
             context,
             6,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun getRepeatIntent(): PendingIntent {
+        val intent = Intent(context, MusicWidgetReceiver::class.java).apply {
+            action = MusicWidgetReceiver.ACTION_REPEAT
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            8,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

@@ -13,8 +13,6 @@ import android.os.Build
 import android.widget.Toast
 import androidx.datastore.preferences.core.edit
 import org.json.JSONObject
-import com.music.spotify.Spotify
-import com.music.spotify.SpotifyAuth
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -28,7 +26,6 @@ import com.music.innertube.YouTube
 import com.music.innertube.models.IpVersion
 import com.music.innertube.models.YouTubeLocale
 import com.music.kugou.KuGou
-import com.music.lastfm.LastFM
 import com.music.vivi.constants.*
 import com.music.vivi.vivimusic.release.NewReleaseCheckWorker
 import com.music.vivi.di.ApplicationScope
@@ -108,12 +105,6 @@ class App : Application(), SingletonImageLoader.Factory {
             KuGou.useTraditionalChinese = true
         }
 
-        // Initialize LastFM with API keys from BuildConfig (GitHub Secrets)
-        LastFM.initialize(
-            apiKey = BuildConfig.LASTFM_API_KEY.takeIf { it.isNotEmpty() } ?: "",
-            secret = BuildConfig.LASTFM_SECRET.takeIf { it.isNotEmpty() } ?: ""
-        )
-
         if (settings[ProxyEnabledKey] == true) {
             val username = settings[ProxyUsernameKey].orEmpty()
             val password = settings[ProxyPasswordKey].orEmpty()
@@ -173,43 +164,6 @@ class App : Application(), SingletonImageLoader.Factory {
 
         applicationScope.launch(Dispatchers.IO) {
             dataStore.data
-                .map { it[SpotifySessionKey] }
-                .distinctUntilChanged()
-                .collect { sessionJson ->
-                    if (!sessionJson.isNullOrBlank()) {
-                        try {
-                            val json = JSONObject(sessionJson)
-                            val token = json.optString("accessToken", "")
-                            val expiresAt = json.optLong("expiresAt", 0L)
-                            val spDc = json.optString("spDc", "")
-                            val spKey = json.optString("spKey", "")
-                            
-                            if (token.isNotEmpty() && expiresAt > System.currentTimeMillis() + 60_000L) {
-                                Spotify.accessToken = token
-                            } else if (spDc.isNotEmpty()) {
-                                // Token expired on cold boot; silently refresh it in background
-                                val result = SpotifyAuth.fetchAccessToken(spDc, spKey).getOrNull()
-                                if (result != null) {
-                                    Spotify.accessToken = result.accessToken
-                                    // Save back to avoid re-fetching on next boot
-                                    val newSession = json.apply {
-                                        put("accessToken", result.accessToken)
-                                        put("expiresAt", result.accessTokenExpirationTimestampMs)
-                                    }
-                                    dataStore.edit { settings ->
-                                        settings[SpotifySessionKey] = newSession.toString()
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            reportException(e)
-                        }
-                    }
-                }
-        }
-
-        applicationScope.launch(Dispatchers.IO) {
-            dataStore.data
                 .map { it[DataSyncIdKey] }
                 .distinctUntilChanged()
                 .collect { dataSyncId ->
@@ -227,19 +181,6 @@ class App : Application(), SingletonImageLoader.Factory {
                     } catch (e: Exception) {
                         Timber.e(e, "Could not parse cookie. Clearing existing cookie.")
                         forgetAccount(this@App)
-                    }
-                }
-        }
-
-        applicationScope.launch(Dispatchers.IO) {
-            dataStore.data
-                .map { it[LastFMSessionKey] }
-                .distinctUntilChanged()
-                .collect { session ->
-                    try {
-                        LastFM.sessionKey = session
-                    } catch (e: Exception) {
-                        Timber.e("Error while loading last.fm session key. %s", e.message)
                     }
                 }
         }

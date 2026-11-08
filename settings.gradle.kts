@@ -28,13 +28,7 @@ rootProject.name = "vivimusic"
 include(":app")
 // Previous canvas included below
 include(":innertube")
-include(":kizzy")
-include(":lastfm")
-include(":shazamkit")
-include(":artistvideo")
-include(":Motionartwork")
 include(":jiosaavn")
-include(":spotify")
 include(":lyricsProvider")
 
 // Use a local copy of NewPipe Extractor by uncommenting the lines below.
