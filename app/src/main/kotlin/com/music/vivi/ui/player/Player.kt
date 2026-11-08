@@ -110,6 +110,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
@@ -778,7 +779,7 @@ fun BottomSheetPlayer(
                             }
                         }
                         // Zoom y recorrido moderados: con zoom 2.4 solo se veía el centro de la carátula (un solo color).
-                        val wanderMaxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight) * 0.35f
+                        val wanderMaxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight) * 0.6f
                         val blurWander = rememberBlurWanderDrift(
                             // Se congela al cerrar: la salida solo deshace el zoom, sin seguir moviéndose.
                             active = usePlayerV2 && lyricsOpen,
@@ -789,8 +790,8 @@ fun BottomSheetPlayer(
                             blurBackdropFootprint(
                                 width = maxWidth,
                                 height = maxHeight,
-                                restScale = 1.1f,
-                                driftScale = 1.35f,
+                                restScale = 1.2f,
+                                driftScale = 1.8f,
                                 maxDriftDp = wanderMaxDrift
                             )
                         }
@@ -811,32 +812,40 @@ fun BottomSheetPlayer(
                                         .graphicsLayer { clip = true }
                                 ) {
                                     if (usePlayerV2) {
-                                        // Carátula difuminada que se acerca y se mueve despacio al abrir
-                                        // las letras. Zoom pequeño para que se vean más colores; sin giro.
-                                        // La imagen ocupa TODA la pantalla (toda la carátula, no solo el centro),
-                                        // así se ven todos sus colores. El movimiento nunca deja huecos en los bordes.
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(context)
-                                                .data(thumbnailUrl)
-                                                .size(100, 100)
-                                                .allowHardware(false)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.FillBounds,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .graphicsLayer {
-                                                    val p = lyricsProgress
-                                                    val s = 1.1f + 0.1f * p
-                                                    scaleX = s
-                                                    scaleY = s
-                                                    val nx = (blurWander.xDp.floatValue / wanderMaxDrift).coerceIn(-1f, 1f)
-                                                    val ny = (blurWander.yDp.floatValue / wanderMaxDrift).coerceIn(-1f, 1f)
-                                                    translationX = nx * (s - 1f) / 2f * size.width * p
-                                                    translationY = ny * (s - 1f) / 2f * size.height * p
-                                                }
-                                                .blur(64.dp)
-                                        )
+                                        // Igual que el Apple Music de ArchiveTune: la carátula difuminada, en un
+                                        // cuadrado más grande que la pantalla, que se expande al abrir las letras
+                                        // y se desplaza/gira despacio (giro limitado a +-30 grados).
+                                        Box(
+                                            modifier = Modifier.fillMaxSize().clipToBounds(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context)
+                                                    .data(thumbnailUrl)
+                                                    .size(200, 200)
+                                                    .allowHardware(false)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .requiredSize(backdropFootprint.width, backdropFootprint.height)
+                                                    .graphicsLayer {
+                                                        val p = lyricsProgress
+                                                        val s = 1.2f + (1.8f - 1.2f) * p
+                                                        scaleX = s
+                                                        scaleY = s
+                                                        if (p > 0f) {
+                                                            translationX = blurWander.xDp.floatValue * density * p
+                                                            translationY = blurWander.yDp.floatValue * density * p
+                                                            rotationZ = 30f * kotlin.math.sin(
+                                                                blurWander.rotationDeg.floatValue * 2f * Math.PI.toFloat() / 180f
+                                                            ) * p
+                                                        }
+                                                        compositingStrategy = CompositingStrategy.Offscreen
+                                                    }
+                                                    .blur(64.dp)
+                                            )
+                                        }
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()

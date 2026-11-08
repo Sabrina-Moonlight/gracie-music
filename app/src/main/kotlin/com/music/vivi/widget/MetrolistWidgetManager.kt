@@ -243,28 +243,41 @@ class vivimusicWidgetManager @Inject constructor(
         if (xe > x0 + 1f) {
             c.drawLine(x0, cy, xe, cy, line)
 
-            // Ola: relleno translúcido sobre la barra; la altura crece y baja suave (como una loma).
+            // Dos olas translúcidas que suben y bajan, desfasadas entre sí. Se animan con el reloj
+            // (el widget se redibuja unas 5 veces por segundo mientras suena la música).
             val span = xe - x0
-            val amp = 9f * d * (span / (24f * d)).coerceAtMost(1f)
-            val wave = 64f * d
-            val path = Path().apply {
-                moveTo(x0, cy)
-                var x = x0
-                while (x < xe) {
-                    x = minOf(x + 2f, xe)
-                    val t = (x - x0) / span
-                    val envelope = kotlin.math.sin(Math.PI * t).toFloat()
-                    val crest = 0.5f + 0.5f * kotlin.math.sin(((x - x0) / wave) * 2.0 * Math.PI - Math.PI / 2).toFloat()
-                    lineTo(x, cy - stroke / 2f - amp * envelope * crest)
+            val now = (System.currentTimeMillis() % 600_000L) / 1000.0
+            val grow = (span / (24f * d)).coerceAtMost(1f)
+            val waves = arrayOf(
+                // longitud (dp), velocidad lateral, velocidad de subida/bajada, fase, altura (dp), alpha
+                doubleArrayOf(70.0, 1.3, 1.1, 0.0, 9.0, 110.0),
+                doubleArrayOf(46.0, -1.8, 0.8, 2.1, 7.0, 90.0)
+            )
+            for (wv in waves) {
+                val lambda = wv[0] * d
+                val breathe = 0.55 + 0.45 * kotlin.math.sin(now * wv[2] + wv[3])
+                val amp = (wv[4] * d * grow * breathe).toFloat()
+                val path = Path().apply {
+                    moveTo(x0, cy)
+                    var x = x0
+                    while (x < xe) {
+                        x = minOf(x + 2f, xe)
+                        val t = (x - x0) / span
+                        val envelope = kotlin.math.sin(Math.PI * t).toFloat()
+                        val crest = 0.5f + 0.5f * kotlin.math.sin(
+                            ((x - x0) / lambda) * 2.0 * Math.PI - now * wv[1]
+                        ).toFloat()
+                        lineTo(x, cy - stroke / 2f - amp * envelope * crest)
+                    }
+                    lineTo(xe, cy)
+                    close()
                 }
-                lineTo(xe, cy)
-                close()
+                val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    this.color = ColorUtils.setAlphaComponent(color, wv[5].toInt())
+                }
+                c.drawPath(path, fill)
             }
-            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-                this.color = ColorUtils.setAlphaComponent(color, 120)
-            }
-            c.drawPath(path, fill)
         }
 
         val thumb = Paint(Paint.ANTI_ALIAS_FLAG).apply {
