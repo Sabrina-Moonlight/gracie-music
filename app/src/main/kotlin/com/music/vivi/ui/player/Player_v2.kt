@@ -125,6 +125,31 @@ fun PlayerV2(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val playerConnection = LocalPlayerConnection.current ?: return
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    // AutoMix: estado de la transición de portada entre dos canciones
+    val crossfadeEnabled by rememberPreference(com.music.vivi.constants.CrossfadeEnabledKey, defaultValue = false)
+    val crossfadeDuration by rememberPreference(com.music.vivi.constants.CrossfadeDurationKey, defaultValue = 6f)
+    val isCrossfadingService by playerConnection.isCrossfading.collectAsState()
+    val crossfadeOutgoingItem by playerConnection.crossfadeOutgoingItem.collectAsState()
+    val crossfadeIncomingItem by playerConnection.crossfadeIncomingItem.collectAsState()
+    val crossfadeProgressService by playerConnection.crossfadeProgress.collectAsState()
+    val nextMediaMetadata by playerConnection.nextMediaMetadata.collectAsState()
+    val isTransitioning = isCrossfadingService
+    val coverProgress by animateFloatAsState(
+        targetValue = if (isTransitioning) crossfadeProgressService else 0f,
+        animationSpec = tween(durationMillis = 150, easing = LinearEasing),
+        label = "coverProgress"
+    )
+    val displayedMetadata = if (isTransitioning && crossfadeOutgoingItem != null) crossfadeOutgoingItem else mediaMetadata
+    val fromCoverUrl = if (isTransitioning && crossfadeOutgoingItem != null) {
+        crossfadeOutgoingItem?.thumbnailUrl
+    } else {
+        mediaMetadata?.thumbnailUrl
+    }
+    val toCoverUrl = if (isTransitioning) {
+        crossfadeIncomingItem?.thumbnailUrl ?: nextMediaMetadata?.thumbnailUrl
+    } else {
+        null
+    }
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val currentSong by playerConnection.currentSong.collectAsState(initial = null)
     val currentLyrics by playerConnection.currentLyrics.collectAsState(initial = null)
@@ -523,21 +548,15 @@ fun PlayerV2(
                                             )
                                         }
                                     } else {
-                                        val isYtThumbnail = remember(mediaMetadata?.thumbnailUrl) {
-                                            mediaMetadata?.thumbnailUrl?.let { it.contains("ytimg") || it.contains("/vi/") || it.contains("youtube.com") } == true
-                                        }
-                                        AsyncImage(
-                                            model = mediaMetadata?.thumbnailUrl?.resize(1200, 1200),
-                                            contentDescription = "Cover Art",
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .graphicsLayer {
-                                                    if (cropAlbumArt && isYtThumbnail) {
-                                                        scaleX = 4f / 3f
-                                                        scaleY = 4f / 3f
-                                                    }
-                                                },
-                                            contentScale = if (cropAlbumArt) ContentScale.Crop else ContentScale.Fit
+                                        Blendingimage(
+                                            fromCoverUrl = fromCoverUrl,
+                                            toCoverUrl = toCoverUrl,
+                                            nextCoverUrl = nextMediaMetadata?.thumbnailUrl,
+                                            progress = coverProgress,
+                                            crossfadeDuration = crossfadeDuration,
+                                            crossfadeEnabled = crossfadeEnabled,
+                                            cropAlbumArt = cropAlbumArt,
+                                            modifier = Modifier.fillMaxSize()
                                         )
                                     }
                                 }
@@ -552,7 +571,7 @@ fun PlayerV2(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            mediaMetadata?.title ?: "Unknown",
+                                            displayedMetadata?.title ?: "Unknown",
                                             style = MaterialTheme.typography.headlineSmall, 
                                             color = adaptivePrimary,
                                             fontWeight = FontWeight.Bold,
@@ -571,7 +590,7 @@ fun PlayerV2(
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            mediaMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
+                                            displayedMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
                                             style = MaterialTheme.typography.titleMedium,
                                             color = adaptiveSecondary,
                                             fontWeight = FontWeight.Medium,
@@ -710,11 +729,11 @@ fun PlayerV2(
                                                 )
                                             }
                                         } else {
-                                            val isYtThumbnail = remember(mediaMetadata?.thumbnailUrl) {
-                                                mediaMetadata?.thumbnailUrl?.let { it.contains("ytimg") || it.contains("/vi/") || it.contains("youtube.com") } == true
+                                            val isYtThumbnail = remember(displayedMetadata?.thumbnailUrl) {
+                                                displayedMetadata?.thumbnailUrl?.let { it.contains("ytimg") || it.contains("/vi/") || it.contains("youtube.com") } == true
                                             }
                                             AsyncImage(
-                                                model = mediaMetadata?.thumbnailUrl?.resize(1200, 1200),
+                                                model = displayedMetadata?.thumbnailUrl?.resize(1200, 1200),
                                                 contentDescription = "Cover Art",
                                                 modifier = Modifier
                                                     .fillMaxSize()
@@ -731,7 +750,7 @@ fun PlayerV2(
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            mediaMetadata?.title ?: "Unknown",
+                                            displayedMetadata?.title ?: "Unknown",
                                             style = MaterialTheme.typography.titleMedium, 
                                             color = adaptivePrimary,
                                             fontWeight = FontWeight.Bold,
@@ -745,7 +764,7 @@ fun PlayerV2(
                                             )
                                         )
                                         Text(
-                                            mediaMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
+                                            displayedMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
                                             style = MaterialTheme.typography.titleSmall,
                                             color = adaptiveSecondary,
                                             maxLines = 1,
@@ -1028,7 +1047,7 @@ fun PlayerV2(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(painterResource(R.drawable.volume_mute), contentDescription = "Volume Down", tint = adaptiveSecondary, modifier = Modifier.size(20.dp))
+                            Icon(painterResource(R.drawable.ic_speaker_24dp), contentDescription = "Volume Down", tint = adaptiveSecondary, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(16.dp))
                             
                             val volumeInteractionSource = remember { MutableInteractionSource() }
@@ -1071,7 +1090,7 @@ fun PlayerV2(
                                 modifier = Modifier.weight(1f).height(24.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
-                            Icon(painterResource(R.drawable.volume_up), contentDescription = "Volume Up", tint = adaptiveSecondary, modifier = Modifier.size(24.dp))
+                            Icon(painterResource(R.drawable.ic_speaker_wave_3_24dp), contentDescription = "Volume Up", tint = adaptiveSecondary, modifier = Modifier.size(24.dp))
                         }
                     }
 
@@ -1124,7 +1143,8 @@ fun PlayerV2(
                                     modifier = Modifier.size(48.dp),
                                     tintColor = adaptiveSecondary,
                                     activeTintColor = adaptivePrimary,
-                                    showBackground = false
+                                    showBackground = false,
+                                    customIconRes = R.drawable.airplay_audio
                                 )
                             } else {
                                 IconButton(
@@ -1132,8 +1152,8 @@ fun PlayerV2(
                                     modifier = Modifier.background(Color.Transparent, RoundedCornerShape(12.dp))
                                 ) {
                                     Icon(
-                                        painter = painterResource(R.drawable.home_speaker_devices),
-                                        contentDescription = "Speaker", 
+                                        painter = painterResource(R.drawable.airplay_audio),
+                                        contentDescription = "Audio Routing", 
                                         tint = adaptiveSecondary, 
                                         modifier = Modifier.size(28.dp)
                                     )

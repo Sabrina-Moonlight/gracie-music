@@ -8,6 +8,7 @@ package com.music.vivi.playback
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM
 import androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
@@ -144,6 +145,22 @@ class PlayerConnection(
     private var showingCachedMetadata = cachedMetadata != null
 
     val mediaMetadata = MutableStateFlow(player.currentMetadata ?: cachedMetadata)
+
+    fun getNextMediaMetadata(playerInstance: Player = player): MediaMetadata? {
+        return try {
+            val nextIndex = playerInstance.nextMediaItemIndex
+            if (nextIndex != C.INDEX_UNSET && nextIndex < playerInstance.mediaItemCount) {
+                playerInstance.getMediaItemAt(nextIndex).metadata
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val nextMediaMetadata = MutableStateFlow<MediaMetadata?>(getNextMediaMetadata())
+    val isCrossfading = service.isCrossfadingFlow
+    val crossfadeOutgoingItem = service.crossfadeOutgoingItem
+    val crossfadeIncomingItem = service.crossfadeIncomingItem
+    val crossfadeProgress = service.crossfadeProgressFlow
 
     init {
         scope.launch(Dispatchers.IO) {
@@ -513,6 +530,7 @@ class PlayerConnection(
     }
 
     private fun updateCanSkipPreviousAndNext() {
+        nextMediaMetadata.value = getNextMediaMetadata(player)
         if (!player.currentTimeline.isEmpty) {
             val window =
                 player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())

@@ -387,6 +387,10 @@ class MusicService :
     private var secondaryPlayer: ExoPlayer? = null
     private var fadingPlayer: ExoPlayer? = null
     private var isCrossfading = false
+    val isCrossfadingFlow = MutableStateFlow(false)
+    val crossfadeOutgoingItem = MutableStateFlow<MediaMetadata?>(null)
+    val crossfadeIncomingItem = MutableStateFlow<MediaMetadata?>(null)
+    val crossfadeProgressFlow = MutableStateFlow(0f)
     private var crossfadeJob: Job? = null
 
     private lateinit var mediaSession: MediaLibrarySession
@@ -4164,6 +4168,12 @@ class MusicService :
         val nextPlayer = secondaryPlayer ?: return
         val currentPlayer = player
 
+        // Estado para la animación AutoMix de la portada (saliente -> entrante)
+        crossfadeOutgoingItem.value = currentPlayer.currentMetadata
+        crossfadeIncomingItem.value = nextPlayer.currentMetadata
+        crossfadeProgressFlow.value = 0f
+        isCrossfadingFlow.value = true
+
         fadingPlayer = currentPlayer
         player = nextPlayer
         _playerFlow.value = player
@@ -4219,8 +4229,8 @@ class MusicService :
 
         crossfadeJob = scope.launch {
             val duration = crossfadeDuration.toLong()
-            val steps = 20
-            val stepTime = duration / steps
+            val steps = 50
+            val stepTime = (duration / steps).coerceAtLeast(20L)
             val startVolume = try { fadingPlayer?.volume ?: 1f } catch(e:Exception) { 1f }
 
             for (i in 0..steps) {
@@ -4231,6 +4241,7 @@ class MusicService :
                 }
 
                 val progress = i / steps.toFloat()
+                crossfadeProgressFlow.value = progress
                 val fadeIn = crossfadeCurve.fadeIn(progress)
                 val fadeOut = crossfadeCurve.fadeOut(progress)
 
@@ -4257,6 +4268,10 @@ class MusicService :
         fadingPlayer = null
         releaseFadingLoudnessEnhancer()
         isCrossfading = false
+        isCrossfadingFlow.value = false
+        crossfadeOutgoingItem.value = null
+        crossfadeIncomingItem.value = null
+        crossfadeProgressFlow.value = 0f
         sleepTimer.notifySongTransition()
     }
 

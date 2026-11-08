@@ -327,40 +327,40 @@ fun LyricsV2(
                             val newEntry = LyricsEntry(entry.time, cleanText, entry.words, agent = entry.agent, isBackground = entry.isBackground)
 
                             if (romanizeJapaneseLyrics && LyricsUtils.isJapanese(entry.text) && !LyricsUtils.isChinese(entry.text)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeJapanese(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeJapanese(entry.text) }
                             }
                             if (romanizeKoreanLyrics && LyricsUtils.isKorean(entry.text)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeKorean(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeKorean(entry.text) }
                             }
                             if (romanizeRussianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isRussian(entry.text) else isRussianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeUkrainianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isUkrainian(entry.text) else isUkrainianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeSerbianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isSerbian(entry.text) else isSerbianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeBulgarianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isBulgarian(entry.text) else isBulgarianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeBelarusianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isBelarusian(entry.text) else isBelarusianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeKyrgyzLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isKyrgyz(entry.text) else isKyrgyzLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeMacedonianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isMacedonian(entry.text) else isMacedonianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(entry.text) }
                             }
                             else if (romanizeChineseLyrics && LyricsUtils.isChinese(entry.text)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeChinese(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeChinese(entry.text) }
                             }
                             else if (romanizeHindiLyrics && LyricsUtils.isHindi(entry.text)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeHindi(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeHindi(entry.text) }
                             }
                             else if (romanizePunjabiLyrics && LyricsUtils.isPunjabi(entry.text)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizePunjabi(entry.text) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizePunjabi(entry.text) }
                             }
                             newEntry
                         }.let {
@@ -380,40 +380,40 @@ fun LyricsV2(
                             val newEntry = LyricsEntry(index * 100L, cleanText, emptyList())
 
                             if (romanizeJapaneseLyrics && LyricsUtils.isJapanese(line) && !LyricsUtils.isChinese(line)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeJapanese(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeJapanese(line) }
                             }
                             if (romanizeKoreanLyrics && LyricsUtils.isKorean(line)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeKorean(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeKorean(line) }
                             }
                             if (romanizeRussianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isRussian(line) else isRussianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeUkrainianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isUkrainian(line) else isUkrainianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeSerbianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isSerbian(line) else isSerbianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeBulgarianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isBulgarian(line) else isBulgarianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeBelarusianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isBelarusian(line) else isBelarusianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeKyrgyzLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isKyrgyz(line) else isKyrgyzLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeMacedonianLyrics && (if (romanizeCyrillicByLine) LyricsUtils.isMacedonian(line) else isMacedonianLyrics)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeCyrillic(line) }
                             }
                             else if (romanizeChineseLyrics && LyricsUtils.isChinese(line)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeChinese(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeChinese(line) }
                             }
                             else if (romanizeHindiLyrics && LyricsUtils.isHindi(line)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeHindi(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizeHindi(line) }
                             }
                             else if (romanizePunjabiLyrics && LyricsUtils.isPunjabi(line)) {
-                                coroutineScope.launch { newEntry.romanizedTextFlow.value = LyricsUtils.romanizePunjabi(line) }
+                                coroutineScope.launch(Dispatchers.Default) { newEntry.romanizedTextFlow.value = LyricsUtils.romanizePunjabi(line) }
                             }
                             newEntry
                         }
@@ -518,17 +518,25 @@ fun LyricsV2(
                     return
                 }
 
-                var currentPlaybackPosition by remember { mutableLongStateOf(0L) }
-                var currentLineIndex by remember { mutableIntStateOf(-1) }
-                var activeLineIndices by remember { mutableStateOf(emptySet<Int>()) }
+                val initialPos = remember { positionProvider() }
+                val initialActiveLine = remember(lines, initialPos, lyricsOffset) {
+                    if (lines.isNotEmpty()) {
+                        LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset).maxOrNull() ?: 0
+                    } else 0
+                }
+                var currentPlaybackPosition by remember { mutableLongStateOf(initialPos) }
+                var currentLineIndex by remember { mutableIntStateOf(initialActiveLine) }
+                var activeLineIndices by remember {
+                    mutableStateOf(if (lines.isNotEmpty()) LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset) else emptySet())
+                }
                 // After tapping a lyric line: time of the tap (0 = not waiting) and the
                 // position we jumped to. Lines stay unlit until the sound really advances.
                 var awaitingSeekSince by remember { mutableLongStateOf(0L) }
                 var awaitingSeekTarget by remember { mutableLongStateOf(0L) }
-                var deferredCurrentLineIndex by rememberSaveable { mutableIntStateOf(0) }
-                var scrollTargetIndex by rememberSaveable { mutableIntStateOf(-1) }
+                var deferredCurrentLineIndex by rememberSaveable { mutableIntStateOf(initialActiveLine) }
+                var scrollTargetIndex by rememberSaveable { mutableIntStateOf(initialActiveLine) }
                 var previousScrollActiveIndices by remember { mutableStateOf(emptySet<Int>()) }
-                var lastMainMaxSeen by remember(lyrics, lines) { mutableIntStateOf(-1) }
+                var lastMainMaxSeen by remember(lyrics, lines) { mutableIntStateOf(initialActiveLine) }
                 var isSeeking by remember { mutableStateOf(false) }
                 var isAutoScrollEnabled by rememberSaveable { mutableStateOf(scrollLyrics) }
                 var lastPreviewTime by rememberSaveable { mutableLongStateOf(0L) }
@@ -613,6 +621,11 @@ fun LyricsV2(
                 val decayAnimSpec = remember { exponentialDecay<Float>(frictionMultiplier = 1.8f) }
                 val itemHeights = remember(lyrics, mergedLyricsList) { mutableStateMapOf<Int, Int>() }
                 var isInitialLayout by remember(lyrics, mergedLyricsList) { mutableStateOf(true) }
+                val contentAlpha by animateFloatAsState(
+                    targetValue = if (isInitialLayout) 0f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    label = "lyricContentAlpha"
+                )
 
                 LaunchedEffect(showLyrics, lyrics, mergedLyricsList.size) {
                     if (showLyrics && mergedLyricsList.isNotEmpty()) {
@@ -623,7 +636,7 @@ fun LyricsV2(
                             val windowEnd = (activeListIndex + 12).coerceAtMost(mergedLyricsList.size - 1)
                             (windowStart..windowEnd).all { h.containsKey(it) }
                         }.first { it }
-                        delay(150)
+                        delay(16)
                         isInitialLayout = false
                     }
                 }
@@ -647,10 +660,15 @@ fun LyricsV2(
 
                 LaunchedEffect(lyrics, lines) {
                     isAutoScrollEnabled = scrollLyrics
-                    scrollTargetIndex = -1
-                    deferredCurrentLineIndex = 0
+                    val pos = positionProvider()
+                    val active = if (lines.isNotEmpty()) {
+                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset).maxOrNull() ?: 0
+                    } else 0
+                    scrollTargetIndex = active
+                    currentLineIndex = active
+                    deferredCurrentLineIndex = active
                     previousScrollActiveIndices = emptySet()
-                    lastMainMaxSeen = -1
+                    lastMainMaxSeen = active
                     userManualOffset = 0f
                 }
 
@@ -662,7 +680,7 @@ fun LyricsV2(
                     }
                     var lastPlayerPos = playerConnection.player.currentPosition
                     var lastUpdateTime = System.currentTimeMillis()
-                    var lastPlaybackPosition = 0L
+                    var lastPlaybackPosition = lastPlayerPos
                     val hasWordTimings = lines.any { !it.words.isNullOrEmpty() }
 
                     while (isActive) {
@@ -1081,7 +1099,7 @@ fun LyricsV2(
                             val targetProviderBase = anchorY + headerItemPos - with(density) { 32.dp.toPx() }
                             val animatedProviderBase by animateFloatAsState(
                                 targetValue = targetProviderBase,
-                                animationSpec = if (isInitialLayout || !isAutoScrollEnabled) snap()
+                                animationSpec = if (isInitialLayout || !isAutoScrollEnabled || isSeeking) snap()
                                 else {
                                     tween(750, 0, FastOutSlowInEasing)
                                 },
@@ -1090,7 +1108,7 @@ fun LyricsV2(
                             Text(
                                 text = "Lyrics from ${currentLyrics?.provider}",
                                 fontSize = 12.sp,
-                                color = adaptivePrimary.copy(alpha = if (isInitialLayout) 0f else 0.6f),
+                                color = adaptivePrimary.copy(alpha = 0.6f * contentAlpha),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .offset { IntOffset(0, (animatedProviderBase + userManualOffset).roundToInt()) }
@@ -1113,7 +1131,7 @@ fun LyricsV2(
 
                                 val animatedOffset by animateFloatAsState(
                                     targetValue = if (isAutoScrollEnabled) targetOffset else frozenOffset.floatValue,
-                                    animationSpec = if (isInitialLayout || !isAutoScrollEnabled) snap()
+                                    animationSpec = if (isInitialLayout || !isAutoScrollEnabled || isSeeking) snap()
                                     else {
                                         tween(
                                             750,
@@ -1130,7 +1148,7 @@ fun LyricsV2(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .graphicsLayer {
-                                            alpha = if (isInitialLayout) 0f else 1f
+                                            alpha = contentAlpha
                                         }
                                         .layout { measurable, constraints ->
                                             val placeable = measurable.measure(constraints.copy(maxHeight = Constraints.Infinity))

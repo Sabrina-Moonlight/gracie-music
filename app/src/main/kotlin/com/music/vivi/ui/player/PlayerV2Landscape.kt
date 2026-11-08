@@ -434,7 +434,8 @@ fun PlayerV2Landscape(
                             modifier = Modifier.size(44.dp),
                             tintColor = adaptiveSecondary,
                             activeTintColor = adaptivePrimary,
-                            showBackground = false
+                            showBackground = false,
+                            customIconRes = R.drawable.airplay_audio
                         )
                     } else {
                         IconButton(
@@ -442,8 +443,8 @@ fun PlayerV2Landscape(
                             modifier = Modifier.size(44.dp)
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.home_speaker_devices),
-                                contentDescription = "Speaker",
+                                painter = painterResource(R.drawable.airplay_audio),
+                                contentDescription = "Audio Routing",
                                 tint = adaptiveSecondary,
                                 modifier = Modifier.size(26.dp)
                             )
@@ -751,7 +752,7 @@ fun PlayerV2Landscape(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    painterResource(R.drawable.volume_mute),
+                                    painterResource(R.drawable.ic_speaker_24dp),
                                     contentDescription = "Volume Down",
                                     tint = adaptiveSecondary,
                                     modifier = Modifier.size(18.dp)
@@ -798,7 +799,7 @@ fun PlayerV2Landscape(
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Icon(
-                                    painterResource(R.drawable.volume_up),
+                                    painterResource(R.drawable.ic_speaker_wave_3_24dp),
                                     contentDescription = "Volume Up",
                                     tint = adaptiveSecondary,
                                     modifier = Modifier.size(20.dp)
