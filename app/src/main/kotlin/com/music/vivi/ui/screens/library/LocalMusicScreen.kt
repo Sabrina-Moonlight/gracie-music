@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -74,6 +75,8 @@ import coil3.request.crossfade
 import com.music.vivi.LocalPlayerAwareWindowInsets
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
+import com.music.vivi.ui.component.ActiveBoxAlpha
+import com.music.vivi.ui.component.PlayingIndicatorBox
 import com.music.vivi.localmedia.LocalTrack
 import com.music.vivi.playback.queues.ListQueue
 import com.music.vivi.viewmodels.LocalMusicViewModel
@@ -94,6 +97,8 @@ fun LocalMusicScreen(
     val artwork by viewModel.artwork.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val queueTitle = stringResource(R.string.local_music_title)
+    val currentMetadata by playerConnection.mediaMetadata.collectAsState()
+    val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
 
     val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_AUDIO
@@ -180,17 +185,17 @@ fun LocalMusicScreen(
 
     // Filas: encabezado de artista, encabezado de álbum y canciones, en el mismo orden de la cola.
     val entries = remember(visibleTracks) {
-        val artistCounts = visibleTracks.groupingBy { it.artist }.eachCount()
+        val artistCounts = visibleTracks.groupingBy { it.groupArtist }.eachCount()
         val albumYears = visibleTracks
-            .groupBy { it.artist to it.album }
+            .groupBy { it.groupArtist to it.album }
             .mapValues { entry -> entry.value.maxOf { it.year } }
         buildList<ListEntry> {
             visibleTracks.forEachIndexed { index, track ->
                 val previous = visibleTracks.getOrNull(index - 1)
-                val newArtist = index == 0 || previous?.artist != track.artist
-                if (newArtist) add(ListEntry.ArtistHeader(track.artist, artistCounts[track.artist] ?: 0))
+                val newArtist = index == 0 || previous?.groupArtist != track.groupArtist
+                if (newArtist) add(ListEntry.ArtistHeader(track.groupArtist, artistCounts[track.groupArtist] ?: 0))
                 if (newArtist || previous?.album != track.album) {
-                    add(ListEntry.AlbumHeader(track.artist, track.album, albumYears[track.artist to track.album] ?: 0))
+                    add(ListEntry.AlbumHeader(track.groupArtist, track.album, albumYears[track.groupArtist to track.album] ?: 0))
                 }
                 add(ListEntry.Song(track, index))
             }
@@ -299,6 +304,8 @@ fun LocalMusicScreen(
                     LocalTrackRow(
                         track = entry.track,
                         artworkUrl = artwork[entry.track.uri],
+                        isActive = entry.track.uri == currentMetadata?.id,
+                        isPlaying = isPlaying,
                         onClick = { play(visibleTracks, entry.index) },
                     )
                 }
@@ -327,35 +334,52 @@ private sealed interface ListEntry {
 private fun LocalTrackRow(
     track: LocalTrack,
     artworkUrl: String?,
+    isActive: Boolean,
+    isPlaying: Boolean,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (isActive) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(artworkUrl ?: track.deviceArtworkUri)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            error = painterResource(R.drawable.music_note),
-            fallback = painterResource(R.drawable.music_note),
+        Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        )
+                .clip(RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(artworkUrl ?: track.deviceArtworkUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.music_note),
+                fallback = painterResource(R.drawable.music_note),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            )
+            PlayingIndicatorBox(
+                isActive = isActive,
+                playWhenReady = isPlaying,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = ActiveBoxAlpha)),
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.bodyLarge,
+                color = if (isActive) MaterialTheme.colorScheme.primary else Color.Unspecified,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

@@ -1166,6 +1166,7 @@ class MainActivity : ComponentActivity() {
                                     startDestination = when (tabOpenedFromShortcut ?: defaultOpenTab) {
                                         NavigationTab.HOME -> Screens.Home
                                         NavigationTab.LIBRARY -> Screens.Library
+                                        NavigationTab.DOWNLOADS -> Screens.Local
                                         else -> Screens.Home
                                     }.route,
                                     // Enter Transition - smoother with smaller offset and longer duration

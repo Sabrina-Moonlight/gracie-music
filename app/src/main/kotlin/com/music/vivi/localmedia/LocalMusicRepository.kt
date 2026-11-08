@@ -7,6 +7,7 @@ package com.music.vivi.localmedia
 
 import android.content.ContentUris
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -45,6 +46,12 @@ data class LocalTrack(
     val durationMs: Long,
     val albumId: Long,
     val format: String,
+    /** Artista del álbum (sin "feat."). Se usa para agrupar y ordenar la lista. */
+    val albumArtist: String? = null,
+    /** Artista bajo el que se agrupa la canción en la lista (por defecto, el suyo). */
+    val groupArtist: String? = artist,
+    /** Fecha de lanzamiento del álbum como aaaammdd (si solo hay año: aaaa0000). Sirve para ordenar. */
+    val releaseDate: Int = 0,
 ) {
     val isLossless: Boolean
         get() = format in LosslessFormats
@@ -73,6 +80,9 @@ class LocalMusicRepository @Inject constructor(
     private val artworkPrefs by lazy {
         context.getSharedPreferences("local_music_artwork", Context.MODE_PRIVATE)
     }
+    private val releasePrefs by lazy {
+        context.getSharedPreferences("local_music_release_dates", Context.MODE_PRIVATE)
+    }
     private val artworkMemory = HashMap<String, String>()
     private val artworkGate = Semaphore(3)
 
@@ -93,6 +103,7 @@ class LocalMusicRepository @Inject constructor(
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DISPLAY_NAME,
+            *(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) arrayOf(MediaStore.Audio.Media.ALBUM_ARTIST) else emptyArray()),
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
         val tracks = mutableListOf<LocalTrack>()
@@ -106,6 +117,11 @@ class LocalMusicRepository @Inject constructor(
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val albumArtistCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
+            } else {
+                -1
+            }
             while (cursor.moveToNext()) {
                 val displayName = cursor.getString(nameCol).orEmpty()
                 val artist = cursor.getString(artistCol)
@@ -123,16 +139,26 @@ class LocalMusicRepository @Inject constructor(
                     durationMs = cursor.getLong(durationCol),
                     albumId = cursor.getLong(albumIdCol),
                     format = displayName.substringAfterLast('.', "").uppercase(Locale.ROOT),
+                    albumArtist = if (albumArtistCol >= 0) {
+                        cursor.getString(albumArtistCol)?.trim()
+                            ?.takeIf { it.isNotEmpty() && it != MediaStore.UNKNOWN_STRING }
+                    } else {
+                        null
+                    },
                 )
             }
         }
-        // Por artista (A-Z); dentro de cada artista, álbumes del más reciente al más antiguo;
+        val grouped = withReleaseDates(assignGroupArtists(tracks))
+
+        // Por artista (A-Z); dentro de cada artista, álbumes del más reciente al más antiguo
+        // (por fecha de lanzamiento completa si el archivo la trae; si empatan, la deluxe va antes);
         // dentro de cada álbum, en el orden del disco (número de pista).
-        val albumYear = tracks.groupBy { albumKey(it) }.mapValues { entry -> entry.value.maxOf { it.year } }
-        tracks.sortedWith(
-            compareBy<LocalTrack> { it.artist == null }
-                .thenBy { it.artist.orEmpty().lowercase(Locale.ROOT) }
-                .thenByDescending { albumYear[albumKey(it)] ?: 0 }
+        grouped.sortedWith(
+            compareBy<LocalTrack> { it.groupArtist == null }
+                .thenBy { it.groupArtist.orEmpty().lowercase(Locale.ROOT) }
+                .thenByDescending { it.releaseDate }
+                .thenBy { baseAlbumName(it.album) }
+                .thenByDescending { isEdition(it.album) }
                 .thenBy { it.album.orEmpty().lowercase(Locale.ROOT) }
                 .thenBy { it.trackNumber }
                 .thenBy { it.title.lowercase(Locale.ROOT) },
@@ -140,7 +166,75 @@ class LocalMusicRepository @Inject constructor(
     }
 
     private fun albumKey(track: LocalTrack) =
-        track.artist.orEmpty().lowercase(Locale.ROOT) + "|" + track.album.orEmpty().lowercase(Locale.ROOT)
+        track.groupArtist.orEmpty().lowercase(Locale.ROOT) + "|" + track.album.orEmpty().lowercase(Locale.ROOT)
+
+    /**
+     * Fecha de lanzamiento de cada álbum. Se lee de la etiqueta DATE del archivo (la base de datos
+     * de Android solo guarda el año, y dos álbumes del mismo año quedarían empatados).
+     * Si el archivo no trae fecha completa, se usa solo el año.
+     */
+    private fun withReleaseDates(tracks: List<LocalTrack>): List<LocalTrack> {
+        val dates = HashMap<String, Int>()
+        for ((key, list) in tracks.groupBy { albumKey(it) }) {
+            val fromTag = list.sortedBy { it.trackNumber }.take(2).firstNotNullOfOrNull { readReleaseDate(it) }
+            dates[key] = fromTag ?: (list.maxOf { it.year } * 10000)
+        }
+        return tracks.map { it.copy(releaseDate = dates[albumKey(it)] ?: 0) }
+    }
+
+    private fun readReleaseDate(track: LocalTrack): Int? {
+        releasePrefs.getInt(track.uri, 0).takeIf { it > 0 }?.let { return it }
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, Uri.parse(track.uri))
+            parseReleaseDate(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE))
+                ?.also { releasePrefs.edit().putInt(track.uri, it).apply() }
+        } catch (e: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    /** "2026-03-06", "20260306", "2026-03-06T00:00:00Z" -> 20260306. Solo el año -> null. */
+    private fun parseReleaseDate(raw: String?): Int? {
+        val match = Regex("(\\d{4})\\D?(\\d{2})\\D?(\\d{2})").find(raw.orEmpty()) ?: return null
+        val (year, month, day) = match.destructured
+        if (month.toInt() !in 1..12 || day.toInt() !in 1..31) return null
+        return year.toInt() * 10000 + month.toInt() * 100 + day.toInt()
+    }
+
+    /** "Album (Deluxe)" -> "album": sirve para dejar juntas la edición normal y la deluxe. */
+    private fun baseAlbumName(album: String?): String =
+        album.orEmpty().lowercase(Locale.ROOT)
+            .replace(Regex("\\(.*?\\)|\\[.*?\\]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    /** True si el álbum trae algo extra entre paréntesis/corchetes, como (Deluxe) o [Expanded]. */
+    private fun isEdition(album: String?): Boolean =
+        album != null && baseAlbumName(album) != album.lowercase(Locale.ROOT).trim()
+
+    /**
+     * Las colaboraciones ("Gracie Abrams Feat. Taylor Swift") se agrupan con el artista principal
+     * del mismo álbum, para que aparezcan dentro de su álbum y no en una sección aparte.
+     */
+    private fun assignGroupArtists(tracks: List<LocalTrack>): List<LocalTrack> {
+        val artistsByAlbum = tracks
+            .groupBy { it.album.orEmpty().lowercase(Locale.ROOT) }
+            .mapValues { entry -> entry.value.mapNotNull { it.artist }.distinct() }
+        return tracks.map { track ->
+            val artist = track.artist
+            val main = track.albumArtist
+                ?: artist?.let { full ->
+                    artistsByAlbum[track.album.orEmpty().lowercase(Locale.ROOT)].orEmpty()
+                        .filter { it.length < full.length && full.startsWith(it, ignoreCase = true) }
+                        .filter { !full[it.length].isLetterOrDigit() }
+                        .minByOrNull { it.length }
+                }
+            track.copy(groupArtist = main ?: artist)
+        }
+    }
 
     /** Carátula ya guardada de un intento anterior (no hace búsquedas). */
     fun cachedArtwork(track: LocalTrack): String? {
