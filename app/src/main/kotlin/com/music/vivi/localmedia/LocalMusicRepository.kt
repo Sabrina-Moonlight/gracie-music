@@ -39,6 +39,9 @@ data class LocalTrack(
     val uri: String,
     val title: String,
     val artist: String?,
+    val album: String?,
+    val year: Int,
+    val trackNumber: Int,
     val durationMs: Long,
     val albumId: Long,
     val format: String,
@@ -84,6 +87,9 @@ class LocalMusicRepository @Inject constructor(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -94,6 +100,9 @@ class LocalMusicRepository @Inject constructor(
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val yearCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+            val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
@@ -107,14 +116,31 @@ class LocalMusicRepository @Inject constructor(
                     title = cursor.getString(titleCol)?.trim()?.takeIf { it.isNotEmpty() }
                         ?: displayName.substringBeforeLast('.'),
                     artist = artist,
+                    album = cursor.getString(albumCol)?.trim()
+                        ?.takeIf { it.isNotEmpty() && it != MediaStore.UNKNOWN_STRING },
+                    year = cursor.getInt(yearCol),
+                    trackNumber = cursor.getInt(trackCol),
                     durationMs = cursor.getLong(durationCol),
                     albumId = cursor.getLong(albumIdCol),
                     format = displayName.substringAfterLast('.', "").uppercase(Locale.ROOT),
                 )
             }
         }
-        tracks.sortedBy { it.title.lowercase(Locale.ROOT) }
+        // Por artista (A-Z); dentro de cada artista, álbumes del más reciente al más antiguo;
+        // dentro de cada álbum, en el orden del disco (número de pista).
+        val albumYear = tracks.groupBy { albumKey(it) }.mapValues { entry -> entry.value.maxOf { it.year } }
+        tracks.sortedWith(
+            compareBy<LocalTrack> { it.artist == null }
+                .thenBy { it.artist.orEmpty().lowercase(Locale.ROOT) }
+                .thenByDescending { albumYear[albumKey(it)] ?: 0 }
+                .thenBy { it.album.orEmpty().lowercase(Locale.ROOT) }
+                .thenBy { it.trackNumber }
+                .thenBy { it.title.lowercase(Locale.ROOT) },
+        )
     }
+
+    private fun albumKey(track: LocalTrack) =
+        track.artist.orEmpty().lowercase(Locale.ROOT) + "|" + track.album.orEmpty().lowercase(Locale.ROOT)
 
     /** Carátula ya guardada de un intento anterior (no hace búsquedas). */
     fun cachedArtwork(track: LocalTrack): String? {

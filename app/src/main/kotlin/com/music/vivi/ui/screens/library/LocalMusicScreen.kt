@@ -178,6 +178,25 @@ fun LocalMusicScreen(
         }
     }
 
+    // Filas: encabezado de artista, encabezado de álbum y canciones, en el mismo orden de la cola.
+    val entries = remember(visibleTracks) {
+        val artistCounts = visibleTracks.groupingBy { it.artist }.eachCount()
+        val albumYears = visibleTracks
+            .groupBy { it.artist to it.album }
+            .mapValues { entry -> entry.value.maxOf { it.year } }
+        buildList<ListEntry> {
+            visibleTracks.forEachIndexed { index, track ->
+                val previous = visibleTracks.getOrNull(index - 1)
+                val newArtist = index == 0 || previous?.artist != track.artist
+                if (newArtist) add(ListEntry.ArtistHeader(track.artist, artistCounts[track.artist] ?: 0))
+                if (newArtist || previous?.album != track.album) {
+                    add(ListEntry.AlbumHeader(track.artist, track.album, albumYears[track.artist to track.album] ?: 0))
+                }
+                add(ListEntry.Song(track, index))
+            }
+        }
+    }
+
     fun play(list: List<LocalTrack>, startIndex: Int) {
         if (list.isEmpty()) return
         scope.launch {
@@ -260,14 +279,47 @@ fun LocalMusicScreen(
             }
         }
 
-        items(items = visibleTracks, key = { it.uri }) { track ->
-            LaunchedEffect(track.uri) { viewModel.requestArtwork(track) }
-            LocalTrackRow(
-                track = track,
-                artworkUrl = artwork[track.uri],
-                onClick = { play(visibleTracks, visibleTracks.indexOf(track)) },
-            )
+        items(items = entries, key = { it.key }) { entry ->
+            when (entry) {
+                is ListEntry.ArtistHeader -> Text(
+                    text = entry.name ?: stringResource(R.string.unknown_artist),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+                )
+                is ListEntry.AlbumHeader -> Text(
+                    text = (entry.album ?: stringResource(R.string.local_music_unknown_album)) +
+                        if (entry.year > 0) " · ${entry.year}" else "",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
+                )
+                is ListEntry.Song -> {
+                    LaunchedEffect(entry.track.uri) { viewModel.requestArtwork(entry.track) }
+                    LocalTrackRow(
+                        track = entry.track,
+                        artworkUrl = artwork[entry.track.uri],
+                        onClick = { play(visibleTracks, entry.index) },
+                    )
+                }
+            }
         }
+    }
+}
+
+private sealed interface ListEntry {
+    val key: String
+
+    data class ArtistHeader(val name: String?, val count: Int) : ListEntry {
+        override val key get() = "artist:$name"
+    }
+
+    data class AlbumHeader(val artist: String?, val album: String?, val year: Int) : ListEntry {
+        override val key get() = "album:$artist:$album"
+    }
+
+    data class Song(val track: LocalTrack, val index: Int) : ListEntry {
+        override val key get() = track.uri
     }
 }
 

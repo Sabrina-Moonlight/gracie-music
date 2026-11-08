@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="local_music_title">Downloads</string>
+    <string name="local_music_unknown_album">Unknown album</string>
     <string name="local_music_play">Play</string>
     <string name="local_music_shuffle">Shuffle</string>
     <string name="local_music_refresh">Refresh</string>
