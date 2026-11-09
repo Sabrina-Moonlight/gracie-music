@@ -179,6 +179,7 @@ import com.music.vivi.extensions.toMediaItem
 import com.music.vivi.extensions.toPersistQueue
 import com.music.vivi.extensions.toQueue
 import com.music.vivi.lyrics.LyricsHelper
+import com.music.vivi.models.MediaMetadata
 import com.music.vivi.models.PersistPlayerState
 import com.music.vivi.models.PersistQueue
 import com.music.vivi.models.toMediaMetadata
