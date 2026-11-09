@@ -96,6 +96,7 @@ fun LocalMusicScreen(
     val tracks by viewModel.tracks.collectAsState()
     val artwork by viewModel.artwork.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isReady by viewModel.isReady.collectAsState()
     val queueTitle = stringResource(R.string.local_music_title)
     val currentMetadata by playerConnection.mediaMetadata.collectAsState()
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
@@ -272,7 +273,7 @@ fun LocalMusicScreen(
             }
         }
 
-        if (tracks.isEmpty() && !isLoading) {
+        if (isReady && tracks.isEmpty() && !isLoading) {
             item(key = "empty") {
                 Text(
                     text = stringResource(R.string.local_music_empty),

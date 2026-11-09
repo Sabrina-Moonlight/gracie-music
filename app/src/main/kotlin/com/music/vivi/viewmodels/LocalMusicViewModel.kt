@@ -35,7 +35,26 @@ class LocalMusicViewModel @Inject constructor(
     private val _artwork = MutableStateFlow<Map<String, String>>(emptyMap())
     val artwork: StateFlow<Map<String, String>> = _artwork.asStateFlow()
 
+    /**
+     * False hasta que se sabe de verdad qué hay: o se cargó la lista guardada, o terminó un
+     * escaneo. Evita mostrar "No music found" en los primeros instantes, cuando la lista
+     * todavía está vacía solo porque aún no se ha leído.
+     */
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+
     private val requested = HashSet<String>()
+
+    /**
+     * Carga la lista guardada en cuanto se crea el ViewModel (no necesita permiso: es un archivo
+     * propio de la app), sin esperar a que la pantalla termine de componerse.
+     */
+    private val cacheJob = viewModelScope.launch {
+        repository.cachedTracks()?.let {
+            publish(it)
+            _isReady.value = true
+        }
+    }
 
     /**
      * Al entrar a la pantalla: usa la lista guardada. Solo escanea el teléfono si nunca
@@ -44,12 +63,8 @@ class LocalMusicViewModel @Inject constructor(
     fun loadIfNeeded() {
         if (_tracks.value.isNotEmpty() || _isLoading.value) return
         viewModelScope.launch {
-            val saved = repository.cachedTracks()
-            if (saved != null) {
-                publish(saved)
-            } else {
-                scan()
-            }
+            cacheJob.join()
+            if (_tracks.value.isEmpty() && !_isLoading.value) scan()
         }
     }
 
@@ -63,6 +78,7 @@ class LocalMusicViewModel @Inject constructor(
         _isLoading.value = true
         publish(runCatching { repository.loadTracks() }.getOrDefault(emptyList()))
         _isLoading.value = false
+        _isReady.value = true
     }
 
     /** Muestra la lista con las carátulas ya guardadas desde el primer cuadro (sin parpadeo). */

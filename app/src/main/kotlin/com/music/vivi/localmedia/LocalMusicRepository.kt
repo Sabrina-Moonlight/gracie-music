@@ -96,8 +96,12 @@ class LocalMusicRepository @Inject constructor(
     private val tracksFile by lazy { File(context.filesDir, "local_music_tracks.json") }
 
     /** Lista guardada la última vez que se escaneó (memoria o archivo). No lee el teléfono. */
-    suspend fun cachedTracks(): List<LocalTrack>? = withContext(Dispatchers.IO) {
-        memoryTracks ?: readTracksFile()?.also { memoryTracks = it }
+    suspend fun cachedTracks(): List<LocalTrack>? {
+        // Ruta rápida: si ya está en memoria no se cambia de hilo ni se toca el disco.
+        memoryTracks?.let { return it }
+        return withContext(Dispatchers.IO) {
+            memoryTracks ?: readTracksFile()?.also { memoryTracks = it }
+        }
     }
 
     private fun saveTracks(list: List<LocalTrack>) {

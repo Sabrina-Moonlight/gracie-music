@@ -53,6 +53,7 @@ import timber.log.Timber
 import java.net.Authenticator
 import java.net.PasswordAuthentication
 import java.net.Proxy
+import com.music.vivi.localmedia.LocalMusicRepository
 import java.util.Locale
 import javax.inject.Inject
 
@@ -63,6 +64,9 @@ class App : Application(), SingletonImageLoader.Factory {
     @Inject
     @ApplicationScope
     lateinit var applicationScope: CoroutineScope
+
+    @Inject
+    lateinit var localMusicRepository: LocalMusicRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -78,6 +82,12 @@ class App : Application(), SingletonImageLoader.Factory {
         CipherDeobfuscator.initialize(this)
 
         Timber.plant(Timber.DebugTree())
+
+        // Precarga la lista de música local (archivo -> memoria) para que la pantalla
+        // de Descargas la muestre al instante, sin pasar por un estado vacío.
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching { localMusicRepository.cachedTracks() }
+        }
 
         // تهيئة إعدادات التطبيق عند الإقلاع
         applicationScope.launch {
