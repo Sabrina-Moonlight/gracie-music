@@ -115,19 +115,19 @@ fun LocalMusicScreen(
         hasPermission = granted
     }
 
-    // Al volver a la pantalla (por ejemplo desde Ajustes) se revisa el permiso y se refresca la lista.
+    // Al volver a la pantalla (por ejemplo desde Ajustes) solo se revisa el permiso.
+    // La lista se actualiza únicamente con el botón de refrescar.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 hasPermission = permissionGranted()
-                if (hasPermission) viewModel.load()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(hasPermission) {
-        if (hasPermission) viewModel.load()
+        if (hasPermission) viewModel.loadIfNeeded()
     }
 
     if (!hasPermission) {

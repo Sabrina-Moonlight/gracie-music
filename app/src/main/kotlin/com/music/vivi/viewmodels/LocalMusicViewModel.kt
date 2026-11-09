@@ -13,16 +13,12 @@ import com.music.vivi.localmedia.LocalMusicRepository
 import com.music.vivi.localmedia.LocalTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -41,13 +37,41 @@ class LocalMusicViewModel @Inject constructor(
 
     private val requested = HashSet<String>()
 
+    /**
+     * Al entrar a la pantalla: usa la lista guardada. Solo escanea el teléfono si nunca
+     * se ha escaneado (la primera vez). Después, solo se actualiza con el botón de refrescar.
+     */
+    fun loadIfNeeded() {
+        if (_tracks.value.isNotEmpty() || _isLoading.value) return
+        viewModelScope.launch {
+            val saved = repository.cachedTracks()
+            if (saved != null) {
+                publish(saved)
+            } else {
+                scan()
+            }
+        }
+    }
+
+    /** Botón de refrescar (manual): vuelve a leer las canciones del teléfono. */
     fun load() {
         if (_isLoading.value) return
-        viewModelScope.launch {
-            _isLoading.value = true
-            _tracks.value = runCatching { repository.loadTracks() }.getOrDefault(emptyList())
-            _isLoading.value = false
+        viewModelScope.launch { scan() }
+    }
+
+    private suspend fun scan() {
+        _isLoading.value = true
+        publish(runCatching { repository.loadTracks() }.getOrDefault(emptyList()))
+        _isLoading.value = false
+    }
+
+    /** Muestra la lista con las carátulas ya guardadas desde el primer cuadro (sin parpadeo). */
+    private suspend fun publish(list: List<LocalTrack>) {
+        val saved = withContext(Dispatchers.Default) {
+            buildMap { list.forEach { track -> repository.cachedArtwork(track)?.let { put(track.uri, it) } } }
         }
+        _artwork.value = saved
+        _tracks.value = list
     }
 
     /** Se llama desde cada fila visible: busca su carátula en línea una sola vez. */
@@ -58,19 +82,14 @@ class LocalMusicViewModel @Inject constructor(
         }
     }
 
-    /** Arma la cola para el reproductor, con carátula en línea para las primeras canciones. */
-    suspend fun buildQueue(list: List<LocalTrack>, startIndex: Int): List<MediaItem> {
-        val head = list.drop(startIndex).take(8)
-        withTimeoutOrNull(2_500L) {
-            coroutineScope { head.map { async { fetchArtwork(it) } }.awaitAll() }
-        }
-        return withContext(Dispatchers.Default) {
+    /** Arma la cola para el reproductor al instante: usa las carátulas ya guardadas, sin esperar internet. */
+    suspend fun buildQueue(list: List<LocalTrack>, startIndex: Int): List<MediaItem> =
+        withContext(Dispatchers.Default) {
             list.map { track ->
                 val url = _artwork.value[track.uri] ?: repository.cachedArtwork(track)
                 track.toMediaMetadata(url).toMediaItem()
             }
         }
-    }
 
     private suspend fun fetchArtwork(track: LocalTrack): String? {
         _artwork.value[track.uri]?.let { return it }

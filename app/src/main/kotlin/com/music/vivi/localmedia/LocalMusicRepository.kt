@@ -20,6 +20,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,14 +80,80 @@ data class LocalTrack(
 class LocalMusicRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    // v2: las carátulas guardadas antes podían ser la del sencillo; se empieza de cero.
     private val artworkPrefs by lazy {
-        context.getSharedPreferences("local_music_artwork", Context.MODE_PRIVATE)
+        runCatching { context.deleteSharedPreferences("local_music_artwork") }
+        context.getSharedPreferences("local_music_artwork_v2", Context.MODE_PRIVATE)
     }
     private val releasePrefs by lazy {
         context.getSharedPreferences("local_music_release_dates", Context.MODE_PRIVATE)
     }
     private val artworkMemory = HashMap<String, String>()
     private val artworkGate = Semaphore(3)
+
+    @Volatile
+    private var memoryTracks: List<LocalTrack>? = null
+    private val tracksFile by lazy { File(context.filesDir, "local_music_tracks.json") }
+
+    /** Lista guardada la última vez que se escaneó (memoria o archivo). No lee el teléfono. */
+    suspend fun cachedTracks(): List<LocalTrack>? = withContext(Dispatchers.IO) {
+        memoryTracks ?: readTracksFile()?.also { memoryTracks = it }
+    }
+
+    private fun saveTracks(list: List<LocalTrack>) {
+        memoryTracks = list.takeIf { it.isNotEmpty() }
+        runCatching {
+            if (list.isEmpty()) {
+                tracksFile.delete()
+            } else {
+                val array = JSONArray()
+                list.forEach { t ->
+                    array.put(
+                        JSONObject().apply {
+                            put("uri", t.uri)
+                            put("title", t.title)
+                            put("artist", t.artist ?: JSONObject.NULL)
+                            put("album", t.album ?: JSONObject.NULL)
+                            put("year", t.year)
+                            put("trackNumber", t.trackNumber)
+                            put("durationMs", t.durationMs)
+                            put("albumId", t.albumId)
+                            put("format", t.format)
+                            put("albumArtist", t.albumArtist ?: JSONObject.NULL)
+                            put("groupArtist", t.groupArtist ?: JSONObject.NULL)
+                            put("releaseDate", t.releaseDate)
+                        },
+                    )
+                }
+                val tmp = File(tracksFile.parentFile, tracksFile.name + ".tmp")
+                tmp.writeText(array.toString())
+                tmp.renameTo(tracksFile)
+            }
+        }
+    }
+
+    private fun readTracksFile(): List<LocalTrack>? = runCatching {
+        if (!tracksFile.exists()) return@runCatching null
+        val array = JSONArray(tracksFile.readText())
+        List(array.length()) { i ->
+            val o = array.getJSONObject(i)
+            fun str(name: String) = if (o.isNull(name)) null else o.optString(name)
+            LocalTrack(
+                uri = o.getString("uri"),
+                title = o.getString("title"),
+                artist = str("artist"),
+                album = str("album"),
+                year = o.optInt("year"),
+                trackNumber = o.optInt("trackNumber"),
+                durationMs = o.optLong("durationMs"),
+                albumId = o.optLong("albumId"),
+                format = o.optString("format"),
+                albumArtist = str("albumArtist"),
+                groupArtist = str("groupArtist"),
+                releaseDate = o.optInt("releaseDate"),
+            )
+        }.takeIf { it.isNotEmpty() }
+    }.getOrNull()
 
     /** Lee todas las canciones de música del teléfono (no usa internet). */
     suspend fun loadTracks(): List<LocalTrack> = withContext(Dispatchers.IO) {
@@ -153,7 +222,7 @@ class LocalMusicRepository @Inject constructor(
         // Por artista (A-Z); dentro de cada artista, álbumes del más reciente al más antiguo
         // (por fecha de lanzamiento completa si el archivo la trae; si empatan, la deluxe va antes);
         // dentro de cada álbum, en el orden del disco (número de pista).
-        grouped.sortedWith(
+        val sorted = grouped.sortedWith(
             compareBy<LocalTrack> { it.groupArtist == null }
                 .thenBy { it.groupArtist.orEmpty().lowercase(Locale.ROOT) }
                 .thenByDescending { it.releaseDate }
@@ -163,6 +232,8 @@ class LocalMusicRepository @Inject constructor(
                 .thenBy { it.trackNumber }
                 .thenBy { it.title.lowercase(Locale.ROOT) },
         )
+        saveTracks(sorted)
+        sorted
     }
 
     private fun albumKey(track: LocalTrack) =
@@ -236,38 +307,60 @@ class LocalMusicRepository @Inject constructor(
         }
     }
 
-    /** Carátula ya guardada de un intento anterior (no hace búsquedas). */
-    fun cachedArtwork(track: LocalTrack): String? {
-        val key = artworkKey(track)
-        val value = synchronized(artworkMemory) { artworkMemory[key] } ?: artworkPrefs.getString(key, null)
-        return value?.takeIf { it.isNotEmpty() }
+    private fun stored(key: String): String? {
+        synchronized(artworkMemory) { artworkMemory[key] }?.let { return it }
+        return artworkPrefs.getString(key, null)?.also { synchronized(artworkMemory) { artworkMemory[key] = it } }
     }
 
-    /** Busca la carátula en línea (YouTube Music). Devuelve null si no hay coincidencia segura. */
+    private fun store(key: String, url: String) {
+        synchronized(artworkMemory) { artworkMemory[key] = url }
+        artworkPrefs.edit().putString(key, url).apply()
+    }
+
+    /** Carátula ya guardada (de la canción o de su álbum). No hace búsquedas. */
+    fun cachedArtwork(track: LocalTrack): String? {
+        stored(artworkKey(track))?.takeIf { it.isNotEmpty() }?.let { return it }
+        return albumArtworkKey(track)?.let { stored(it) }?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Busca la carátula del ÁLBUM de la canción en línea (YouTube Music). Si la canción es un
+     * sencillo que también está en un álbum, se elige la versión que pertenece a ese álbum,
+     * no la del sencillo. Devuelve null si no hay coincidencia segura (entonces se usa la del archivo).
+     */
     suspend fun onlineArtwork(track: LocalTrack): String? {
-        val key = artworkKey(track)
-        synchronized(artworkMemory) { artworkMemory[key] }?.let { return it.takeIf(String::isNotEmpty) }
-        artworkPrefs.getString(key, null)?.let { stored ->
-            synchronized(artworkMemory) { artworkMemory[key] = stored }
-            return stored.takeIf(String::isNotEmpty)
-        }
+        cachedArtwork(track)?.let { return it }
+        if (stored(artworkKey(track)) != null) return null // ya se buscó y no hubo coincidencia
 
         return artworkGate.withPermit {
+            // Mientras esperaba turno, otra canción del mismo álbum pudo encontrar la carátula.
+            cachedArtwork(track)?.let { return@withPermit it }
             withContext(Dispatchers.IO) {
-                val query = listOfNotNull(track.title, track.artist).joinToString(" ")
-                val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
-                    ?: return@withContext null // sin internet o error: no se guarda, se reintenta luego
-                val match = result.items.filterIsInstance<SongItem>()
-                    .filter { matches(track, it) }
-                    .minByOrNull { candidate ->
+                val base = listOfNotNull(track.title, track.artist).joinToString(" ")
+                val queries = if (track.album != null) listOf("$base ${track.album}", base) else listOf(base)
+                var url = ""
+                for (query in queries) {
+                    val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                        ?: return@withContext null // sin internet o error: no se guarda, se reintenta luego
+                    val candidates = result.items.filterIsInstance<SongItem>().filter { matches(track, it) }
+                        .let { list -> if (track.album != null) list.filter { albumMatches(track, it) } else list }
+                    val match = candidates.minByOrNull { candidate ->
                         candidate.duration?.let { abs(it - track.durationMs / 1000L) } ?: Long.MAX_VALUE
                     }
-                val url = match?.thumbnail?.resize(544, 544).orEmpty()
-                synchronized(artworkMemory) { artworkMemory[key] = url }
-                artworkPrefs.edit().putString(key, url).apply()
+                    url = match?.thumbnail?.resize(544, 544).orEmpty()
+                    if (url.isNotEmpty()) break
+                }
+                store(artworkKey(track), url)
+                if (url.isNotEmpty()) albumArtworkKey(track)?.let { store(it, url) }
                 url.takeIf { it.isNotEmpty() }
             }
         }
+    }
+
+    private fun albumMatches(track: LocalTrack, candidate: SongItem): Boolean {
+        val wanted = normalize(track.album.orEmpty())
+        val found = normalize(candidate.album?.name.orEmpty())
+        return wanted.isNotEmpty() && wanted == found
     }
 
     private fun matches(track: LocalTrack, candidate: SongItem): Boolean {
@@ -285,7 +378,17 @@ class LocalMusicRepository @Inject constructor(
         }
     }
 
-    private fun artworkKey(track: LocalTrack) = "${normalize(track.title)}|${normalize(track.artist.orEmpty())}"
+    private fun artworkKey(track: LocalTrack) =
+        "track|${normalize(track.title)}|${normalize(track.artist.orEmpty())}|${plain(track.album.orEmpty())}"
+
+    /** Una carátula por álbum: todas las canciones del mismo álbum comparten la misma. */
+    private fun albumArtworkKey(track: LocalTrack): String? {
+        val album = plain(track.album.orEmpty()).takeIf { it.isNotEmpty() } ?: return null
+        return "album|$album|${plain(track.groupArtist.orEmpty())}"
+    }
+
+    private fun plain(value: String): String =
+        value.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
     private fun normalize(value: String): String =
         value.lowercase(Locale.ROOT)
