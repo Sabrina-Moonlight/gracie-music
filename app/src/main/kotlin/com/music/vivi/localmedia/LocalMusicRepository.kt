@@ -95,6 +95,12 @@ class LocalMusicRepository @Inject constructor(
     private var memoryTracks: List<LocalTrack>? = null
     private val tracksFile by lazy { File(context.filesDir, "local_music_tracks.json") }
 
+    /** Se llama al abrir la app: deja en memoria la lista y las carátulas guardadas para que Descargas abra al instante. */
+    suspend fun warmUp() {
+        cachedTracks()
+        withContext(Dispatchers.IO) { runCatching { stored("") } }
+    }
+
     /** Lista guardada la última vez que se escaneó (memoria o archivo). No lee el teléfono. */
     suspend fun cachedTracks(): List<LocalTrack>? {
         // Ruta rápida: si ya está en memoria no se cambia de hilo ni se toca el disco.
@@ -383,13 +389,19 @@ class LocalMusicRepository @Inject constructor(
     }
 
     private fun artworkKey(track: LocalTrack) =
-        "track|${normalize(track.title)}|${normalize(track.artist.orEmpty())}|${plain(track.album.orEmpty())}"
+        "track2|${normalize(track.title)}|${normalize(track.artist.orEmpty())}|${exactAlbum(track.album)}"
 
-    /** Una carátula por álbum: todas las canciones del mismo álbum comparten la misma. */
+    /**
+     * Una carátula por álbum: todas las canciones del mismo álbum comparten la misma.
+     * Se usa el nombre EXACTO del álbum (no se ignoran apóstrofes ni signos) para que la edición
+     * deluxe no herede la carátula del álbum normal.
+     */
     private fun albumArtworkKey(track: LocalTrack): String? {
-        val album = plain(track.album.orEmpty()).takeIf { it.isNotEmpty() } ?: return null
-        return "album|$album|${plain(track.groupArtist.orEmpty())}"
+        val album = exactAlbum(track.album).takeIf { it.isNotEmpty() } ?: return null
+        return "album2|$album|${plain(track.groupArtist.orEmpty())}"
     }
+
+    private fun exactAlbum(album: String?): String = album.orEmpty().lowercase(Locale.ROOT).trim()
 
     private fun plain(value: String): String =
         value.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()

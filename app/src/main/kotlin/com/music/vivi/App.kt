@@ -86,7 +86,7 @@ class App : Application(), SingletonImageLoader.Factory {
         // Precarga la lista de música local (archivo -> memoria) para que la pantalla
         // de Descargas la muestre al instante, sin pasar por un estado vacío.
         applicationScope.launch(Dispatchers.IO) {
-            runCatching { localMusicRepository.cachedTracks() }
+            runCatching { localMusicRepository.warmUp() }
         }
 
         // تهيئة إعدادات التطبيق عند الإقلاع
