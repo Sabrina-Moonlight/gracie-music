@@ -227,7 +227,7 @@ class LocalMusicRepository @Inject constructor(
                 )
             }
         }
-        val grouped = withReleaseDates(assignGroupArtists(tracks))
+        val grouped = markBonusEditions(withReleaseDates(assignGroupArtists(tracks)))
 
         // Por artista (A-Z); dentro de cada artista, álbumes del más reciente al más antiguo
         // (por fecha de lanzamiento completa si el archivo la trae; si empatan, la deluxe va antes);
@@ -244,6 +244,37 @@ class LocalMusicRepository @Inject constructor(
         )
         saveTracks(sorted)
         sorted
+    }
+
+    /**
+     * Si un mismo álbum aparece con nombres casi iguales (por ejemplo con otro apóstrofe) y una de las
+     * versiones tiene bastantes menos canciones, esa versión es la edición extra (deluxe / bonus track).
+     * Se le pone "(Deluxe)" al nombre y se ordena con la fecha más nueva, así queda como grupo propio
+     * justo arriba del álbum normal. Las que ya traen "(Deluxe)" o similar en el nombre no se tocan.
+     */
+    private fun markBonusEditions(tracks: List<LocalTrack>): List<LocalTrack> {
+        val families = tracks
+            .filter { !it.album.isNullOrBlank() }
+            .groupBy { it.groupArtist.orEmpty().lowercase(Locale.ROOT) + "|" + plain(baseAlbumName(it.album)) }
+        val changes = HashMap<String, Pair<String, Int>>()
+        for (family in families.values) {
+            val variants = family.groupBy { exactAlbum(it.album) }
+            if (variants.size < 2) continue
+            val standard = variants.values
+                .filter { !isEdition(it.first().album) }
+                .maxWithOrNull(compareBy<List<LocalTrack>> { it.size }.thenByDescending { it.first().releaseDate })
+                ?: continue
+            val standardName = standard.first().album ?: continue
+            val newest = family.maxOf { it.releaseDate }
+            for (variant in variants.values) {
+                if (variant === standard || isEdition(variant.first().album)) continue
+                changes[albumKey(variant.first())] = "$standardName (Deluxe)" to newest
+            }
+        }
+        if (changes.isEmpty()) return tracks
+        return tracks.map { track ->
+            changes[albumKey(track)]?.let { (name, date) -> track.copy(album = name, releaseDate = date) } ?: track
+        }
     }
 
     private fun albumKey(track: LocalTrack) =

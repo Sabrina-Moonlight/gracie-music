@@ -735,9 +735,10 @@ class MusicService :
                 var index = player.currentMediaItemIndex
                 repeat(preloadCount.coerceIn(1, 10)) {
                     if (index < 0 || index >= player.mediaItemCount) return@repeat
+                    // Con "repetir una" el siguiente sería la misma canción y no se precargaría nada.
                     index = player.currentTimeline.getNextWindowIndex(
                         index,
-                        player.repeatMode,
+                        if (player.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_ALL else player.repeatMode,
                         player.shuffleModeEnabled,
                     )
                     if (index == androidx.media3.common.C.INDEX_UNSET ||
@@ -2298,7 +2299,15 @@ class MusicService :
         mediaItem?.takeIf { it.mediaId.isLocalMediaId() }?.metadata?.let { localMetadata ->
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    database.query { insert(localMetadata) { song -> song.copy(isLocal = true) } }
+                    database.query {
+                        insert(localMetadata) { song -> song.copy(isLocal = true) }
+                        // insert no cambia una canción que ya estaba guardada: se actualiza la carátula
+                        // para que el widget y el mini reproductor muestren la misma que la lista.
+                        val saved = getSongByIdBlocking(localMetadata.id)
+                        if (saved != null && saved.song.thumbnailUrl != localMetadata.thumbnailUrl) {
+                            update(saved.song.copy(thumbnailUrl = localMetadata.thumbnailUrl))
+                        }
+                    }
                 }
             }
         }
