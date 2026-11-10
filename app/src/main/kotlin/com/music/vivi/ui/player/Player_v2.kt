@@ -574,7 +574,7 @@ fun PlayerV2(
                                             displayedMetadata?.title ?: "Unknown",
                                             style = MaterialTheme.typography.headlineSmall, 
                                             color = adaptivePrimary,
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.sharedBounds(
@@ -593,7 +593,7 @@ fun PlayerV2(
                                             displayedMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
                                             style = MaterialTheme.typography.titleMedium,
                                             color = adaptiveSecondary,
-                                            fontWeight = FontWeight.Medium,
+                                            fontWeight = FontWeight.Normal,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.sharedBounds(
@@ -753,7 +753,7 @@ fun PlayerV2(
                                             displayedMetadata?.title ?: "Unknown",
                                             style = MaterialTheme.typography.titleMedium, 
                                             color = adaptivePrimary,
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.sharedBounds(
@@ -767,6 +767,7 @@ fun PlayerV2(
                                             displayedMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
                                             style = MaterialTheme.typography.titleSmall,
                                             color = adaptiveSecondary,
+                                            fontWeight = FontWeight.Normal,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.sharedBounds(

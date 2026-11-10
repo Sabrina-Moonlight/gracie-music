@@ -515,7 +515,7 @@ fun PlayerV2Landscape(
                                         text = mediaMetadata?.title ?: "Unknown",
                                         style = MaterialTheme.typography.titleLarge,
                                         color = adaptivePrimary,
-                                        fontWeight = FontWeight.Bold,
+                                        fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.clickable {
@@ -528,7 +528,7 @@ fun PlayerV2Landscape(
                                         text = mediaMetadata?.artists?.firstOrNull()?.name ?: "Unknown",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = adaptiveSecondary,
-                                        fontWeight = FontWeight.Medium,
+                                        fontWeight = FontWeight.Normal,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.clickable {

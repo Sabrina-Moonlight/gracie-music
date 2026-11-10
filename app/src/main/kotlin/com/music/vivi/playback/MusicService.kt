@@ -444,6 +444,9 @@ class MusicService :
     // URL cache for stream URLs - class-level so it can be invalidated on errors
     private val songUrlCache = HashMap<String, Pair<String, Long>>()
 
+    // Remembers which stream client produced each cached URL, so a 403 can mark that client as failed
+    private val songClientCache = HashMap<String, String>()
+
     // Flag to bypass cache when quality changes - forces fresh stream fetch
     private val bypassCacheForQualityChange = mutableSetOf<String>()
 
@@ -2425,6 +2428,7 @@ class MusicService :
             result.getOrNull()?.getOrNull()?.let { playbackData ->
                 // Only write to cache if the job wasn't cancelled while we were resolving
                 if (isActive) {
+                    songClientCache[nextMediaId] = playbackData.streamClient
                     songUrlCache[nextMediaId] =
                         playbackData.streamUrl to
                             System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L)
@@ -2834,7 +2838,7 @@ class MusicService :
             }
             isExpiredUrlError(error) -> {
                 Timber.tag(TAG).d("Expired URL (403) detected, refreshing stream URL")
-                handleExpiredUrlError(mediaId)
+                handleExpiredUrlError(mediaId, mediaId?.let { songClientCache[it] })
                 return
             }
 
@@ -3070,7 +3074,7 @@ class MusicService :
     /**
      * Handles expired URL (403) errors by clearing caches and retrying.
      */
-    private fun handleExpiredUrlError(mediaId: String?) {
+    private fun handleExpiredUrlError(mediaId: String?, failedStreamClient: String? = null) {
         if (mediaId == null) {
             handleFinalFailure()
             return
@@ -3078,11 +3082,19 @@ class MusicService :
 
         incrementRetryCount(mediaId)
 
+        val client = failedStreamClient ?: songClientCache[mediaId]
+        client?.let { InnerTubeXPlayer.markStreamClientFailed(mediaId, it) }
+
         // Clear the cached URL
         songUrlCache.remove(mediaId)
-        Timber.tag(TAG).d("Cleared cached URL for $mediaId")
+        songClientCache.remove(mediaId)
+        Timber.tag(TAG).d("Cleared cached URL for $mediaId (client=$client)")
 
-
+        scope.launch {
+            if (InnerTubeXPlayer.refreshAfterStreamRejection()) {
+                Timber.tag(TAG).d("Player config refreshed after stream rejection")
+            }
+        }
 
         retryJob?.cancel()
         retryJob = scope.launch {
@@ -3395,6 +3407,7 @@ class MusicService :
 
                 val streamUrl = nonNullPlayback.streamUrl
 
+                songClientCache[mediaId] = nonNullPlayback.streamClient
                 songUrlCache[mediaId] =
                     streamUrl to System.currentTimeMillis() + (nonNullPlayback.streamExpiresInSeconds * 1000L)
                 return@Factory dataSpec.withUri(streamUrl.toUri()).subrange(dataSpec.uriPositionOffset, CHUNK_LENGTH)

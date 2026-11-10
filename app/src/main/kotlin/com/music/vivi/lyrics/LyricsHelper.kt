@@ -114,19 +114,22 @@ constructor(
                         if (provider.isEnabled(context) && !(needsVideoId && mediaMetadata.id.isLocalMediaId())) {
                             launch {
                                 try {
-                                    val result = provider.getLyrics(
-                                        mediaMetadata.id,
-                                        mediaMetadata.title,
-                                        mediaMetadata.artists.joinToString { it.name },
-                                        mediaMetadata.duration,
-                                        mediaMetadata.album?.title,
-                                    )
-                                    result.onSuccess { lyrics ->
-                                        if (lyrics.isNotBlank() && lyrics != LYRICS_NOT_FOUND) {
-                                            channel.send(Triple(index, provider.name, lyrics))
+                                    // Si un proveedor tarda más de 3,5 s, se sigue sin él.
+                                    withTimeoutOrNull(PROVIDER_FETCH_TIMEOUT_MS) {
+                                        val result = provider.getLyrics(
+                                            mediaMetadata.id,
+                                            mediaMetadata.title,
+                                            mediaMetadata.artists.joinToString { it.name },
+                                            mediaMetadata.duration,
+                                            mediaMetadata.album?.title,
+                                        )
+                                        result.onSuccess { lyrics ->
+                                            if (lyrics.isNotBlank() && lyrics != LYRICS_NOT_FOUND) {
+                                                channel.send(Triple(index, provider.name, lyrics))
+                                            }
+                                        }.onFailure {
+                                            reportException(it)
                                         }
-                                    }.onFailure {
-                                        reportException(it)
                                     }
                                 } catch (e: Exception) {
                                     reportException(e)
@@ -146,52 +149,85 @@ constructor(
                     var bestIndex = Int.MAX_VALUE
 
                     try {
-                        kotlinx.coroutines.withTimeout(15000) {
-                            for ((index, providerName, lyrics) in channel) {
-                                if (!prioritizeSync) {
-                                    if (index < bestIndex) {
+                        var deadline = System.currentTimeMillis() + 5000L
+
+                        while (System.currentTimeMillis() < deadline) {
+                            val remainingTime = (deadline - System.currentTimeMillis()).coerceAtLeast(1L)
+                            val item = withTimeoutOrNull(remainingTime) {
+                                channel.receiveCatching()
+                            } ?: break
+
+                            val triple = item.getOrNull() ?: break
+                            val (index, providerName, lyrics) = triple
+
+                            if (!prioritizeSync) {
+                                if (index < bestIndex) {
+                                    bestLyrics = lyrics
+                                    bestProvider = providerName
+                                    bestIndex = index
+                                    if (index == 0) break
+                                    deadline = minOf(deadline, System.currentTimeMillis() + 500L)
+                                }
+                            } else {
+                                val syncType = try {
+                                    LyricsUtils.getSyncType(lyrics)
+                                } catch (e: Exception) {
+                                    reportException(e)
+                                    LyricsUtils.SyncType.NONE
+                                }
+
+                                if (syncType == LyricsUtils.SyncType.WORD) {
+                                    if (bestSyncType != LyricsUtils.SyncType.WORD || index < bestIndex) {
                                         bestLyrics = lyrics
                                         bestProvider = providerName
+                                        bestSyncType = syncType
                                         bestIndex = index
-                                        if (index == 0) break
+                                    }
+                                    if (index == 0) break
+                                    deadline = minOf(deadline, System.currentTimeMillis() + 400L)
+                                } else if (syncType == LyricsUtils.SyncType.LINE) {
+                                    val isBetter = bestSyncType == LyricsUtils.SyncType.NONE ||
+                                        (bestSyncType == LyricsUtils.SyncType.LINE && index < bestIndex)
+                                    if (isBetter) {
+                                        bestLyrics = lyrics
+                                        bestProvider = providerName
+                                        bestSyncType = syncType
+                                        bestIndex = index
+                                    }
+                                    if (bestSyncType == LyricsUtils.SyncType.LINE) {
+                                        if (index == 0) {
+                                            deadline = minOf(deadline, System.currentTimeMillis() + 500L)
+                                        } else {
+                                            deadline = minOf(deadline, System.currentTimeMillis() + 800L)
+                                        }
                                     }
                                 } else {
-                                    val syncType = try {
-                                        LyricsUtils.getSyncType(lyrics)
-                                    } catch (e: Exception) {
-                                        reportException(e)
-                                        LyricsUtils.SyncType.NONE
-                                    }
-                                    
-                                    if (syncType == LyricsUtils.SyncType.WORD) {
-                                        if (bestSyncType != LyricsUtils.SyncType.WORD || index < bestIndex) {
-                                            bestLyrics = lyrics
-                                            bestProvider = providerName
-                                            bestSyncType = syncType
-                                            bestIndex = index
-                                        }
-                                        if (index == 0) break
-                                    } else if (syncType == LyricsUtils.SyncType.LINE && (bestSyncType == LyricsUtils.SyncType.NONE || (bestSyncType == LyricsUtils.SyncType.LINE && index < bestIndex))) {
+                                    if (bestLyrics == LYRICS_NOT_FOUND) {
                                         bestLyrics = lyrics
                                         bestProvider = providerName
                                         bestSyncType = syncType
                                         bestIndex = index
-                                    } else if (bestLyrics == LYRICS_NOT_FOUND || (syncType == bestSyncType && index < bestIndex)) {
+                                        deadline = minOf(deadline, System.currentTimeMillis() + 1200L)
+                                    } else if (bestSyncType == LyricsUtils.SyncType.NONE && index < bestIndex) {
                                         bestLyrics = lyrics
                                         bestProvider = providerName
-                                        bestSyncType = syncType
                                         bestIndex = index
                                     }
                                 }
                             }
                         }
-                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                        // Use whatever we found
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        reportException(e)
                     } finally {
                         jobs.forEach { it.cancel() }
                         channel.close()
                     }
-                    
+
+                    if (bestLyrics != LYRICS_NOT_FOUND) {
+                        cache.put(cacheKey, listOf(LyricsResult(bestProvider, bestLyrics)))
+                    }
                     LyricsWithProvider(bestLyrics, bestProvider)
                 }
             }
@@ -284,6 +320,7 @@ constructor(
     companion object {
         private const val MAX_CACHE_SIZE = 3
         private const val PROVIDER_TIMEOUT_MS = 15_000L
+        private const val PROVIDER_FETCH_TIMEOUT_MS = 3_500L
     }
 }
 
