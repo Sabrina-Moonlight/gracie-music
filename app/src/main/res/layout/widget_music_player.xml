@@ -60,13 +60,74 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <!-- Barra de progreso con onda y círculo (se dibuja por código) -->
-        <ImageView
-            android:id="@+id/widget_progress_track"
+        <!-- Barra de progreso: la ola va debajo y se anima sola en el launcher (fluida); encima, la barra y el círculo (se dibujan por código) -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="24dp"
-            android:scaleType="fitXY"
-            android:contentDescription="@null" />
+            android:layout_height="24dp">
+
+            <FrameLayout
+                android:id="@+id/widget_wave_clip"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="7dp"
+                android:visibility="gone">
+
+                <ViewFlipper
+                    android:id="@+id/widget_wave_a"
+                    android:layout_width="630dp"
+                    android:layout_height="match_parent"
+                    android:autoStart="true"
+                    android:flipInterval="3000"
+                    android:inAnimation="@anim/widget_wave_a_in"
+                    android:outAnimation="@anim/widget_wave_a_out">
+                    <ImageView
+                        android:id="@+id/widget_wave_a1"
+                        android:layout_width="630dp"
+                        android:layout_height="24dp"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/widget_wave_a"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_a2"
+                        android:layout_width="630dp"
+                        android:layout_height="24dp"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/widget_wave_a"
+                        android:contentDescription="@null" />
+                </ViewFlipper>
+
+                <ViewFlipper
+                    android:id="@+id/widget_wave_b"
+                    android:layout_width="644dp"
+                    android:layout_height="match_parent"
+                    android:autoStart="true"
+                    android:flipInterval="2500"
+                    android:inAnimation="@anim/widget_wave_b_in"
+                    android:outAnimation="@anim/widget_wave_b_out">
+                    <ImageView
+                        android:id="@+id/widget_wave_b1"
+                        android:layout_width="644dp"
+                        android:layout_height="24dp"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/widget_wave_b"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_b2"
+                        android:layout_width="644dp"
+                        android:layout_height="24dp"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/widget_wave_b"
+                        android:contentDescription="@null" />
+                </ViewFlipper>
+            </FrameLayout>
+
+            <ImageView
+                android:id="@+id/widget_progress_track"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitXY"
+                android:contentDescription="@null" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"

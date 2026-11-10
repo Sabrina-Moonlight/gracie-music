@@ -179,10 +179,37 @@ class vivimusicWidgetManager @Inject constructor(
         // Barra de progreso con onda y círculo, color claro sacado de la carátula (como en la notificación)
         val accent = pickAccentColor(albumArt)
         val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+        // Android 12+: la ola la anima el propio launcher (fluida) y aquí solo se recorta hasta lo reproducido.
+        // En versiones anteriores la ola se sigue dibujando dentro de la imagen de la barra.
+        val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
         views.setImageViewBitmap(
             R.id.widget_progress_track,
-            drawProgressBar(widthDp, fraction, accent)
+            drawProgressBar(widthDp, fraction, accent, drawWave = !waveByLauncher)
         )
+        if (waveByLauncher) {
+            val trackDp = (widthDp - 36).coerceAtLeast(120)
+            val spanDp = (trackDp - 14).coerceAtLeast(1)
+            views.setViewLayoutWidth(
+                R.id.widget_wave_clip,
+                spanDp * fraction,
+                android.util.TypedValue.COMPLEX_UNIT_DIP
+            )
+            val waves = arrayOf(
+                intArrayOf(R.id.widget_wave_a, R.id.widget_wave_a1, R.id.widget_wave_a2) to 110,
+                intArrayOf(R.id.widget_wave_b, R.id.widget_wave_b1, R.id.widget_wave_b2) to 90
+            )
+            for ((ids, alpha) in waves) {
+                // El tinte va en las imágenes y la transparencia en el conjunto, para que al cruzarse no se oscurezca
+                views.setInt(ids[1], "setColorFilter", accent)
+                views.setInt(ids[2], "setColorFilter", accent)
+                views.setFloat(ids[0], "setAlpha", alpha / 255f)
+            }
+            // Con la música en pausa la ola se esconde (así no gasta batería animándose)
+            views.setViewVisibility(
+                R.id.widget_wave_clip,
+                if (isPlaying && fraction > 0f) android.view.View.VISIBLE else android.view.View.GONE
+            )
+        }
 
         // Set play/pause icon
         val playPauseIcon = if (isPlaying) R.drawable.ic_widget_n_pause else R.drawable.ic_widget_n_play
@@ -218,7 +245,7 @@ class vivimusicWidgetManager @Inject constructor(
      * Barra de progreso como la de la notificación: barra recta (lo reproducido en color, el resto tenue),
      * con una ola suave que se levanta encima de lo reproducido y un círculo al final.
      */
-    private fun drawProgressBar(widthDp: Int, fraction: Float, color: Int): Bitmap {
+    private fun drawProgressBar(widthDp: Int, fraction: Float, color: Int, drawWave: Boolean = true): Bitmap {
         val d = context.resources.displayMetrics.density
         val w = ((widthDp - 36).coerceAtLeast(120) * d).toInt()
         val h = (24 * d).toInt()
@@ -243,6 +270,7 @@ class vivimusicWidgetManager @Inject constructor(
         if (xe > x0 + 1f) {
             c.drawLine(x0, cy, xe, cy, line)
 
+            if (drawWave) {
             // Dos olas translúcidas que suben y bajan, desfasadas entre sí. Se animan con el reloj
             // (el widget se redibuja unas 5 veces por segundo mientras suena la música).
             val span = xe - x0
@@ -277,6 +305,7 @@ class vivimusicWidgetManager @Inject constructor(
                     this.color = ColorUtils.setAlphaComponent(color, wv[5].toInt())
                 }
                 c.drawPath(path, fill)
+            }
             }
         }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ola para el widget: 9 ondas seguidas (se repite igual cada 70dp para que el desplazamiento no tenga saltos) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="630dp"
+    android:height="24dp"
+    android:viewportWidth="630"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M0,13.5 C12.95,13.5 22.05,1.5 35,1.5 C47.95,1.5 57.05,13.5 70,13.5 C82.95,13.5 92.05,1.5 105,1.5 C117.95,1.5 127.05,13.5 140,13.5 C152.95,13.5 162.05,1.5 175,1.5 C187.95,1.5 197.05,13.5 210,13.5 C222.95,13.5 232.05,1.5 245,1.5 C257.95,1.5 267.05,13.5 280,13.5 C292.95,13.5 302.05,1.5 315,1.5 C327.95,1.5 337.05,13.5 350,13.5 C362.95,13.5 372.05,1.5 385,1.5 C397.95,1.5 407.05,13.5 420,13.5 C432.95,13.5 442.05,1.5 455,1.5 C467.95,1.5 477.05,13.5 490,13.5 C502.95,13.5 512.05,1.5 525,1.5 C537.95,1.5 547.05,13.5 560,13.5 C572.95,13.5 582.05,1.5 595,1.5 C607.95,1.5 617.05,13.5 630,13.5 L630,13.5 Z" />
+</vector>
