@@ -179,36 +179,29 @@ class vivimusicWidgetManager @Inject constructor(
         // Barra de progreso con onda y círculo, color claro sacado de la carátula (como en la notificación)
         val accent = pickAccentColor(albumArt)
         val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-        // Android 12+: la ola la anima el propio launcher (fluida) y aquí solo se recorta hasta lo reproducido.
-        // En versiones anteriores la ola se sigue dibujando dentro de la imagen de la barra.
-        val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+        // Android 12+: la ola la anima el propio launcher (fluida): 12 imágenes de la ola en fases distintas
+        // que se mezclan con un fundido continuo. Cada imagen ya lleva el inicio y el final suaves.
+        // En pausa, o antes de Android 12, la ola se dibuja por código dentro de la imagen de la barra.
+        val trackDp = (widthDp - 36).coerceAtLeast(120)
+        val waveWidthDp = (trackDp - 14).coerceAtLeast(1) * fraction
+        val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            isPlaying && waveWidthDp >= 4f
         views.setImageViewBitmap(
             R.id.widget_progress_track,
             drawProgressBar(widthDp, fraction, accent, drawWave = !waveByLauncher)
         )
         if (waveByLauncher) {
-            val trackDp = (widthDp - 36).coerceAtLeast(120)
-            val spanDp = (trackDp - 14).coerceAtLeast(1)
             views.setViewLayoutWidth(
                 R.id.widget_wave_clip,
-                spanDp * fraction,
+                waveWidthDp,
                 android.util.TypedValue.COMPLEX_UNIT_DIP
             )
-            val waves = arrayOf(
-                intArrayOf(R.id.widget_wave_a, R.id.widget_wave_a1, R.id.widget_wave_a2) to 110,
-                intArrayOf(R.id.widget_wave_b, R.id.widget_wave_b1, R.id.widget_wave_b2) to 90
-            )
-            for ((ids, alpha) in waves) {
-                // El tinte va en las imágenes y la transparencia en el conjunto, para que al cruzarse no se oscurezca
-                views.setInt(ids[1], "setColorFilter", accent)
-                views.setInt(ids[2], "setColorFilter", accent)
-                views.setFloat(ids[0], "setAlpha", alpha / 255f)
+            for (i in waveFrameIds.indices) {
+                views.setImageViewBitmap(waveFrameIds[i], drawWaveFrame(waveWidthDp, accent, i))
             }
-            // Con la música en pausa la ola se esconde (así no gasta batería animándose)
-            views.setViewVisibility(
-                R.id.widget_wave_clip,
-                if (isPlaying && fraction > 0f) android.view.View.VISIBLE else android.view.View.GONE
-            )
+            views.setViewVisibility(R.id.widget_wave_clip, android.view.View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_wave_clip, android.view.View.GONE)
         }
 
         // Set play/pause icon
@@ -239,6 +232,61 @@ class vivimusicWidgetManager @Inject constructor(
         views.setOnClickPendingIntent(R.id.widget_repeat_button, getRepeatIntent())
 
         return views
+    }
+
+    private val waveFrameIds = intArrayOf(
+        R.id.widget_wave_f0, R.id.widget_wave_f1, R.id.widget_wave_f2, R.id.widget_wave_f3,
+        R.id.widget_wave_f4, R.id.widget_wave_f5, R.id.widget_wave_f6, R.id.widget_wave_f7,
+        R.id.widget_wave_f8, R.id.widget_wave_f9, R.id.widget_wave_f10, R.id.widget_wave_f11
+    )
+
+    /**
+     * Una imagen de la ola (dos capas translúcidas) en el instante `index` de un ciclo de 6 s dividido en
+     * 12 pasos. El launcher las va mezclando en orden y en bucle, y el ciclo cierra sin saltos.
+     * Mide `spanDp` de ancho y 24 dp de alto, y se dibuja a media resolución (la ola es suave y se estira bien).
+     */
+    private fun drawWaveFrame(spanDp: Float, color: Int, index: Int): Bitmap {
+        val s = context.resources.displayMetrics.density * 0.5f
+        val w = (spanDp * s).toInt().coerceAtLeast(2)
+        val h = (24f * s).toInt()
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        val cy = h - 8f * s
+        val base = cy - 2.5f * s
+        val spanPx = w.toFloat()
+        val t = index * 6.0 / 12.0
+        val grow = (spanDp / 24f).coerceAtMost(1f)
+        val taper = (28f * s).coerceAtMost(spanPx / 2f)
+        val waves = arrayOf(
+            // longitud (dp), vueltas laterales por ciclo, vueltas de subida/bajada por ciclo, fase, altura (dp), alpha
+            doubleArrayOf(70.0, 1.0, 1.0, 0.0, 12.0, 110.0),
+            doubleArrayOf(46.0, -1.0, 1.0, 2.1, 9.5, 90.0)
+        )
+        for (wv in waves) {
+            val lambda = wv[0] * s
+            val shift = 2.0 * Math.PI * wv[1] * t / 6.0
+            val breathe = 0.55 + 0.45 * kotlin.math.sin(2.0 * Math.PI * wv[2] * t / 6.0 + wv[3])
+            val amp = (wv[4] * s * grow * breathe).toFloat()
+            val path = Path().apply {
+                moveTo(0f, cy)
+                var x = 0f
+                while (x < spanPx) {
+                    x = minOf(x + 1f, spanPx)
+                    val edge = (minOf(x, spanPx - x) / taper).coerceIn(0f, 1f)
+                    val envelope = edge * edge * (3f - 2f * edge)
+                    val crest = 0.5f + 0.5f * kotlin.math.sin((x / lambda) * 2.0 * Math.PI - shift).toFloat()
+                    lineTo(x, base - amp * envelope * crest)
+                }
+                lineTo(spanPx, cy)
+                close()
+            }
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                this.color = ColorUtils.setAlphaComponent(color, wv[5].toInt())
+            }
+            c.drawPath(path, fill)
+        }
+        return out
     }
 
     /**
@@ -276,6 +324,7 @@ class vivimusicWidgetManager @Inject constructor(
             val span = xe - x0
             val now = (System.currentTimeMillis() % 600_000L) / 1000.0
             val grow = (span / (24f * d)).coerceAtMost(1f)
+            val taper = (28f * d).coerceAtMost(span / 2f)
             val waves = arrayOf(
                 // longitud (dp), velocidad lateral, velocidad de subida/bajada, fase, altura (dp), alpha
                 doubleArrayOf(70.0, 1.3, 1.1, 0.0, 12.0, 110.0),
@@ -290,8 +339,9 @@ class vivimusicWidgetManager @Inject constructor(
                     var x = x0
                     while (x < xe) {
                         x = minOf(x + 2f, xe)
-                        val t = (x - x0) / span
-                        val envelope = kotlin.math.sin(Math.PI * t).toFloat()
+                        // Sube suave desde la barra en el inicio y baja suave hasta la barra en el final
+                        val edge = (minOf(x - x0, xe - x) / taper).coerceIn(0f, 1f)
+                        val envelope = edge * edge * (3f - 2f * edge)
                         val crest = 0.5f + 0.5f * kotlin.math.sin(
                             ((x - x0) / lambda) * 2.0 * Math.PI - now * wv[1]
                         ).toFloat()

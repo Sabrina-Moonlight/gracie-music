@@ -72,51 +72,86 @@
                 android:layout_marginStart="7dp"
                 android:visibility="gone">
 
+                <!-- 12 imágenes de la ola en fases distintas; el launcher las mezcla con un fundido continuo (fluido) -->
                 <ViewFlipper
-                    android:id="@+id/widget_wave_a"
-                    android:layout_width="630dp"
+                    android:id="@+id/widget_wave_flipper"
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:autoStart="true"
-                    android:flipInterval="3000"
-                    android:inAnimation="@anim/widget_wave_a_in"
-                    android:outAnimation="@anim/widget_wave_a_out">
+                    android:flipInterval="500"
+                    android:inAnimation="@anim/widget_wave_fade_in"
+                    android:outAnimation="@anim/widget_wave_fade_out">
                     <ImageView
-                        android:id="@+id/widget_wave_a1"
-                        android:layout_width="630dp"
-                        android:layout_height="24dp"
+                        android:id="@+id/widget_wave_f0"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
                         android:scaleType="fitXY"
-                        android:src="@drawable/widget_wave_a"
                         android:contentDescription="@null" />
                     <ImageView
-                        android:id="@+id/widget_wave_a2"
-                        android:layout_width="630dp"
-                        android:layout_height="24dp"
+                        android:id="@+id/widget_wave_f1"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
                         android:scaleType="fitXY"
-                        android:src="@drawable/widget_wave_a"
-                        android:contentDescription="@null" />
-                </ViewFlipper>
-
-                <ViewFlipper
-                    android:id="@+id/widget_wave_b"
-                    android:layout_width="644dp"
-                    android:layout_height="match_parent"
-                    android:autoStart="true"
-                    android:flipInterval="2500"
-                    android:inAnimation="@anim/widget_wave_b_in"
-                    android:outAnimation="@anim/widget_wave_b_out">
-                    <ImageView
-                        android:id="@+id/widget_wave_b1"
-                        android:layout_width="644dp"
-                        android:layout_height="24dp"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/widget_wave_b"
                         android:contentDescription="@null" />
                     <ImageView
-                        android:id="@+id/widget_wave_b2"
-                        android:layout_width="644dp"
-                        android:layout_height="24dp"
+                        android:id="@+id/widget_wave_f2"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
                         android:scaleType="fitXY"
-                        android:src="@drawable/widget_wave_b"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f3"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f4"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f6"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f7"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f8"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f9"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f10"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f11"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
                         android:contentDescription="@null" />
                 </ViewFlipper>
             </FrameLayout>
