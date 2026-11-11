@@ -179,7 +179,7 @@ class vivimusicWidgetManager @Inject constructor(
         // Barra de progreso con onda y círculo, color claro sacado de la carátula (como en la notificación)
         val accent = pickAccentColor(albumArt)
         val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-        // Android 12+: la ola la anima el propio launcher: 24 imágenes de la ola en fases distintas
+        // Android 12+: la ola la anima el propio launcher: 48 imágenes de la ola en fases distintas
         // que cambian en seco (sin fundido, para que no se vean olas dobles). Cada imagen ya lleva el inicio y el final suaves.
         // En pausa, o antes de Android 12, la ola se dibuja por código dentro de la imagen de la barra.
         val trackDp = (widthDp - 36).coerceAtLeast(120)
@@ -240,16 +240,22 @@ class vivimusicWidgetManager @Inject constructor(
         R.id.widget_wave_f8, R.id.widget_wave_f9, R.id.widget_wave_f10, R.id.widget_wave_f11,
         R.id.widget_wave_f12, R.id.widget_wave_f13, R.id.widget_wave_f14, R.id.widget_wave_f15,
         R.id.widget_wave_f16, R.id.widget_wave_f17, R.id.widget_wave_f18, R.id.widget_wave_f19,
-        R.id.widget_wave_f20, R.id.widget_wave_f21, R.id.widget_wave_f22, R.id.widget_wave_f23
+        R.id.widget_wave_f20, R.id.widget_wave_f21, R.id.widget_wave_f22, R.id.widget_wave_f23,
+        R.id.widget_wave_f24, R.id.widget_wave_f25, R.id.widget_wave_f26, R.id.widget_wave_f27,
+        R.id.widget_wave_f28, R.id.widget_wave_f29, R.id.widget_wave_f30, R.id.widget_wave_f31,
+        R.id.widget_wave_f32, R.id.widget_wave_f33, R.id.widget_wave_f34, R.id.widget_wave_f35,
+        R.id.widget_wave_f36, R.id.widget_wave_f37, R.id.widget_wave_f38, R.id.widget_wave_f39,
+        R.id.widget_wave_f40, R.id.widget_wave_f41, R.id.widget_wave_f42, R.id.widget_wave_f43,
+        R.id.widget_wave_f44, R.id.widget_wave_f45, R.id.widget_wave_f46, R.id.widget_wave_f47
     )
 
     /**
      * Una imagen de la ola (dos capas translúcidas) en el instante `index` de un ciclo de 3 s dividido en
-     * 24 pasos. El launcher las va cambiando en seco (cada 125 ms), en orden y en bucle, y el ciclo cierra sin saltos.
-     * Mide `spanDp` de ancho y 24 dp de alto, y se dibuja a media resolución (la ola es suave y se estira bien).
+     * 48 pasos. El launcher las va cambiando en seco (cada 62 ms), en orden y en bucle, y el ciclo cierra sin saltos.
+     * Mide `spanDp` de ancho y 24 dp de alto, y se dibuja a baja resolución (la ola es suave y se estira bien).
      */
     private fun drawWaveFrame(spanDp: Float, color: Int, index: Int): Bitmap {
-        val s = context.resources.displayMetrics.density * 0.5f
+        val s = context.resources.displayMetrics.density * 0.35f
         val w = (spanDp * s).toInt().coerceAtLeast(2)
         val h = (24f * s).toInt()
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -257,7 +263,7 @@ class vivimusicWidgetManager @Inject constructor(
         val cy = h - 8f * s
         val base = cy - 2.5f * s
         val spanPx = w.toFloat()
-        val t = index * 3.0 / 24.0
+        val t = index * 3.0 / 48.0
         val grow = (spanDp / 24f).coerceAtMost(1f)
         val taper = (28f * s).coerceAtMost(spanPx / 2f)
         val waves = arrayOf(

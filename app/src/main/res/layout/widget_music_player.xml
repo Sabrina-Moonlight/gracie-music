@@ -72,13 +72,13 @@
                 android:layout_marginStart="7dp"
                 android:visibility="gone">
 
-                <!-- 24 imágenes de la ola en fases distintas; el launcher cambia de una a otra en seco, sin fundido (así no se ven olas dobles ni parpadeo) -->
+                <!-- 48 imágenes de la ola en fases distintas; el launcher cambia de una a otra en seco, sin fundido (así no se ven olas dobles ni parpadeo) -->
                 <ViewFlipper
                     android:id="@+id/widget_wave_flipper"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:autoStart="true"
-                    android:flipInterval="125">
+                    android:flipInterval="62">
                     <ImageView
                         android:id="@+id/widget_wave_f0"
                         android:layout_width="match_parent"
@@ -219,6 +219,150 @@
                         android:contentDescription="@null" />
                     <ImageView
                         android:id="@+id/widget_wave_f23"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f24"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f25"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f26"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f27"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f28"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f29"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f30"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f31"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f32"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f33"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f34"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f35"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f36"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f37"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f38"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f39"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f40"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f41"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f42"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f43"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f44"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f45"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f46"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
+                    <ImageView
+                        android:id="@+id/widget_wave_f47"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:scaleType="fitXY"
