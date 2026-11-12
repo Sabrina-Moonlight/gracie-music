@@ -54,6 +54,12 @@ class vivimusicWidgetManager @Inject constructor(
     private var cachedAlbumArt: Bitmap? = null
     private var cachedCircularAlbumArt: Bitmap? = null
 
+    // Para no reenviar todo el widget 5 veces por segundo (eso atascaba el launcher y la ola no salía fluida):
+    // firma de lo último enviado completo y "tramo" de ola enviado, por cada widget.
+    private val lastFullSig = HashMap<Int, String>()
+    private val lastWaveBucket = HashMap<Int, Int>()
+    private val insetDp = 17 // margen arriba y abajo del widget (lo hace más bajo)
+
     suspend fun updateWidgets(
         title: String,
         artist: String,
@@ -88,18 +94,37 @@ class vivimusicWidgetManager @Inject constructor(
         if (widgetIds.isNotEmpty()) {
             widgetIds.forEach { widgetId ->
                 val options = appWidgetManager.getAppWidgetOptions(widgetId)
-                val views = createRemoteViewsForSize(
-                    options,
-                    title,
-                    artist,
-                    albumArt,
-                    isPlaying,
-                    isLiked,
-                    duration,
-                    currentPosition,
-                    repeatMode
-                )
-                appWidgetManager.updateAppWidget(widgetId, views)
+                val minW = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+                val minH = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
+                val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+                val waveSpan = waveSpanDp(minW, fraction)
+                val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                    isPlaying && waveSpan >= 4f
+                val bucket = if (waveByLauncher) (waveSpan / 8f).toInt() else -1
+                val sig = "$title|$artist|$artworkUri|$isPlaying|$isLiked|$repeatMode|$minW|$minH|$waveByLauncher"
+                if (minH >= 100 && lastFullSig[widgetId] == sig) {
+                    // Mismo widget, solo avanzó el tiempo: actualización parcial (barra, tiempos y, de vez en cuando, la ola)
+                    val light = createProgressOnlyRemoteViews(
+                        albumArt, duration, currentPosition, minW, fraction, waveSpan,
+                        waveByLauncher, resendWave = bucket != lastWaveBucket[widgetId]
+                    )
+                    appWidgetManager.partiallyUpdateAppWidget(widgetId, light)
+                } else {
+                    val views = createRemoteViewsForSize(
+                        options,
+                        title,
+                        artist,
+                        albumArt,
+                        isPlaying,
+                        isLiked,
+                        duration,
+                        currentPosition,
+                        repeatMode
+                    )
+                    appWidgetManager.updateAppWidget(widgetId, views)
+                    lastFullSig[widgetId] = sig
+                }
+                lastWaveBucket[widgetId] = bucket
             }
         }
 
@@ -173,7 +198,7 @@ class vivimusicWidgetManager @Inject constructor(
         // Portada de fondo (estilo notificación)
         views.setImageViewBitmap(
             R.id.widget_background_art,
-            buildNotificationStyleBackground(albumArt, widthDp, heightDp)
+            buildNotificationStyleBackground(albumArt, widthDp, heightDp - 2 * insetDp)
         )
 
         // Barra de progreso con onda y círculo, color claro sacado de la carátula (como en la notificación)
@@ -182,8 +207,7 @@ class vivimusicWidgetManager @Inject constructor(
         // Android 12+: la ola la anima el propio launcher: 48 imágenes de la ola en fases distintas
         // que cambian en seco (sin fundido, para que no se vean olas dobles). Cada imagen ya lleva el inicio y el final suaves.
         // En pausa, o antes de Android 12, la ola se dibuja por código dentro de la imagen de la barra.
-        val trackDp = (widthDp - 36).coerceAtLeast(120)
-        val waveWidthDp = (trackDp - 14).coerceAtLeast(1) * fraction
+        val waveWidthDp = waveSpanDp(widthDp, fraction)
         val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             isPlaying && waveWidthDp >= 4f
         views.setImageViewBitmap(
@@ -231,6 +255,47 @@ class vivimusicWidgetManager @Inject constructor(
         views.setOnClickPendingIntent(R.id.widget_next_button, getNextIntent())
         views.setOnClickPendingIntent(R.id.widget_repeat_button, getRepeatIntent())
 
+        return views
+    }
+
+    /** Largo (dp) de la ola: lo reproducido de la barra. */
+    private fun waveSpanDp(widthDp: Int, fraction: Float): Float =
+        ((widthDp - 36).coerceAtLeast(120) - 14).coerceAtLeast(1) * fraction
+
+    /**
+     * Actualización ligera (cada 200 ms): solo barra, tiempos y ancho de la ola. Las 48 imágenes de la ola
+     * solo se reenvían si `resendWave` (cada ~8 dp de avance), así el launcher no se atasca y la ola fluye.
+     */
+    private fun createProgressOnlyRemoteViews(
+        albumArt: Bitmap?,
+        duration: Long,
+        currentPosition: Long,
+        widthDp: Int,
+        fraction: Float,
+        waveWidthDp: Float,
+        waveByLauncher: Boolean,
+        resendWave: Boolean
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.widget_music_player)
+        val accent = pickAccentColor(albumArt)
+        views.setImageViewBitmap(
+            R.id.widget_progress_track,
+            drawProgressBar(widthDp, fraction, accent, drawWave = !waveByLauncher)
+        )
+        if (waveByLauncher) {
+            views.setViewLayoutWidth(
+                R.id.widget_wave_clip,
+                waveWidthDp,
+                android.util.TypedValue.COMPLEX_UNIT_DIP
+            )
+            if (resendWave) {
+                for (i in waveFrameIds.indices) {
+                    views.setImageViewBitmap(waveFrameIds[i], drawWaveFrame(waveWidthDp, accent, i))
+                }
+            }
+        }
+        views.setTextViewText(R.id.widget_time_current, formatTime(currentPosition))
+        views.setTextViewText(R.id.widget_time_total, formatTime(duration))
         return views
     }
 

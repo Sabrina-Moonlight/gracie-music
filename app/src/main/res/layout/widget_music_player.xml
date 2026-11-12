@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Widget estilo notificación: portada nítida de fondo + texto, barra y 5 controles encima -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingTop="17dp"
+    android:paddingBottom="17dp"
+    android:theme="@style/Theme.Widget.vivimusic">
+
+<!-- Tarjeta del widget (el margen de arriba y abajo de la de fuera la hace más baja) -->
+<FrameLayout
     android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
-    android:clipToOutline="true"
-    android:theme="@style/Theme.Widget.vivimusic">
+    android:clipToOutline="true">
 
     <!-- Portada de fondo (se dibuja por código) -->
     <ImageView
@@ -470,5 +477,7 @@
         </LinearLayout>
 
     </LinearLayout>
+
+</FrameLayout>
 
 </FrameLayout>

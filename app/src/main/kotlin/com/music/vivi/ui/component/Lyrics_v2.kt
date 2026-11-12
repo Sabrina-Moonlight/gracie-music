@@ -155,7 +155,10 @@ fun LyricsV2(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     playerCoordinates: LayoutCoordinates? = null,
     onControlsVisibilityChange: (Boolean) -> Unit = {},
-    controlsVisible: Boolean = false
+    controlsVisible: Boolean = false,
+    // El reproductor pide ocultar los controles: se ocultan cuando termina la línea que suena
+    // (justo al empezar la siguiente o el círculo de espera), no a mitad de la línea.
+    hideControlsRequested: Boolean = false
 ) {
     if (!showLyrics) return
 
@@ -615,6 +618,13 @@ fun LyricsV2(
                     }
                 }
 
+                LaunchedEffect(hideControlsRequested) {
+                    if (!hideControlsRequested) return@LaunchedEffect
+                    val indexWhenRequested = activeListIndex
+                    snapshotFlow { activeListIndex }.first { it != indexWhenRequested }
+                    onControlsVisibilityChange(false)
+                }
+
                 var userManualOffset by remember { mutableFloatStateOf(0f) }
                 var flingJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
                 val velocityTracker = remember { VelocityTracker() }
@@ -884,7 +894,7 @@ fun LyricsV2(
                     mergedLyricsList.indexOfFirst { it is LyricsListItemV2.Line }.coerceAtLeast(0)
                 } else 0
                 val isAtLyricsStart = activeListIndex <= leadingIndicatorFirstLineIdx
-                val anchorRatio = if (controlsVisible || isAtLyricsStart) LYRICS_ANCHOR_RATIO_CONTROLS_VISIBLE else LYRICS_ANCHOR_RATIO
+                val anchorRatio = if (isAtLyricsStart) LYRICS_ANCHOR_RATIO_CONTROLS_VISIBLE else LYRICS_ANCHOR_RATIO
 
                 BoxWithConstraints(
                     contentAlignment = Alignment.TopCenter,
@@ -908,9 +918,15 @@ fun LyricsV2(
                         ?: if (mergedLyricsList.getOrNull(activeListIndex) is LyricsListItemV2.Indicator)
                             with(density) { 72.dp.toPx() } else lineHeightPx
                     val centeredAnchorY = (maxHeightPx - activeItemHeightPx) / 2f
-                    val baseAnchorY = if (controlsVisible && !isAtLyricsStart) centeredAnchorY
-                    else if (zoneTopInPlayerPx.isNaN() || playerHeightPx.isNaN()) maxHeightPx * anchorRatio
+                    val hiddenAnchorY = if (zoneTopInPlayerPx.isNaN() || playerHeightPx.isNaN()) maxHeightPx * anchorRatio
                     else playerHeightPx * anchorRatio - zoneTopInPlayerPx
+                    // Al mostrar u ocultar los controles, las letras se deslizan de una posición a la otra (antes saltaban de golpe)
+                    val controlsBlend by animateFloatAsState(
+                        targetValue = if (controlsVisible && !isAtLyricsStart) 1f else 0f,
+                        animationSpec = tween(400, easing = FastOutSlowInEasing),
+                        label = "lyricsControlsBlend"
+                    )
+                    val baseAnchorY = hiddenAnchorY + (centeredAnchorY - hiddenAnchorY) * controlsBlend
                     val constraintLineHeightPx = with(density) { 120.dp.toPx() }
 
                     val positions = remember(itemHeights.toMap(), activeListIndex, mergedLyricsList) {
