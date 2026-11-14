@@ -236,7 +236,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val INSTANT_SILENCE_SKIP_STEP_MS = 15_000L
 private const val INSTANT_SILENCE_SKIP_SETTLE_MS = 350L
 
-private const val LYRICS_PRELOAD_ENABLED = true
+private const val LYRICS_PRELOAD_ENABLED = false
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @androidx.annotation.OptIn(UnstableApi::class)
