@@ -2644,18 +2644,9 @@ fun BottomSheetPlayer(
                     ) {
                         Spacer(Modifier.weight(1f))
 
-                        if (mediaMetadata != null) {
-                            controlsContent(mediaMetadata)
-                        } else {
-                            // Evita pantalla negra mientras carga metadata (online / primera reproducción / transición)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 48.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                ContainedLoadingIndicator()
-                            }
+                        val metaForControls = mediaMetadata
+                        if (metaForControls != null) {
+                            controlsContent(metaForControls)
                         }
 
                         Spacer(Modifier.weight(1f))
@@ -2706,18 +2697,9 @@ fun BottomSheetPlayer(
                         }
                     }
 
-                    if (mediaMetadata != null) {
-                        controlsContent(mediaMetadata)
-                    } else {
-                        // Evita pantalla negra mientras carga metadata (online / primera reproducción / transición)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ContainedLoadingIndicator()
-                        }
+                    val metaForControlsPortrait = mediaMetadata
+                    if (metaForControlsPortrait != null) {
+                        controlsContent(metaForControlsPortrait)
                     }
 
                     Spacer(Modifier.height(if (useNewPlayerDesign) 30.dp else 8.dp))
@@ -2771,7 +2753,8 @@ fun InlineLyricsView(
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(mediaMetadata?.id, currentLyrics) {
-        if (mediaMetadata != null && currentLyrics == null) {
+        val meta = mediaMetadata ?: return@LaunchedEffect
+        if (currentLyrics == null) {
             delay(500)
             coroutineScope.launch(Dispatchers.IO) {
                 try {
@@ -2780,9 +2763,9 @@ fun InlineLyricsView(
                         com.music.vivi.di.LyricsHelperEntryPoint::class.java
                     )
                     val lyricsHelper = entryPoint.lyricsHelper()
-                    val fetchedLyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
+                    val fetchedLyricsWithProvider = lyricsHelper.getLyrics(meta)
                     database.query {
-                        upsert(LyricsEntity(mediaMetadata.id, fetchedLyricsWithProvider.lyrics, fetchedLyricsWithProvider.provider))
+                        upsert(LyricsEntity(meta.id, fetchedLyricsWithProvider.lyrics, fetchedLyricsWithProvider.provider))
                     }
                 } catch (e: Exception) {
                     // Handle error
