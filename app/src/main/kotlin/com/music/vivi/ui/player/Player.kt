@@ -2644,8 +2644,18 @@ fun BottomSheetPlayer(
                     ) {
                         Spacer(Modifier.weight(1f))
 
-                        mediaMetadata?.let {
-                            controlsContent(it)
+                        if (mediaMetadata != null) {
+                            controlsContent(mediaMetadata)
+                        } else {
+                            // Evita pantalla negra mientras carga metadata (online / primera reproducción / transición)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ContainedLoadingIndicator()
+                            }
                         }
 
                         Spacer(Modifier.weight(1f))
@@ -2696,8 +2706,18 @@ fun BottomSheetPlayer(
                         }
                     }
 
-                    mediaMetadata?.let {
-                        controlsContent(it)
+                    if (mediaMetadata != null) {
+                        controlsContent(mediaMetadata)
+                    } else {
+                        // Evita pantalla negra mientras carga metadata (online / primera reproducción / transición)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ContainedLoadingIndicator()
+                        }
                     }
 
                     Spacer(Modifier.height(if (useNewPlayerDesign) 30.dp else 8.dp))
