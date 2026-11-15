@@ -742,9 +742,8 @@ class MainActivity : ComponentActivity() {
                     }
                     val hasMedia = player.currentMediaItem != null || player.mediaItemCount > 0
                     // Leer sin bloquear el hilo principal (evita pantalla negra al abrir el reproductor)
-                    val wasExpanded = withContext(Dispatchers.IO) {
-                        restoreContext.dataStore.getAsync(LastPlayerExpandedKey, false)
-                    }
+                    // PRUEBA v02: restauración del reproductor abierto desactivada.
+                    val wasExpanded = false
                     if (!hasMedia) {
                         if (!playerBottomSheetState.isDismissed) playerBottomSheetState.dismiss()
                     } else if (wasExpanded && !playerRestoreDone) {
@@ -753,7 +752,7 @@ class MainActivity : ComponentActivity() {
                         playerBottomSheetState.collapseSoft()
                     }
                     // Al volver a la app: si estaba abierto al salir, se deja abierto otra vez.
-                    if (hasMedia && expandedOnStop && !playerBottomSheetState.isExpanded) {
+                    if (false && hasMedia && expandedOnStop && !playerBottomSheetState.isExpanded) {
                         playerBottomSheetState.expandSoft()
                     }
                     expandedOnStop = false

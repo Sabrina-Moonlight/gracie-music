@@ -141,7 +141,7 @@ class PlayerConnection(
     // Al abrir la app la cola tarda en restaurarse: mientras tanto se usa la última canción guardada
     // para que el reproductor se vea ya cargado (carátula, título, artista...).
     private val cachedMetadata: MediaMetadata? =
-        if (player.currentMetadata == null) LastMetadataCache.load(appContext) else null
+        null // PRUEBA v03: canción guardada desactivada (antes: LastMetadataCache.load)
     private var showingCachedMetadata = cachedMetadata != null
 
     val mediaMetadata = MutableStateFlow(player.currentMetadata ?: cachedMetadata)
