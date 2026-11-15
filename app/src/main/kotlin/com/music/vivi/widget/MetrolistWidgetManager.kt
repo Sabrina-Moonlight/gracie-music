@@ -54,12 +54,6 @@ class vivimusicWidgetManager @Inject constructor(
     private var cachedAlbumArt: Bitmap? = null
     private var cachedCircularAlbumArt: Bitmap? = null
 
-    // Para no reenviar todo el widget 5 veces por segundo (eso atascaba el launcher y la ola no salía fluida):
-    // firma de lo último enviado completo y "tramo" de ola enviado, por cada widget.
-    private val lastFullSig = HashMap<Int, String>()
-    private val lastWaveBucket = HashMap<Int, Int>()
-    private val insetDp = 17 // margen arriba y abajo del widget (lo hace más bajo)
-
     suspend fun updateWidgets(
         title: String,
         artist: String,
@@ -94,37 +88,18 @@ class vivimusicWidgetManager @Inject constructor(
         if (widgetIds.isNotEmpty()) {
             widgetIds.forEach { widgetId ->
                 val options = appWidgetManager.getAppWidgetOptions(widgetId)
-                val minW = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
-                val minH = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
-                val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-                val waveSpan = waveSpanDp(minW, fraction)
-                val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                    isPlaying && waveSpan >= 4f
-                val bucket = if (waveByLauncher) (waveSpan / 8f).toInt() else -1
-                val sig = "$title|$artist|$artworkUri|$isPlaying|$isLiked|$repeatMode|$minW|$minH|$waveByLauncher"
-                if (minH >= 100 && lastFullSig[widgetId] == sig) {
-                    // Mismo widget, solo avanzó el tiempo: actualización parcial (barra, tiempos y, de vez en cuando, la ola)
-                    val light = createProgressOnlyRemoteViews(
-                        albumArt, duration, currentPosition, minW, fraction, waveSpan,
-                        waveByLauncher, resendWave = bucket != lastWaveBucket[widgetId]
-                    )
-                    appWidgetManager.partiallyUpdateAppWidget(widgetId, light)
-                } else {
-                    val views = createRemoteViewsForSize(
-                        options,
-                        title,
-                        artist,
-                        albumArt,
-                        isPlaying,
-                        isLiked,
-                        duration,
-                        currentPosition,
-                        repeatMode
-                    )
-                    appWidgetManager.updateAppWidget(widgetId, views)
-                    lastFullSig[widgetId] = sig
-                }
-                lastWaveBucket[widgetId] = bucket
+                val views = createRemoteViewsForSize(
+                    options,
+                    title,
+                    artist,
+                    albumArt,
+                    isPlaying,
+                    isLiked,
+                    duration,
+                    currentPosition,
+                    repeatMode
+                )
+                appWidgetManager.updateAppWidget(widgetId, views)
             }
         }
 
@@ -198,35 +173,16 @@ class vivimusicWidgetManager @Inject constructor(
         // Portada de fondo (estilo notificación)
         views.setImageViewBitmap(
             R.id.widget_background_art,
-            buildNotificationStyleBackground(albumArt, widthDp, heightDp - 2 * insetDp)
+            buildNotificationStyleBackground(albumArt, widthDp, heightDp)
         )
 
         // Barra de progreso con onda y círculo, color claro sacado de la carátula (como en la notificación)
         val accent = pickAccentColor(albumArt)
         val fraction = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-        // Android 12+: la ola la anima el propio launcher: 48 imágenes de la ola en fases distintas
-        // que cambian en seco (sin fundido, para que no se vean olas dobles). Cada imagen ya lleva el inicio y el final suaves.
-        // En pausa, o antes de Android 12, la ola se dibuja por código dentro de la imagen de la barra.
-        val waveWidthDp = waveSpanDp(widthDp, fraction)
-        val waveByLauncher = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-            isPlaying && waveWidthDp >= 4f
         views.setImageViewBitmap(
             R.id.widget_progress_track,
-            drawProgressBar(widthDp, fraction, accent, drawWave = !waveByLauncher)
+            drawProgressBar(widthDp, fraction, accent)
         )
-        if (waveByLauncher) {
-            views.setViewLayoutWidth(
-                R.id.widget_wave_clip,
-                waveWidthDp,
-                android.util.TypedValue.COMPLEX_UNIT_DIP
-            )
-            for (i in waveFrameIds.indices) {
-                views.setImageViewBitmap(waveFrameIds[i], drawWaveFrame(waveWidthDp, accent, i))
-            }
-            views.setViewVisibility(R.id.widget_wave_clip, android.view.View.VISIBLE)
-        } else {
-            views.setViewVisibility(R.id.widget_wave_clip, android.view.View.GONE)
-        }
 
         // Set play/pause icon
         val playPauseIcon = if (isPlaying) R.drawable.ic_widget_n_pause else R.drawable.ic_widget_n_play
@@ -258,116 +214,11 @@ class vivimusicWidgetManager @Inject constructor(
         return views
     }
 
-    /** Largo (dp) de la ola: lo reproducido de la barra. */
-    private fun waveSpanDp(widthDp: Int, fraction: Float): Float =
-        ((widthDp - 36).coerceAtLeast(120) - 14).coerceAtLeast(1) * fraction
-
-    /**
-     * Actualización ligera (cada 200 ms): solo barra, tiempos y ancho de la ola. Las 48 imágenes de la ola
-     * solo se reenvían si `resendWave` (cada ~8 dp de avance), así el launcher no se atasca y la ola fluye.
-     */
-    private fun createProgressOnlyRemoteViews(
-        albumArt: Bitmap?,
-        duration: Long,
-        currentPosition: Long,
-        widthDp: Int,
-        fraction: Float,
-        waveWidthDp: Float,
-        waveByLauncher: Boolean,
-        resendWave: Boolean
-    ): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.widget_music_player)
-        val accent = pickAccentColor(albumArt)
-        views.setImageViewBitmap(
-            R.id.widget_progress_track,
-            drawProgressBar(widthDp, fraction, accent, drawWave = !waveByLauncher)
-        )
-        if (waveByLauncher) {
-            views.setViewLayoutWidth(
-                R.id.widget_wave_clip,
-                waveWidthDp,
-                android.util.TypedValue.COMPLEX_UNIT_DIP
-            )
-            if (resendWave) {
-                for (i in waveFrameIds.indices) {
-                    views.setImageViewBitmap(waveFrameIds[i], drawWaveFrame(waveWidthDp, accent, i))
-                }
-            }
-        }
-        views.setTextViewText(R.id.widget_time_current, formatTime(currentPosition))
-        views.setTextViewText(R.id.widget_time_total, formatTime(duration))
-        return views
-    }
-
-    private val waveFrameIds = intArrayOf(
-        R.id.widget_wave_f0, R.id.widget_wave_f1, R.id.widget_wave_f2, R.id.widget_wave_f3,
-        R.id.widget_wave_f4, R.id.widget_wave_f5, R.id.widget_wave_f6, R.id.widget_wave_f7,
-        R.id.widget_wave_f8, R.id.widget_wave_f9, R.id.widget_wave_f10, R.id.widget_wave_f11,
-        R.id.widget_wave_f12, R.id.widget_wave_f13, R.id.widget_wave_f14, R.id.widget_wave_f15,
-        R.id.widget_wave_f16, R.id.widget_wave_f17, R.id.widget_wave_f18, R.id.widget_wave_f19,
-        R.id.widget_wave_f20, R.id.widget_wave_f21, R.id.widget_wave_f22, R.id.widget_wave_f23,
-        R.id.widget_wave_f24, R.id.widget_wave_f25, R.id.widget_wave_f26, R.id.widget_wave_f27,
-        R.id.widget_wave_f28, R.id.widget_wave_f29, R.id.widget_wave_f30, R.id.widget_wave_f31,
-        R.id.widget_wave_f32, R.id.widget_wave_f33, R.id.widget_wave_f34, R.id.widget_wave_f35,
-        R.id.widget_wave_f36, R.id.widget_wave_f37, R.id.widget_wave_f38, R.id.widget_wave_f39,
-        R.id.widget_wave_f40, R.id.widget_wave_f41, R.id.widget_wave_f42, R.id.widget_wave_f43,
-        R.id.widget_wave_f44, R.id.widget_wave_f45, R.id.widget_wave_f46, R.id.widget_wave_f47
-    )
-
-    /**
-     * Una imagen de la ola (dos capas translúcidas) en el instante `index` de un ciclo de 3 s dividido en
-     * 48 pasos. El launcher las va cambiando en seco (cada 62 ms), en orden y en bucle, y el ciclo cierra sin saltos.
-     * Mide `spanDp` de ancho y 24 dp de alto, y se dibuja a baja resolución (la ola es suave y se estira bien).
-     */
-    private fun drawWaveFrame(spanDp: Float, color: Int, index: Int): Bitmap {
-        val s = context.resources.displayMetrics.density * 0.35f
-        val w = (spanDp * s).toInt().coerceAtLeast(2)
-        val h = (24f * s).toInt()
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(out)
-        val cy = h - 8f * s
-        val base = cy - 2.5f * s
-        val spanPx = w.toFloat()
-        val t = index * 3.0 / 48.0
-        val grow = (spanDp / 24f).coerceAtMost(1f)
-        val taper = (28f * s).coerceAtMost(spanPx / 2f)
-        val waves = arrayOf(
-            // longitud (dp), vueltas laterales por ciclo, vueltas de subida/bajada por ciclo, fase, altura (dp), alpha
-            doubleArrayOf(70.0, 1.0, 1.0, 0.0, 12.0, 110.0),
-            doubleArrayOf(46.0, -1.0, 1.0, 2.1, 9.5, 90.0)
-        )
-        for (wv in waves) {
-            val lambda = wv[0] * s
-            val shift = 2.0 * Math.PI * wv[1] * t / 3.0
-            val breathe = 0.55 + 0.45 * kotlin.math.sin(2.0 * Math.PI * wv[2] * t / 3.0 + wv[3])
-            val amp = (wv[4] * s * grow * breathe).toFloat()
-            val path = Path().apply {
-                moveTo(0f, cy)
-                var x = 0f
-                while (x < spanPx) {
-                    x = minOf(x + 1f, spanPx)
-                    val edge = (minOf(x, spanPx - x) / taper).coerceIn(0f, 1f)
-                    val envelope = edge * edge * (3f - 2f * edge)
-                    val crest = 0.5f + 0.5f * kotlin.math.sin((x / lambda) * 2.0 * Math.PI - shift).toFloat()
-                    lineTo(x, base - amp * envelope * crest)
-                }
-                lineTo(spanPx, cy)
-                close()
-            }
-            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-                this.color = ColorUtils.setAlphaComponent(color, wv[5].toInt())
-            }
-            c.drawPath(path, fill)
-        }
-        return out
-    }
-
     /**
      * Barra de progreso como la de la notificación: barra recta (lo reproducido en color, el resto tenue),
      * con una ola suave que se levanta encima de lo reproducido y un círculo al final.
      */
-    private fun drawProgressBar(widthDp: Int, fraction: Float, color: Int, drawWave: Boolean = true): Bitmap {
+    private fun drawProgressBar(widthDp: Int, fraction: Float, color: Int): Bitmap {
         val d = context.resources.displayMetrics.density
         val w = ((widthDp - 36).coerceAtLeast(120) * d).toInt()
         val h = (24 * d).toInt()
@@ -392,13 +243,11 @@ class vivimusicWidgetManager @Inject constructor(
         if (xe > x0 + 1f) {
             c.drawLine(x0, cy, xe, cy, line)
 
-            if (drawWave) {
             // Dos olas translúcidas que suben y bajan, desfasadas entre sí. Se animan con el reloj
             // (el widget se redibuja unas 5 veces por segundo mientras suena la música).
             val span = xe - x0
             val now = (System.currentTimeMillis() % 600_000L) / 1000.0
             val grow = (span / (24f * d)).coerceAtMost(1f)
-            val taper = (28f * d).coerceAtMost(span / 2f)
             val waves = arrayOf(
                 // longitud (dp), velocidad lateral, velocidad de subida/bajada, fase, altura (dp), alpha
                 doubleArrayOf(70.0, 1.3, 1.1, 0.0, 12.0, 110.0),
@@ -413,9 +262,8 @@ class vivimusicWidgetManager @Inject constructor(
                     var x = x0
                     while (x < xe) {
                         x = minOf(x + 2f, xe)
-                        // Sube suave desde la barra en el inicio y baja suave hasta la barra en el final
-                        val edge = (minOf(x - x0, xe - x) / taper).coerceIn(0f, 1f)
-                        val envelope = edge * edge * (3f - 2f * edge)
+                        val t = (x - x0) / span
+                        val envelope = kotlin.math.sin(Math.PI * t).toFloat()
                         val crest = 0.5f + 0.5f * kotlin.math.sin(
                             ((x - x0) / lambda) * 2.0 * Math.PI - now * wv[1]
                         ).toFloat()
@@ -429,7 +277,6 @@ class vivimusicWidgetManager @Inject constructor(
                     this.color = ColorUtils.setAlphaComponent(color, wv[5].toInt())
                 }
                 c.drawPath(path, fill)
-            }
             }
         }
 

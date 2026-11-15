@@ -217,10 +217,8 @@ fun PlayerV2(
         if (playerState == PlayerInternalState.LYRICS) {
             controlsVisible = true
             if (lyricsKeepControls) return@LaunchedEffect
-            delay(5000L)
-            if (playerState == PlayerInternalState.LYRICS &&
-                System.currentTimeMillis() - lastInteractionTime >= 5000L
-            ) {
+            delay(1500L)
+            if (playerState == PlayerInternalState.LYRICS) {
                 controlsVisible = false
             }
         } else if (playerState == PlayerInternalState.COVER) {
@@ -235,7 +233,7 @@ fun PlayerV2(
         if (playerState == PlayerInternalState.LYRICS) {
             controlsVisible = true
             if (lyricsKeepControls) return@LaunchedEffect
-            delay(5000L)
+            delay(2000L)
             if (playerState == PlayerInternalState.LYRICS) {
                 controlsVisible = false
             }
@@ -892,8 +890,14 @@ fun PlayerV2(
             // Persistent Controls & Utility Action Bar Container (Always at the bottom)
             AnimatedVisibility(
                 visible = controlsVisible,
-                enter = fadeIn(animationSpec = tween(400, easing = androidx.compose.animation.core.LinearOutSlowInEasing)),
-                exit = fadeOut(animationSpec = tween(450, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                // Fix 2: Removed expandVertically/shrinkVertically — these force layout
+                // recalculation every frame during the animation, which is expensive and
+                // the main cause of the stutter when re-entering the cover view.
+                // Pure draw-layer ops (fade + slide) are much cheaper.
+                enter = fadeIn(animationSpec = tween(400, easing = FastOutSlowInEasing)) +
+                        slideInVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) { it / 3 },
+                exit = fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing)) +
+                       slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { it / 3 }
             ) {
                 Column(
                     modifier = Modifier
@@ -918,7 +922,7 @@ fun PlayerV2(
                         val isTrackActive = isTrackDragged || isTrackPressed
                         
                         val trackHeight by animateDpAsState(
-                            targetValue = if (isTrackActive) 10.dp else 7.25.dp,
+                            targetValue = if (isTrackActive) 14.dp else 8.dp,
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
                             label = "trackScale"
                         )
@@ -956,14 +960,7 @@ fun PlayerV2(
                                         activeColor = adaptivePrimary.copy(alpha = 0.8f),
                                         playerBackground = playerBackground,
                                         useDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-                                    ).let { base ->
-                                        // Tonos suaves como en vivi (solo con fondos que no son el normal)
-                                        if (playerBackground == com.music.vivi.constants.PlayerBackgroundStyle.DEFAULT) base
-                                        else base.copy(
-                                            activeTrackColor = androidx.compose.ui.graphics.Color(0x73FFFFFF),
-                                            inactiveTrackColor = androidx.compose.ui.graphics.Color(0x33FFFFFF)
-                                        )
-                                    }
+                                    )
                                 )
                             },
                             modifier = Modifier.fillMaxWidth()
