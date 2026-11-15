@@ -238,6 +238,7 @@ import android.view.TextureView
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -786,13 +787,21 @@ fun BottomSheetPlayer(
                             maxDriftDp = wanderMaxDrift,
                             resetKey = wanderEpoch
                         )
-                        val backdropFootprint = remember(maxWidth, maxHeight, wanderMaxDrift) {
-                            blurBackdropFootprint(
+                        // Límite de seguridad: una imagen difuminada de más de ~3000 px por lado puede
+                        // superar lo que dibuja la GPU de algunos teléfonos y salir toda negra.
+                        val backdropDensity = LocalDensity.current.density
+                        val backdropFootprint = remember(maxWidth, maxHeight, wanderMaxDrift, backdropDensity) {
+                            val raw = blurBackdropFootprint(
                                 width = maxWidth,
                                 height = maxHeight,
                                 restScale = 1.2f,
                                 driftScale = 1.8f,
                                 maxDriftDp = wanderMaxDrift
+                            )
+                            val capDp = (3000f / backdropDensity).dp
+                            DpSize(
+                                width = minOf(raw.width, maxOf(maxWidth, capDp)),
+                                height = minOf(raw.height, maxOf(maxHeight, capDp))
                             )
                         }
                         // Mientras la canción real no ha cargado, se usa la carátula guardada de la última vez.
@@ -2736,6 +2745,7 @@ fun BottomSheetPlayer(
         }
     }
     }
+    DiagnosticOverlay(state)
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
