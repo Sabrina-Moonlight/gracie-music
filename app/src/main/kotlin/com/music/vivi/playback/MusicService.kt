@@ -3327,6 +3327,13 @@ class MusicService :
 
                 songUrlCache[mediaId]?.takeIf { it.second > System.currentTimeMillis() }?.let {
                     scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                    if (songClientCache[mediaId] == "JioSaavn") {
+                        return@Factory dataSpec
+                            .buildUpon()
+                            .setUri(it.first.toUri())
+                            .setKey("saavn_$mediaId")
+                            .build()
+                    }
                     return@Factory dataSpec.withUri(it.first.toUri())
                 }
             } else {
@@ -3410,6 +3417,16 @@ class MusicService :
                 songClientCache[mediaId] = nonNullPlayback.streamClient
                 songUrlCache[mediaId] =
                     streamUrl to System.currentTimeMillis() + (nonNullPlayback.streamExpiresInSeconds * 1000L)
+                if (nonNullPlayback.isSaavnStream) {
+                    // JioSaavn: MP4 normal, sin el troceo de rangos de YouTube y con su propia
+                    // clave de caché para no mezclar bytes con los de YouTube.
+                    return@Factory dataSpec
+                        .buildUpon()
+                        .setUri(streamUrl.toUri())
+                        .setKey("saavn_$mediaId")
+                        .setHttpRequestHeaders(dataSpec.httpRequestHeaders + nonNullPlayback.streamHeaders)
+                        .build()
+                }
                 return@Factory dataSpec.withUri(streamUrl.toUri()).subrange(dataSpec.uriPositionOffset, CHUNK_LENGTH)
             }
         }
