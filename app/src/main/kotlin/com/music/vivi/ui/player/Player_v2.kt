@@ -98,7 +98,10 @@ import com.music.vivi.constants.LyricsKeepControlsKey
 import com.music.vivi.constants.LastPlayerInternalStateKey
 import com.music.vivi.utils.dataStore
 import com.music.vivi.utils.get
+import com.music.vivi.utils.getAsync
 import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 enum class PlayerInternalState { COVER, LYRICS, QUEUE }
 
@@ -156,18 +159,27 @@ fun PlayerV2(
     val menuState = LocalMenuState.current
     val bottomSheetPageState = LocalBottomSheetPageState.current
     val restoreContext = LocalContext.current
+    // No leer DataStore con runBlocking aquí: bloquea el hilo principal y deja la pantalla en negro.
+    // Se restaura el estado interno en el LaunchedEffect de abajo (una sola vez por proceso).
     var playerState by androidx.compose.runtime.saveable.rememberSaveable {
-        var initial = PlayerInternalState.COVER
-        if (!PlayerRestore.internalStateConsumed) {
-            PlayerRestore.internalStateConsumed = true
-            // Solo se restaura si el reproductor estaba abierto al cerrar la app.
-            if (restoreContext.dataStore[LastPlayerExpandedKey] == true) {
-                initial = runCatching {
-                    PlayerInternalState.valueOf(restoreContext.dataStore[LastPlayerInternalStateKey] ?: "")
-                }.getOrDefault(PlayerInternalState.COVER)
+        mutableStateOf(PlayerInternalState.COVER)
+    }
+    LaunchedEffect(Unit) {
+        if (PlayerRestore.internalStateConsumed) return@LaunchedEffect
+        PlayerRestore.internalStateConsumed = true
+        val wasExpanded = withContext(Dispatchers.IO) {
+            restoreContext.dataStore.getAsync(LastPlayerExpandedKey, false)
+        }
+        if (wasExpanded) {
+            val saved = withContext(Dispatchers.IO) {
+                restoreContext.dataStore.getAsync(LastPlayerInternalStateKey, "")
+            }
+            val restored = runCatching { PlayerInternalState.valueOf(saved) }
+                .getOrDefault(PlayerInternalState.COVER)
+            if (restored != PlayerInternalState.COVER) {
+                playerState = restored
             }
         }
-        mutableStateOf(initial)
     }
     LaunchedEffect(playerState) {
         restoreContext.dataStore.edit { it[LastPlayerInternalStateKey] = playerState.name }
