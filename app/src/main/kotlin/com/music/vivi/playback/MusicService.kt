@@ -236,7 +236,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val INSTANT_SILENCE_SKIP_STEP_MS = 15_000L
 private const val INSTANT_SILENCE_SKIP_SETTLE_MS = 350L
 
-private const val LYRICS_PRELOAD_ENABLED = false
+private const val LYRICS_PRELOAD_ENABLED = true
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -284,18 +284,6 @@ class MusicService :
     private var crossfadeCurve = CrossfadeCurve.EASE_OUT_QUAD
     private var crossfadeTriggerJob: Job? = null
 
-    // Cached prefs used on the player/main thread. Never call dataStore.get (runBlocking)
-    // from onMediaItemTransition / onPlaybackStateChanged / maybeLoadMore — it deadlocks
-    // when the stream resolver is also doing nested runBlocking for JioSaavn.
-    @Volatile private var cachedRepeatMode: Int = REPEAT_MODE_OFF
-    @Volatile private var cachedPersistentQueue: Boolean = true
-    @Volatile private var cachedAutoLoadMore: Boolean = true
-    @Volatile private var cachedDisableLoadMoreWhenRepeatAll: Boolean = false
-    @Volatile private var cachedShufflePlaylistFirst: Boolean = false
-    @Volatile private var cachedHideExplicit: Boolean = false
-    @Volatile private var cachedHideVideoSongs: Boolean = false
-    @Volatile private var cachedAutoSkipNextOnError: Boolean = false
-
     /** Holds the combined crossfade-related settings emitted from DataStore. */
     private data class CrossfadeSettings(
         val enabled: Boolean,
@@ -303,18 +291,6 @@ class MusicService :
         val gapless: Boolean,
         val manualSkip: Boolean,
         val curve: CrossfadeCurve,
-    )
-
-    /** Prefs that player callbacks used to read with runBlocking — now cached. */
-    private data class CachedPlayerPrefs(
-        val repeatMode: Int,
-        val persistentQueue: Boolean,
-        val autoLoadMore: Boolean,
-        val disableLoadMoreWhenRepeatAll: Boolean,
-        val shufflePlaylistFirst: Boolean,
-        val hideExplicit: Boolean,
-        val hideVideoSongs: Boolean,
-        val autoSkipNextOnError: Boolean,
     )
 
     /**
@@ -585,21 +561,11 @@ class MusicService :
                 ).setBitmapLoader(CoilBitmapLoader(this, scope))
                 .build()
         player.repeatMode = dataStore.get(RepeatModeKey, REPEAT_MODE_OFF)
-        cachedRepeatMode = player.repeatMode
 
         // Restore shuffle mode if remember option is enabled
         if (dataStore.get(RememberShuffleAndRepeatKey, true)) {
             player.shuffleModeEnabled = dataStore.get(ShuffleModeKey, false)
         }
-
-        // Seed hot-path preference cache (collect below will keep it updated)
-        cachedPersistentQueue = dataStore.get(PersistentQueueKey, true)
-        cachedAutoLoadMore = dataStore.get(AutoLoadMoreKey, true)
-        cachedDisableLoadMoreWhenRepeatAll = dataStore.get(DisableLoadMoreWhenRepeatAllKey, false)
-        cachedShufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-        cachedHideExplicit = dataStore.get(HideExplicitKey, false)
-        cachedHideVideoSongs = dataStore.get(HideVideoSongsKey, false)
-        cachedAutoSkipNextOnError = dataStore.get(AutoSkipNextOnErrorKey, false)
 
         // Keep a connected controller so that notification works
         val sessionToken = SessionToken(this, ComponentName(this, MusicService::class.java))
@@ -1013,32 +979,6 @@ class MusicService :
                 crossfadeGapless = settings.gapless
                 crossfadeManualSkipEnabled = settings.manualSkip
                 crossfadeCurve = settings.curve
-            }
-
-        // Keep hot-path prefs in memory so player callbacks never call runBlocking/dataStore.get
-        dataStore.data
-            .map { prefs ->
-                CachedPlayerPrefs(
-                    repeatMode = prefs[RepeatModeKey] ?: REPEAT_MODE_OFF,
-                    persistentQueue = prefs[PersistentQueueKey] ?: true,
-                    autoLoadMore = prefs[AutoLoadMoreKey] ?: true,
-                    disableLoadMoreWhenRepeatAll = prefs[DisableLoadMoreWhenRepeatAllKey] ?: false,
-                    shufflePlaylistFirst = prefs[ShufflePlaylistFirstKey] ?: false,
-                    hideExplicit = prefs[HideExplicitKey] ?: false,
-                    hideVideoSongs = prefs[HideVideoSongsKey] ?: false,
-                    autoSkipNextOnError = prefs[AutoSkipNextOnErrorKey] ?: false,
-                )
-            }
-            .distinctUntilChanged()
-            .collect(scope) { p ->
-                cachedRepeatMode = p.repeatMode
-                cachedPersistentQueue = p.persistentQueue
-                cachedAutoLoadMore = p.autoLoadMore
-                cachedDisableLoadMoreWhenRepeatAll = p.disableLoadMoreWhenRepeatAll
-                cachedShufflePlaylistFirst = p.shufflePlaylistFirst
-                cachedHideExplicit = p.hideExplicit
-                cachedHideVideoSongs = p.hideVideoSongs
-                cachedAutoSkipNextOnError = p.autoSkipNextOnError
             }
 
         if (dataStore.get(PersistentQueueKey, true)) {
@@ -2347,7 +2287,7 @@ class MusicService :
                 scope.launch(Dispatchers.IO) { markCachedIfFullyDownloaded(finishedMediaId) }
             }
 
-            val repeatMode = cachedRepeatMode
+            val repeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
             if (repeatMode == REPEAT_MODE_ONE &&
                 previousMediaItemIndex != C.INDEX_UNSET &&
                 previousMediaItemIndex != player.currentMediaItemIndex) {
@@ -2402,9 +2342,9 @@ class MusicService :
         // Pre-resolve the next track's stream URL so the transition feels instant
         prefetchNextTrack()
 
-        // Save state when media item changes (async — never block main/player thread)
-        if (cachedPersistentQueue) {
-            scope.launch(Dispatchers.IO) { saveQueueToDisk() }
+        // Save state when media item changes
+        if (dataStore.get(PersistentQueueKey, true)) {
+            saveQueueToDisk()
         }
     }
 
@@ -2418,17 +2358,17 @@ class MusicService :
      */
     private fun maybeLoadMore(reason: Int) {
         val queueAtScheduleTime = currentQueue
-        if (cachedAutoLoadMore &&
+        if (dataStore.get(AutoLoadMoreKey, true) &&
             reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT &&
             player.mediaItemCount - player.currentMediaItemIndex <= 5 &&
             queueAtScheduleTime.hasNextPage() &&
-            !(cachedDisableLoadMoreWhenRepeatAll && player.repeatMode == REPEAT_MODE_ALL)
+            !(dataStore.get(DisableLoadMoreWhenRepeatAllKey, false) && player.repeatMode == REPEAT_MODE_ALL)
         ) {
             scope.launch(SilentHandler) {
                 val mediaItems = withContext(Dispatchers.IO) {
                     queueAtScheduleTime.nextPage()
-                        .filterExplicit(cachedHideExplicit)
-                        .filterVideoSongs(cachedHideVideoSongs)
+                        .filterExplicit(dataStore.get(HideExplicitKey, false))
+                        .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
                 }
                 // The user may have started a different queue while this page was in flight;
                 // appending the old queue's songs onto the new one would mix both.
@@ -2436,7 +2376,8 @@ class MusicService :
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                     player.addMediaItems(mediaItems)
                     if (player.shuffleModeEnabled) {
-                        applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, cachedShufflePlaylistFirst)
+                        val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                        applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
                     }
                 }
             }
@@ -2523,7 +2464,8 @@ class MusicService :
     ) {
         // Force Repeat All if the player ignored it and ended playback
         if (playbackState == Player.STATE_ENDED) {
-            if (cachedRepeatMode == REPEAT_MODE_ALL && player.mediaItemCount > 0) {
+            val repeatMode = runBlocking { dataStore.get(RepeatModeKey, REPEAT_MODE_OFF) }
+            if (repeatMode == REPEAT_MODE_ALL && player.mediaItemCount > 0) {
                 player.seekTo(0, 0)
                 player.prepare()
                 player.play()
@@ -2531,8 +2473,8 @@ class MusicService :
         }
 
         // Save state when playback state changes (but not during silence skipping)
-        if (cachedPersistentQueue && !isSilenceSkipping) {
-            scope.launch(Dispatchers.IO) { saveQueueToDisk() }
+        if (dataStore.get(PersistentQueueKey, true) && !isSilenceSkipping) {
+            saveQueueToDisk()
         }
 
         if (playbackState == Player.STATE_READY) {
@@ -2616,29 +2558,30 @@ class MusicService :
             // If queue is empty, don't shuffle
             if (player.mediaItemCount == 0) return
 
+            val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
             val currentIndex = player.currentMediaItemIndex
             val totalCount = player.mediaItemCount
 
-            applyShuffleOrder(currentIndex, totalCount, cachedShufflePlaylistFirst)
+            applyShuffleOrder(currentIndex, totalCount, shufflePlaylistFirst)
         }
 
         // Save shuffle mode to preferences
-        scope.launch {
-            dataStore.edit { settings ->
-                settings[ShuffleModeKey] = shuffleModeEnabled
+        if (dataStore.get(RememberShuffleAndRepeatKey, true)) {
+            scope.launch {
+                dataStore.edit { settings ->
+                    settings[ShuffleModeKey] = shuffleModeEnabled
+                }
             }
         }
 
         // Save state when shuffle mode changes
-        if (cachedPersistentQueue) {
-            scope.launch(Dispatchers.IO) { saveQueueToDisk() }
+        if (dataStore.get(PersistentQueueKey, true)) {
+            saveQueueToDisk()
         }
     }
 
     override fun onRepeatModeChanged(repeatMode: Int) {
         updateNotification()
-        // Keep cache in sync immediately (edit is async)
-        cachedRepeatMode = repeatMode
         scope.launch {
             dataStore.edit { settings ->
                 settings[RepeatModeKey] = repeatMode
@@ -2646,8 +2589,8 @@ class MusicService :
         }
 
         // Save state when repeat mode changes
-        if (cachedPersistentQueue) {
-            scope.launch(Dispatchers.IO) { saveQueueToDisk() }
+        if (dataStore.get(PersistentQueueKey, true)) {
+            saveQueueToDisk()
         }
     }
 
@@ -2915,7 +2858,7 @@ class MusicService :
         }
 
         // Final fallback
-        if (cachedAutoSkipNextOnError) {
+        if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
             Timber.tag(TAG).d("Auto-skipping to next track due to unrecoverable error")
             skipOnError()
         } else {

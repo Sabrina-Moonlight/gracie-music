@@ -19,7 +19,7 @@
 - Ya conoce lo básico de GitHub (subir archivos, ejecutar workflows, fusionar pull requests). No se lo expliques. Si debe hacer algo nuevo a mano, dale los pasos exactos, uno por uno.
 - Tú modificas el código y las aplicaciones. Tienes **permiso total** para leer, crear, modificar y borrar archivos del proyecto. No preguntes "¿puedo hacer X?": hazlo y explica después.
 - Ella es la tester: sube, compila, prueba y te cuenta. No tienes acceso a su GitHub. Nunca digas "no puedo compilar ni probar": entrega y espera su resultado.
-- Cada chat empieza sin memoria: este archivo es la memoria. Para el arreglo de la pantalla negra del reproductor, lee también `RESTAURACION.md` (plan y avance). Si cambia una regla de trabajo, actualízalo (y el otro, `grok.md` o `claude.md`, si la regla vale para los dos) y entrégalo en el ZIP.
+- Cada chat empieza sin memoria: este archivo es la memoria. Si cambia una regla de trabajo, actualízalo (y el otro, `grok.md` o `claude.md`, si la regla vale para los dos) y entrégalo en el ZIP.
 
 ## La app
 `gracie-music` es una de sus tres apps personales (island, music, nuvio), fork de otro proyecto. Usa Gradle y Compose. Trabaja con el código del proyecto que tienes delante y no supongas carpetas, nombres ni librerías de otro fork.

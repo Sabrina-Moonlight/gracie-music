@@ -8,6 +8,7 @@ package com.music.vivi.playback
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM
 import androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
@@ -22,12 +23,12 @@ import com.music.vivi.extensions.getCurrentQueueIndex
 import com.music.vivi.extensions.getQueueWindows
 import com.music.vivi.extensions.metadata
 import com.music.vivi.extensions.togglePlayPause
-import com.music.vivi.models.MediaMetadata
 import com.music.vivi.playback.MusicService.MusicBinder
 import com.music.vivi.playback.queues.Queue
 import com.music.vivi.playback.queues.YouTubeQueue
 import com.music.innertube.pages.RadioChip
 import com.music.vivi.utils.reportException
+import com.music.vivi.models.MediaMetadata
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -101,12 +102,8 @@ class PlayerConnection(
         
         playbackState = MutableStateFlow(initialState.first)
         playWhenReady = MutableStateFlow(initialState.second)
-        isPlaying = combine(playbackState, playWhenReady, service.isCrossfadingFlow) { state, ready, isCrossfading ->
-            if (isCrossfading) {
-                ready
-            } else {
-                ready && state != STATE_ENDED
-            }
+        isPlaying = combine(playbackState, playWhenReady) { state, ready ->
+            ready && state != STATE_ENDED
         }.stateIn(
             scope,
             SharingStarted.Lazily,
@@ -136,19 +133,34 @@ class PlayerConnection(
     }.stateIn(
         scope,
         SharingStarted.Lazily,
-        isPlaying.value
+        player.playbackState != STATE_ENDED && player.playWhenReady
     )
     
     private val appContext = context.applicationContext
 
     // Al abrir la app la cola tarda en restaurarse: mientras tanto se usa la última canción guardada
     // para que el reproductor se vea ya cargado (carátula, título, artista...).
-    private val initialPlayerMetadata: MediaMetadata? = try { player.currentMetadata } catch (_: Exception) { null }
     private val cachedMetadata: MediaMetadata? =
-        if (initialPlayerMetadata == null) LastMetadataCache.load(appContext) else null
+        if (player.currentMetadata == null) LastMetadataCache.load(appContext) else null
     private var showingCachedMetadata = cachedMetadata != null
 
-    val mediaMetadata = MutableStateFlow<MediaMetadata?>(initialPlayerMetadata ?: cachedMetadata)
+    val mediaMetadata = MutableStateFlow(player.currentMetadata ?: cachedMetadata)
+
+    fun getNextMediaMetadata(playerInstance: Player = player): MediaMetadata? {
+        return try {
+            val nextIndex = playerInstance.nextMediaItemIndex
+            if (nextIndex != C.INDEX_UNSET && nextIndex < playerInstance.mediaItemCount) {
+                playerInstance.getMediaItemAt(nextIndex).metadata
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val nextMediaMetadata = MutableStateFlow<MediaMetadata?>(getNextMediaMetadata())
+    val isCrossfading = service.isCrossfadingFlow
+    val crossfadeOutgoingItem = service.crossfadeOutgoingItem
+    val crossfadeIncomingItem = service.crossfadeIncomingItem
+    val crossfadeProgress = service.crossfadeProgressFlow
 
     init {
         scope.launch(Dispatchers.IO) {
@@ -166,21 +178,6 @@ class PlayerConnection(
         }
     }
 
-    fun getNextMediaMetadata(playerInstance: Player = player): MediaMetadata? {
-        return try {
-            val nextIndex = playerInstance.nextMediaItemIndex
-            if (nextIndex != androidx.media3.common.C.INDEX_UNSET && nextIndex < playerInstance.mediaItemCount) {
-                playerInstance.getMediaItemAt(nextIndex).metadata
-            } else null
-        } catch (_: Exception) {
-            null
-        }
-    }
-    val nextMediaMetadata = MutableStateFlow<MediaMetadata?>(getNextMediaMetadata())
-    val isCrossfading = service.isCrossfadingFlow
-    val crossfadeOutgoingItem = service.crossfadeOutgoingItem
-    val crossfadeIncomingItem = service.crossfadeIncomingItem
-    val crossfadeProgress = service.crossfadeProgressFlow
     val currentSong =
         mediaMetadata.flatMapLatest {
             database.song(it?.id)
@@ -221,35 +218,15 @@ class PlayerConnection(
             // Observe player changes (e.g. crossfade swap)
             scope.launch {
                 service.playerFlow.collect { newPlayer ->
-                    if (newPlayer != null) {
+                    if (newPlayer != null && newPlayer != attachedPlayer) {
                         updateAttachedPlayer(newPlayer)
-                    }
-                }
-            }
-
-            // Keep metadata and queue in sync with authoritative service state
-            scope.launch {
-                service.currentMediaMetadata.collect { meta ->
-                    if (meta != null && meta.id != mediaMetadata.value?.id) {
-                        setMetadata(meta)
-                        val p = attachedPlayer ?: player
-                        currentMediaItemIndex.value = p.currentMediaItemIndex
-                        currentWindowIndex.value = p.getCurrentQueueIndex()
-                        queueWindows.value = p.getQueueWindows()
-                        nextMediaMetadata.value = getNextMediaMetadata(p)
-                        updateCanSkipPreviousAndNext()
-                        Timber.tag(TAG).d("currentMediaMetadata sync: updated to ${meta.title} (id=${meta.id})")
                     }
                 }
             }
             
             // Initial setup if flow hasn't emitted yet but service is ready
             if (attachedPlayer == null && service.isPlayerReady.value) {
-                try {
-                    updateAttachedPlayer(player)
-                } catch (e: Exception) {
-                    Timber.tag(TAG).w(e, "Service marked ready but player attach deferred to flow observer")
-                }
+                 updateAttachedPlayer(player)
             }
 
             Timber.tag(TAG).d("PlayerConnection flow observer registered")
@@ -268,19 +245,15 @@ class PlayerConnection(
         // Refresh all state from new player
         playbackState.value = newPlayer.playbackState
         playWhenReady.value = newPlayer.playWhenReady
-        val meta = newPlayer.currentMetadata
-        setMetadata(meta)
+        setMetadata(newPlayer.currentMetadata)
         queueTitle.value = service.queueTitle
         queueWindows.value = newPlayer.getQueueWindows()
         currentWindowIndex.value = newPlayer.getCurrentQueueIndex()
         currentMediaItemIndex.value = newPlayer.currentMediaItemIndex
         shuffleModeEnabled.value = newPlayer.shuffleModeEnabled
         repeatMode.value = newPlayer.repeatMode
-        nextMediaMetadata.value = getNextMediaMetadata(newPlayer)
-        updateCanSkipPreviousAndNext()
         
-        Timber.tag(TAG).d("updateAttachedPlayer: mediaMetadata updated to ${meta?.title} (id=${meta?.id})")
-        Timber.tag(TAG).d("updateAttachedPlayer: queueIndex=${newPlayer.currentMediaItemIndex}, queueSize=${newPlayer.mediaItemCount}, canSkipNext=${canSkipNext.value}, canSkipPrevious=${canSkipPrevious.value}")
+        Timber.tag(TAG).d("Attached to new player instance: $newPlayer")
     }
 
     fun playQueue(queue: Queue) {
@@ -441,13 +414,11 @@ class PlayerConnection(
             // seek otherwise.
             if (!service.manualSkipToNextWithCrossfade()) {
                 service.cancelCrossfadeIfActive()
-                val p = attachedPlayer ?: player
-                p.seekToNext()
-                if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
-                    p.prepare()
+                player.seekToNext()
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
                 }
-                p.playWhenReady = true
-                updateCanSkipPreviousAndNext()
+                player.playWhenReady = true
             }
             onSkipNext?.invoke()
         } catch (e: Exception) {
@@ -466,28 +437,25 @@ class PlayerConnection(
                 return
             }
 
-            val p = attachedPlayer ?: player
             // Logic to mimic standard seekToPrevious behavior but with explicit callbacks
             // If we are more than 3 seconds in, just restart the song
-            if (p.currentPosition > 3000 || !p.hasPreviousMediaItem()) {
-                p.seekTo(0)
-                if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
-                    p.prepare()
+            if (player.currentPosition > 3000 || !player.hasPreviousMediaItem()) {
+                player.seekTo(0)
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
                 }
-                p.playWhenReady = true
-                updateCanSkipPreviousAndNext()
+                player.playWhenReady = true
                 onRestartSong?.invoke()
             } else {
                 // Otherwise go to previous media item — try a crossfaded
                 // manual skip first, falling back to an instant seek.
                 if (!service.manualSkipToPreviousWithCrossfade()) {
                     service.cancelCrossfadeIfActive()
-                    p.seekToPreviousMediaItem()
-                    if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
-                        p.prepare()
+                    player.seekToPreviousMediaItem()
+                    if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                        player.prepare()
                     }
-                    p.playWhenReady = true
-                    updateCanSkipPreviousAndNext()
+                    player.playWhenReady = true
                 }
                 onSkipPrevious?.invoke()
             }
@@ -505,9 +473,6 @@ class PlayerConnection(
     }
 
     override fun onPlaybackStateChanged(state: Int) {
-        if (isCrossfading.value && state == Player.STATE_ENDED) {
-            return
-        }
         playbackState.value = state
         error.value = player.playerError
     }
@@ -516,9 +481,6 @@ class PlayerConnection(
         newPlayWhenReady: Boolean,
         reason: Int,
     ) {
-        if (isCrossfading.value && reason != Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
-            return
-        }
         playWhenReady.value = newPlayWhenReady
     }
 
@@ -527,9 +489,8 @@ class PlayerConnection(
         reason: Int,
     ) {
         setMetadata(mediaItem?.metadata)
-        val p = attachedPlayer ?: player
-        currentMediaItemIndex.value = p.currentMediaItemIndex
-        currentWindowIndex.value = p.getCurrentQueueIndex()
+        currentMediaItemIndex.value = player.currentMediaItemIndex
+        currentWindowIndex.value = player.getCurrentQueueIndex()
         updateCanSkipPreviousAndNext()
         // Auto-refresh radio filter chips for every newly active song
         if (mediaItem != null) {
@@ -541,20 +502,18 @@ class PlayerConnection(
         timeline: Timeline,
         reason: Int,
     ) {
-        val p = attachedPlayer ?: player
-        setMetadata(p.currentMetadata)
-        queueWindows.value = p.getQueueWindows()
+        setMetadata(player.currentMetadata)
+        queueWindows.value = player.getQueueWindows()
         queueTitle.value = service.queueTitle
-        currentMediaItemIndex.value = p.currentMediaItemIndex
-        currentWindowIndex.value = p.getCurrentQueueIndex()
+        currentMediaItemIndex.value = player.currentMediaItemIndex
+        currentWindowIndex.value = player.getCurrentQueueIndex()
         updateCanSkipPreviousAndNext()
     }
 
     override fun onShuffleModeEnabledChanged(enabled: Boolean) {
-        val p = attachedPlayer ?: player
         shuffleModeEnabled.value = enabled
-        queueWindows.value = p.getQueueWindows()
-        currentWindowIndex.value = p.getCurrentQueueIndex()
+        queueWindows.value = player.getQueueWindows()
+        currentWindowIndex.value = player.getCurrentQueueIndex()
         updateCanSkipPreviousAndNext()
     }
 
@@ -570,40 +529,20 @@ class PlayerConnection(
         error.value = playbackError
     }
 
-    override fun onEvents(player: Player, events: Player.Events) {
-        if (events.containsAny(
-                Player.EVENT_AVAILABLE_COMMANDS_CHANGED,
-                Player.EVENT_TIMELINE_CHANGED,
-                Player.EVENT_MEDIA_ITEM_TRANSITION,
-                Player.EVENT_REPEAT_MODE_CHANGED,
-                Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED
-            )
-        ) {
-            updateCanSkipPreviousAndNext()
-        }
-    }
-
     private fun updateCanSkipPreviousAndNext() {
-        val p = attachedPlayer ?: player
-        nextMediaMetadata.value = getNextMediaMetadata(p)
-        try {
-            if (!p.currentTimeline.isEmpty && p.currentMediaItemIndex in 0 until p.currentTimeline.windowCount) {
-                val window =
-                    p.currentTimeline.getWindow(p.currentMediaItemIndex, Timeline.Window())
-                canSkipPrevious.value = p.hasPreviousMediaItem() ||
-                        p.isCommandAvailable(COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) ||
-                        !window.isLive ||
-                        p.isCommandAvailable(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                canSkipNext.value = p.hasNextMediaItem() ||
-                        (window.isLive && window.isDynamic) ||
-                        p.isCommandAvailable(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-            } else {
-                canSkipPrevious.value = p.hasPreviousMediaItem()
-                canSkipNext.value = p.hasNextMediaItem()
-            }
-        } catch (_: Exception) {
-            canSkipPrevious.value = p.hasPreviousMediaItem()
-            canSkipNext.value = p.hasNextMediaItem()
+        nextMediaMetadata.value = getNextMediaMetadata(player)
+        if (!player.currentTimeline.isEmpty) {
+            val window =
+                player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
+            canSkipPrevious.value = player.isCommandAvailable(COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) ||
+                    !window.isLive ||
+                    player.isCommandAvailable(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            canSkipNext.value = window.isLive &&
+                    window.isDynamic ||
+                    player.isCommandAvailable(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+        } else {
+            canSkipPrevious.value = false
+            canSkipNext.value = false
         }
     }
 

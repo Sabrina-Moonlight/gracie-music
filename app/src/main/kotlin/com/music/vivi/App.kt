@@ -75,9 +75,6 @@ class App : Application(), SingletonImageLoader.Factory {
         // Install crash handler first
         CrashHandler.install(this)
 
-        // Diagnóstico: anota qué hace la app si se congela
-        com.music.vivi.utils.FreezeWatchdog.start(this)
-
         // Initialize InnerTubeX stream extractor
         InnerTubeXPlayer.initialize(this)
 

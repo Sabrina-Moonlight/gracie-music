@@ -249,8 +249,8 @@ class BottomSheetState(
             }
         } else {
             val l0 = dismissedBound
-            val l1 = (dismissedBound + collapsedBound) / 2
-            val l2 = (collapsedBound + expandedBound) / 2
+            val l1 = (collapsedBound - dismissedBound) / 2
+            val l2 = (expandedBound - collapsedBound) / 2
             val l3 = expandedBound
 
             when (value) {

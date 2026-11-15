@@ -207,7 +207,6 @@ import com.music.vivi.constants.LastDynamicThemeColorKey
 import com.music.vivi.constants.LastPlayerExpandedKey
 import com.music.vivi.constants.PersistentQueueKey
 import com.music.vivi.utils.get
-import com.music.vivi.utils.getAsync
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.utils.reportException
@@ -467,9 +466,11 @@ class MainActivity : ComponentActivity() {
         val (selectedThemeColorInt) = rememberPreference(SelectedThemeColorKey, defaultValue = DefaultThemeColor.toArgb(), readInitialSync = true)
         val selectedThemeColor = Color(selectedThemeColorInt)
 
-        // No leer DataStore con runBlocking en composición (evita pantalla negra).
         var themeColor by rememberSaveable(stateSaver = ColorSaver) {
-            mutableStateOf(selectedThemeColor)
+            val lastDynamicColor = dataStore[LastDynamicThemeColorKey]
+            mutableStateOf(
+                if (enableDynamicTheme && lastDynamicColor != null) Color(lastDynamicColor) else selectedThemeColor
+            )
         }
 
         LaunchedEffect(selectedThemeColor) {
@@ -552,8 +553,9 @@ class MainActivity : ComponentActivity() {
                 val (floatingNav) = rememberPreference(FloatingNavBarKey, defaultValue = false)
                 val (useNewMiniPlayerDesign) = rememberPreference(UseNewMiniPlayerDesignKey, defaultValue = true)
                 val (useAppleMiniPlayer) = rememberPreference(UseAppleMiniPlayerKey, defaultValue = false)
-                // No bloquear composición con dataStore[]; el valor por defecto basta al arrancar.
-                val defaultOpenTab = remember { NavigationTab.HOME }
+                val defaultOpenTab = remember {
+                    dataStore[DefaultOpenTabKey].toEnum(defaultValue = NavigationTab.HOME)
+                }
                 val tabOpenedFromShortcut = remember {
                     when (intent?.action) {
                         ACTION_SEARCH -> NavigationTab.LIBRARY
@@ -578,8 +580,9 @@ class MainActivity : ComponentActivity() {
                     { searchQuery ->
                         if (searchQuery.isNotEmpty()) {
                             navController.navigate("search/${URLEncoder.encode(searchQuery, "UTF-8")}")
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                if (dataStore.getAsync(PauseSearchHistoryKey, false) != true) {
+
+                            if (dataStore[PauseSearchHistoryKey] != true) {
+                                lifecycleScope.launch(Dispatchers.IO) {
                                     database.query {
                                         insert(SearchHistory(query = searchQuery))
                                     }
@@ -629,11 +632,10 @@ class MainActivity : ComponentActivity() {
                     label = "snackbarHeight"
                 )
 
-                // No leer DataStore aquí con runBlocking: bloquea el hilo principal y deja la pantalla en negro.
-                // Se restaura el estado expandido más abajo, en el LaunchedEffect (sin bloquear).
-                val startExpanded = remember { false }
+                // Si el reproductor estaba abierto al cerrar la app, la hoja se crea ya abierta (sin esperar ni animar después).
+                val startExpanded = remember { !playerRestoreAlreadyDone && dataStore[LastPlayerExpandedKey] == true }
                 val playerBottomSheetState = rememberBottomSheetState(
-                    initialAnchor = com.music.vivi.ui.component.dismissedAnchor,
+                    initialAnchor = if (startExpanded) com.music.vivi.ui.component.expandedAnchor else com.music.vivi.ui.component.dismissedAnchor,
                     dismissedBound = 0.dp,
                     collapsedBound = bottomInset +
                         (if (!showRail && shouldShowNavigationBar) navPadding else 0.dp) +
@@ -731,7 +733,7 @@ class MainActivity : ComponentActivity() {
                     // tiene que cargar la cola guardada y eso puede tardar varios segundos: con una
                     // espera corta se cerraba el reproductor abierto. Con cola guardada se espera más.
                     val hasSavedQueue = withContext(Dispatchers.IO) {
-                        restoreContext.dataStore.getAsync(PersistentQueueKey, true) &&
+                        restoreContext.dataStore.get(PersistentQueueKey, true) &&
                             restoreContext.filesDir.resolve(MusicService.PERSISTENT_QUEUE_FILE).exists()
                     }
                     val maxTries = if (hasSavedQueue) 300 else 15
@@ -741,15 +743,9 @@ class MainActivity : ComponentActivity() {
                         tries++
                     }
                     val hasMedia = player.currentMediaItem != null || player.mediaItemCount > 0
-                    // Leer sin bloquear el hilo principal (evita pantalla negra al abrir el reproductor)
-                    val wasExpanded = withContext(Dispatchers.IO) {
-                        restoreContext.dataStore.getAsync(LastPlayerExpandedKey, false)
-                    }
                     if (!hasMedia) {
                         if (!playerBottomSheetState.isDismissed) playerBottomSheetState.dismiss()
-                    } else if (wasExpanded && !playerRestoreDone) {
-                        playerBottomSheetState.expandSoft()
-                    } else if (playerBottomSheetState.isDismissed) {
+                    } else if (playerBottomSheetState.isDismissed && !(startExpanded && !playerRestoreDone)) {
                         playerBottomSheetState.collapseSoft()
                     }
                     // Al volver a la app: si estaba abierto al salir, se deja abierto otra vez.

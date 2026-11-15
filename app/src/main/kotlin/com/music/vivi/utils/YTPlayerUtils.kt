@@ -134,11 +134,7 @@ object YTPlayerUtils {
         // URL from JioSaavn first. We fall through to YouTube on ANY failure so
         // the user always hears audio.
         if (context != null) {
-            // Must use suspend getAsync — the blocking dataStore.get() uses runBlocking and
-            // is already nested inside another runBlocking(Dispatchers.IO) in MusicService's
-            // ResolvingDataSource. Nested runBlocking + DataStore can deadlock the IO pool
-            // and (via PoToken/WebView or player listeners) freeze the main thread forever.
-            val saavnEnabled = context.dataStore.getAsync(EnableSaavnStreamingKey, false)
+            val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, false)
             if (saavnEnabled) {
                 Timber.tag(TAG).d("JioSaavn streaming enabled — trying Saavn for videoId=$videoId")
                 val saavnResult = runCatching {
@@ -267,7 +263,7 @@ object YTPlayerUtils {
                     Timber.tag(TAG).i("Saavn: matched \"${bestSong.name}\" (id=${bestSong.id}, album=\"${bestSong.album?.name}\")")
 
                     // Step 4: resolve stream URL at requested quality
-                    val qualityKey = context.dataStore.getAsync(SaavnAudioQualityKey, SaavnAudioQuality.QUALITY_320.name)
+                    val qualityKey = context.dataStore.get(SaavnAudioQualityKey, SaavnAudioQuality.QUALITY_320.name)
                     val quality = runCatching { SaavnAudioQuality.valueOf(qualityKey) }
                         .getOrDefault(SaavnAudioQuality.QUALITY_320)
 

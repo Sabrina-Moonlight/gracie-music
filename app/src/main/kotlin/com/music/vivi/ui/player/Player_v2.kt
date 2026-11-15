@@ -98,10 +98,7 @@ import com.music.vivi.constants.LyricsKeepControlsKey
 import com.music.vivi.constants.LastPlayerInternalStateKey
 import com.music.vivi.utils.dataStore
 import com.music.vivi.utils.get
-import com.music.vivi.utils.getAsync
 import androidx.datastore.preferences.core.edit
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 enum class PlayerInternalState { COVER, LYRICS, QUEUE }
 
@@ -159,27 +156,18 @@ fun PlayerV2(
     val menuState = LocalMenuState.current
     val bottomSheetPageState = LocalBottomSheetPageState.current
     val restoreContext = LocalContext.current
-    // No leer DataStore con runBlocking aquí: bloquea el hilo principal y deja la pantalla en negro.
-    // Se restaura el estado interno en el LaunchedEffect de abajo (una sola vez por proceso).
     var playerState by androidx.compose.runtime.saveable.rememberSaveable {
-        mutableStateOf(PlayerInternalState.COVER)
-    }
-    LaunchedEffect(Unit) {
-        if (PlayerRestore.internalStateConsumed) return@LaunchedEffect
-        PlayerRestore.internalStateConsumed = true
-        val wasExpanded = withContext(Dispatchers.IO) {
-            restoreContext.dataStore.getAsync(LastPlayerExpandedKey, false)
-        }
-        if (wasExpanded) {
-            val saved = withContext(Dispatchers.IO) {
-                restoreContext.dataStore.getAsync(LastPlayerInternalStateKey, "")
-            }
-            val restored = runCatching { PlayerInternalState.valueOf(saved) }
-                .getOrDefault(PlayerInternalState.COVER)
-            if (restored != PlayerInternalState.COVER) {
-                playerState = restored
+        var initial = PlayerInternalState.COVER
+        if (!PlayerRestore.internalStateConsumed) {
+            PlayerRestore.internalStateConsumed = true
+            // Solo se restaura si el reproductor estaba abierto al cerrar la app.
+            if (restoreContext.dataStore[LastPlayerExpandedKey] == true) {
+                initial = runCatching {
+                    PlayerInternalState.valueOf(restoreContext.dataStore[LastPlayerInternalStateKey] ?: "")
+                }.getOrDefault(PlayerInternalState.COVER)
             }
         }
+        mutableStateOf(initial)
     }
     LaunchedEffect(playerState) {
         restoreContext.dataStore.edit { it[LastPlayerInternalStateKey] = playerState.name }
@@ -221,8 +209,6 @@ fun PlayerV2(
     }
     
     var controlsVisible by remember { mutableStateOf(true) }
-    // Letra sincronizada: tras 5 s sin tocar, los controles esperan a que termine la línea que suena para irse
-    var hideControlsAtLineEnd by remember { mutableStateOf(false) }
     val lyricsKeepControls by rememberPreference(LyricsKeepControlsKey, defaultValue = false)
     var playerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -230,16 +216,14 @@ fun PlayerV2(
     LaunchedEffect(playerState, lyricsKeepControls) {
         if (playerState == PlayerInternalState.LYRICS) {
             controlsVisible = true
-            hideControlsAtLineEnd = false
             if (lyricsKeepControls) return@LaunchedEffect
             delay(5000L)
             if (playerState == PlayerInternalState.LYRICS &&
                 System.currentTimeMillis() - lastInteractionTime >= 5000L
             ) {
-                if (currentLyrics?.lyrics?.trim()?.startsWith("[") == true) hideControlsAtLineEnd = true else controlsVisible = false
+                controlsVisible = false
             }
         } else if (playerState == PlayerInternalState.COVER) {
-            hideControlsAtLineEnd = false
             // Fix 1: Delay controls appearing so AnimatedContent morph starts first,
             // preventing a simultaneous layout + animation race that causes stutter.
             delay(200L)
@@ -250,11 +234,10 @@ fun PlayerV2(
     LaunchedEffect(lastInteractionTime, lyricsKeepControls) {
         if (playerState == PlayerInternalState.LYRICS) {
             controlsVisible = true
-            hideControlsAtLineEnd = false
             if (lyricsKeepControls) return@LaunchedEffect
             delay(5000L)
             if (playerState == PlayerInternalState.LYRICS) {
-                if (currentLyrics?.lyrics?.trim()?.startsWith("[") == true) hideControlsAtLineEnd = true else controlsVisible = false
+                controlsVisible = false
             }
         }
     }
@@ -886,10 +869,8 @@ fun PlayerV2(
                                             positionProvider = { sliderPosition ?: position },
                                             playerCoordinates = playerCoordinates,
                                             controlsVisible = controlsVisible,
-                                            hideControlsRequested = hideControlsAtLineEnd,
                                             onControlsVisibilityChange = { isVisible ->
                                                 controlsVisible = isVisible
-                                                if (!isVisible) hideControlsAtLineEnd = false
                                             }
                                         )
                                     } else {
@@ -912,12 +893,7 @@ fun PlayerV2(
             AnimatedVisibility(
                 visible = controlsVisible,
                 enter = fadeIn(animationSpec = tween(400, easing = androidx.compose.animation.core.LinearOutSlowInEasing)),
-                // Se desvanece y se encoge a la vez, así se ve cómo se van y las letras suben poco a poco (no de golpe)
-                exit = fadeOut(animationSpec = tween(400, easing = FastOutSlowInEasing)) +
-                    shrinkVertically(
-                        animationSpec = tween(400, easing = FastOutSlowInEasing),
-                        shrinkTowards = Alignment.Bottom
-                    )
+                exit = fadeOut(animationSpec = tween(450, easing = androidx.compose.animation.core.FastOutLinearInEasing))
             ) {
                 Column(
                     modifier = Modifier

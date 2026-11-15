@@ -238,7 +238,6 @@ import android.view.TextureView
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -787,21 +786,13 @@ fun BottomSheetPlayer(
                             maxDriftDp = wanderMaxDrift,
                             resetKey = wanderEpoch
                         )
-                        // Límite de seguridad: una imagen difuminada de más de ~3000 px por lado puede
-                        // superar lo que dibuja la GPU de algunos teléfonos y salir toda negra.
-                        val backdropDensity = LocalDensity.current.density
-                        val backdropFootprint = remember(maxWidth, maxHeight, wanderMaxDrift, backdropDensity) {
-                            val raw = blurBackdropFootprint(
+                        val backdropFootprint = remember(maxWidth, maxHeight, wanderMaxDrift) {
+                            blurBackdropFootprint(
                                 width = maxWidth,
                                 height = maxHeight,
                                 restScale = 1.2f,
                                 driftScale = 1.8f,
                                 maxDriftDp = wanderMaxDrift
-                            )
-                            val capDp = (3000f / backdropDensity).dp
-                            DpSize(
-                                width = minOf(raw.width, maxOf(maxWidth, capDp)),
-                                height = minOf(raw.height, maxOf(maxHeight, capDp))
                             )
                         }
                         // Mientras la canción real no ha cargado, se usa la carátula guardada de la última vez.
@@ -2653,9 +2644,8 @@ fun BottomSheetPlayer(
                     ) {
                         Spacer(Modifier.weight(1f))
 
-                        val metaForControls = mediaMetadata
-                        if (metaForControls != null) {
-                            controlsContent(metaForControls)
+                        mediaMetadata?.let {
+                            controlsContent(it)
                         }
 
                         Spacer(Modifier.weight(1f))
@@ -2706,9 +2696,8 @@ fun BottomSheetPlayer(
                         }
                     }
 
-                    val metaForControlsPortrait = mediaMetadata
-                    if (metaForControlsPortrait != null) {
-                        controlsContent(metaForControlsPortrait)
+                    mediaMetadata?.let {
+                        controlsContent(it)
                     }
 
                     Spacer(Modifier.height(if (useNewPlayerDesign) 30.dp else 8.dp))
@@ -2745,7 +2734,6 @@ fun BottomSheetPlayer(
         }
     }
     }
-    DiagnosticOverlay(state)
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -2763,8 +2751,7 @@ fun InlineLyricsView(
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(mediaMetadata?.id, currentLyrics) {
-        val meta = mediaMetadata ?: return@LaunchedEffect
-        if (currentLyrics == null) {
+        if (mediaMetadata != null && currentLyrics == null) {
             delay(500)
             coroutineScope.launch(Dispatchers.IO) {
                 try {
@@ -2773,9 +2760,9 @@ fun InlineLyricsView(
                         com.music.vivi.di.LyricsHelperEntryPoint::class.java
                     )
                     val lyricsHelper = entryPoint.lyricsHelper()
-                    val fetchedLyricsWithProvider = lyricsHelper.getLyrics(meta)
+                    val fetchedLyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
                     database.query {
-                        upsert(LyricsEntity(meta.id, fetchedLyricsWithProvider.lyrics, fetchedLyricsWithProvider.provider))
+                        upsert(LyricsEntity(mediaMetadata.id, fetchedLyricsWithProvider.lyrics, fetchedLyricsWithProvider.provider))
                     }
                 } catch (e: Exception) {
                     // Handle error
