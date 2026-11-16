@@ -501,6 +501,8 @@
     <string name="tap_to_play">Toca para abrir vivimusic</string>
     <string name="widget_music_player">Reproductor de música</string>
     <string name="widget_turntable">Tocadiscos</string>
+    <string name="widget_notification">Estilo notificación</string>
+    <string name="notification_widget_description">Widget estilo notificación con anterior, reproducir, siguiente, repetir y me gusta</string>
     <string name="listen_together_choose_server">Elegir servidor</string>
     <string name="listen_together_custom_server">Servidor personalizado</string>
     <string name="listen_together_use_custom_server">Usar servidor personalizado</string>

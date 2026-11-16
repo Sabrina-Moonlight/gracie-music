@@ -354,7 +354,7 @@ fun PlayerV2(
 
     // ── 7. AutoMix / crossfade de portada ──
     val crossfadeEnabled by rememberPreference(CrossfadeEnabledKey, defaultValue = false)
-    val crossfadeDuration by rememberPreference(CrossfadeDurationKey, defaultValue = 6f)
+    val crossfadeDuration by rememberPreference(CrossfadeDurationKey, defaultValue = 5f)
     val isCrossfading by playerConnection.isCrossfading.collectAsState()
     val crossfadeOutgoingItem by playerConnection.crossfadeOutgoingItem.collectAsState()
     val crossfadeIncomingItem by playerConnection.crossfadeIncomingItem.collectAsState()

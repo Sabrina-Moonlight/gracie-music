@@ -18,6 +18,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Bundle
 import android.widget.RemoteViews
+import androidx.media3.common.Player
 import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
@@ -55,7 +56,8 @@ class vivimusicWidgetManager @Inject constructor(
         isPlaying: Boolean,
         isLiked: Boolean,
         duration: Long = 0,
-        currentPosition: Long = 0
+        currentPosition: Long = 0,
+        repeatMode: Int = Player.REPEAT_MODE_OFF
     ) {
         val appWidgetManager = AppWidgetManager.getInstance(context)
 
@@ -92,6 +94,19 @@ class vivimusicWidgetManager @Inject constructor(
                     currentPosition
                 )
                 appWidgetManager.updateAppWidget(widgetId, views)
+            }
+        }
+
+        // Update notification-style widgets
+        val notificationWidgetIds = appWidgetManager.getAppWidgetIds(
+            ComponentName(context, NotificationWidgetReceiver::class.java)
+        )
+        if (notificationWidgetIds.isNotEmpty()) {
+            val notificationViews = createNotificationRemoteViews(
+                title, artist, albumArt, isPlaying, isLiked, repeatMode
+            )
+            notificationWidgetIds.forEach { widgetId ->
+                appWidgetManager.updateAppWidget(widgetId, notificationViews)
             }
         }
 
@@ -347,6 +362,62 @@ class vivimusicWidgetManager @Inject constructor(
         return views
     }
     
+    private fun createNotificationRemoteViews(
+        title: String,
+        artist: String,
+        albumArt: Bitmap?,
+        isPlaying: Boolean,
+        isLiked: Boolean,
+        repeatMode: Int
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.widget_notification)
+
+        views.setTextViewText(R.id.widget_n_song_title, title)
+        views.setTextViewText(R.id.widget_n_artist_name, artist)
+        views.setImageViewBitmap(
+            R.id.widget_n_album_art,
+            if (albumArt != null) getRoundedCornerBitmap(albumArt, 48f) else getRoundedDefaultIcon(48f)
+        )
+
+        views.setImageViewResource(
+            R.id.widget_n_play_pause,
+            if (isPlaying) R.drawable.ic_widget_n_pause else R.drawable.ic_widget_n_play
+        )
+        views.setImageViewResource(
+            R.id.widget_n_repeat,
+            when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> R.drawable.ic_widget_n_repeat_one
+                Player.REPEAT_MODE_ALL -> R.drawable.ic_widget_n_repeat_all
+                else -> R.drawable.ic_widget_n_repeat_off
+            }
+        )
+        views.setImageViewResource(
+            R.id.widget_n_like,
+            if (isLiked) R.drawable.ic_widget_heart_nav else R.drawable.ic_widget_heart_outline_nav
+        )
+
+        views.setOnClickPendingIntent(R.id.widget_n_album_art, getOpenAppIntent())
+        views.setOnClickPendingIntent(R.id.widget_n_play_container, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_PLAY_PAUSE, 6))
+        views.setOnClickPendingIntent(R.id.widget_n_prev, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_PREVIOUS, 7))
+        views.setOnClickPendingIntent(R.id.widget_n_next, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_NEXT, 8))
+        views.setOnClickPendingIntent(R.id.widget_n_repeat, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_REPEAT, 9))
+        views.setOnClickPendingIntent(R.id.widget_n_like, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_LIKE, 10))
+
+        return views
+    }
+
+    private fun getNotificationIntent(action: String, requestCode: Int): PendingIntent {
+        val intent = Intent(context, NotificationWidgetReceiver::class.java).apply {
+            this.action = action
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun getCircularDefaultIcon(): Bitmap {
         // Get the launcher icon and make it circular
         val drawable = context.packageManager.getApplicationIcon(context.packageName)

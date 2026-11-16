@@ -56,6 +56,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.music.vivi.constants.LastPlayerExpandedKey
 import com.music.vivi.constants.LastSeenStarPromptVersionKey
 import com.music.vivi.constants.HasStarredRepoKey
 import com.music.vivi.ui.component.ActionPromptDialog
@@ -208,6 +209,7 @@ import com.music.vivi.ui.theme.extractThemeColor
 import com.music.vivi.ui.utils.appBarScrollBehavior
 import com.music.vivi.ui.utils.resetHeightOffset
 import com.music.vivi.utils.SyncUtils
+import androidx.datastore.preferences.core.edit
 import com.music.vivi.utils.dataStore
 import com.music.vivi.utils.get
 import com.music.vivi.utils.rememberEnumPreference
@@ -335,7 +337,12 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
+    /** true solo en un arranque nuevo de la actividad (no al girar la pantalla): restaura el reproductor abierto. */
+    private var restorePlayerOnStart = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        restorePlayerOnStart = savedInstanceState == null
+        if (restorePlayerOnStart) com.music.vivi.ui.player.PlayerRestore.internalStateConsumed = false
         val splashScreen = installSplashScreen()
         var isStartupTimeoutReached by mutableStateOf(false)
         lifecycleScope.launch {
@@ -852,6 +859,33 @@ class MainActivity : ComponentActivity() {
                     // Track previous tab for animations
                     navController.currentBackStackEntry?.destination?.route?.let {
                         setPreviousTab(it)
+                    }
+                }
+
+                // Restaurar el reproductor abierto (y guardar si está abierto o cerrado).
+                LaunchedEffect(playerConnection) {
+                    val player = playerConnection?.player ?: return@LaunchedEffect
+                    val wasExpanded = restorePlayerOnStart && dataStore.get(LastPlayerExpandedKey, false)
+                    restorePlayerOnStart = false
+                    if (wasExpanded) {
+                        var waited = 0
+                        while (player.currentMediaItem == null && waited < 5000) {
+                            delay(200)
+                            waited += 200
+                        }
+                        if (player.currentMediaItem != null) {
+                            if (playerBottomSheetState.isDismissed) playerBottomSheetState.collapseSoft()
+                            playerBottomSheetState.expandSoft()
+                        }
+                    }
+                    androidx.compose.runtime.snapshotFlow {
+                        when {
+                            playerBottomSheetState.isExpanded -> 1
+                            playerBottomSheetState.isCollapsed -> 0
+                            else -> -1
+                        }
+                    }.distinctUntilChanged().collect { st ->
+                        if (st >= 0) dataStore.edit { it[LastPlayerExpandedKey] = st == 1 }
                     }
                 }
 

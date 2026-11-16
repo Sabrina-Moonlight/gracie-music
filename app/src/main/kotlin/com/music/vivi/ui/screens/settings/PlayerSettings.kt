@@ -102,7 +102,7 @@ fun PlayerSettings(
     )
     val (crossfadeDuration, onCrossfadeDurationChange) = rememberPreference(
         CrossfadeDurationKey,
-        defaultValue = 6f
+        defaultValue = 5f
     )
     val (crossfadeCurve, onCrossfadeCurveChange) = rememberEnumPreference(
         CrossfadeCurveKey,

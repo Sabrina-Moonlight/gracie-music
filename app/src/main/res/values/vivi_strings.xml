@@ -631,6 +631,8 @@
     <string name="turntable_widget_description">Circular music widget with play and like controls</string>
     <string name="widget_music_player">Music Player</string>
     <string name="widget_turntable">Turntable</string>
+    <string name="widget_notification">Notification style</string>
+    <string name="notification_widget_description">Notification-style widget with previous, play, next, repeat and like controls</string>
 
     <!-- Player Client Settings -->
     <string name="player_client">Player client</string>
