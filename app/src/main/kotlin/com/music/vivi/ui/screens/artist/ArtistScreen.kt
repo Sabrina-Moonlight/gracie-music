@@ -134,13 +134,11 @@ import com.music.vivi.utils.listItemShape
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.viewmodels.ArtistViewModel
 import com.valentinilk.shimmer.shimmer
-import com.music.vivi.artistvideo.ArtistVideo
 import com.music.vivi.constants.ShowArtistVideoKey
 import com.music.vivi.constants.ShowArtistBackgroundVideoKey
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import com.music.vivi.artistvideo.AppleMusicArtistBackgroundProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -297,14 +295,6 @@ fun ArtistScreen(
                     val artistName = artistPage?.artist?.title ?: libraryArtist?.artist?.name
 
                     var backgroundVideoUrl by remember { mutableStateOf<String?>(null) }
-                    LaunchedEffect(artistName, showArtistBackgroundVideo) {
-                        if (artistName != null && showArtistBackgroundVideo) {
-                            withContext(Dispatchers.IO) {
-                                backgroundVideoUrl = AppleMusicArtistBackgroundProvider.getByArtistName(artistName)
-                            }
-                        }
-                    }
-
                     Box {
                         // Artist Image with offset
                         if (thumbnail != null || backgroundVideoUrl != null) {
@@ -331,13 +321,6 @@ fun ArtistScreen(
                                             contentDescription = null,
                                             modifier = Modifier.fillMaxSize(),
                                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
-                                    }
-                                    if (backgroundVideoUrl != null && showArtistBackgroundVideo) {
-                                        ArtistVideo(
-                                            videoUrl = backgroundVideoUrl!!,
-                                            modifier = Modifier.fillMaxSize(),
-                                            onClick = { }
                                         )
                                     }
                                 }
@@ -369,28 +352,6 @@ fun ArtistScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 ) {
-
-                                    //artist video
-                                    if (showArtistVideo && !(showArtistBackgroundVideo && backgroundVideoUrl != null)) {
-                                        artistVideoUrl?.let { videoUrl ->
-                                            artistPage?.artist?.radioEndpoint?.let { radioEndpoint ->
-                                                Spacer(modifier = Modifier.width(5.dp))
-                                                ArtistVideo(
-                                                    videoUrl = videoUrl,
-                                                    modifier = Modifier
-                                                        .height(45.dp)
-                                                        .aspectRatio(16f / 9f),
-                                                    onClick = {
-                                                        val watchEndpoint = artistVideoSong?.endpoint
-                                                            ?: artistPage?.artist?.radioEndpoint
-                                                        watchEndpoint?.let {
-                                                            playerConnection.playQueue(YouTubeQueue(it))
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
 
                                     Spacer(modifier = Modifier.width(5.dp))
 

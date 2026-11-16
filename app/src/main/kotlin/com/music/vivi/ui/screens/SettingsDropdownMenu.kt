@@ -42,7 +42,6 @@ import com.music.vivi.R
 import com.music.vivi.constants.AccountEmailKey
 import com.music.vivi.constants.InnerTubeCookieKey
 import com.music.vivi.constants.HasStarredRepoKey
-import com.music.vivi.github.GitHubViewModel
 import com.music.vivi.utils.rememberPreference
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -60,7 +59,6 @@ fun SettingsDropdownMenu(
     onDismissRequest: () -> Unit,
     onNavigate: (String) -> Unit,
     homeViewModel: HomeViewModel,
-    gitHubViewModel: GitHubViewModel = hiltViewModel(),
     accountSettingsViewModel: AccountSettingsViewModel = hiltViewModel(),
 ) {
     val uriHandler = LocalUriHandler.current
@@ -72,11 +70,9 @@ fun SettingsDropdownMenu(
         innerTubeCookie.isNotEmpty() && "SAPISID" in parseCookieString(innerTubeCookie)
     }
 
-    val isStarred by gitHubViewModel.isStarred.collectAsState()
     LaunchedEffect(expanded) {
         if (expanded) {
             isUpdateAvailable = getUpdateAvailableState(context)
-            gitHubViewModel.checkStarStatus(context)
         }
     }
 
@@ -115,22 +111,6 @@ fun SettingsDropdownMenu(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             )
 
-            IconButton(
-                onClick = { 
-                    gitHubViewModel.toggleStar(context) {
-                        uriHandler.openUri("https://github.com/vivizzz007/vivi-music")
-                    }
-                }, 
-                modifier = iconButtonModifier,
-                colors = iconButtonColors,
-                shapes = IconButtonDefaults.shapes()
-            ) {
-                Icon(
-                    painter = painterResource(if (isStarred) R.drawable.star else R.drawable.star_border), 
-                    contentDescription = "Star Repo",
-                    tint = if (isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             IconButton(
                 onClick = { 
                     onDismissRequest()

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 
@@ -73,5 +74,11 @@ class CachePlaylistViewModel @Inject constructor(
         if (ids.isEmpty()) return emptyList()
         return database.getSongsByIds(ids)
             .sortedBy { it.song.title.lowercase() }
+    }
+
+    fun removeSongFromCache(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playerCache.removeResource(id)
+        }
     }
 }

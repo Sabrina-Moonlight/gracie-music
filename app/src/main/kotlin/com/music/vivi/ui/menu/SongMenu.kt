@@ -407,7 +407,7 @@ fun SongMenu(
                             onDismiss()
                             playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.play_next)) },
                         description = { Text(text = stringResource(R.string.play_next_desc)) },
@@ -421,7 +421,7 @@ fun SongMenu(
                             onDismiss()
                             playerConnection.playNext(song.toMediaItem())
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.add_to_queue)) },
                         description = { Text(text = stringResource(R.string.add_to_queue_desc)) },

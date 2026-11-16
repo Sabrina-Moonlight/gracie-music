@@ -1334,6 +1334,7 @@ fun Lyrics(
                                             romanizeChineseLyrics ||
                                             romanizeHindiLyrics ||
                                             romanizePunjabiLyrics),
+                            showTranslated = false,
                             textSize = lyricsTextSize,
                             lineSpacing = lyricsLineSpacing,
                             isAutoScrollActive = isAutoScrollEnabled,

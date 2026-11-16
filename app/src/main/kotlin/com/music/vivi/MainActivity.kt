@@ -164,7 +164,6 @@ import com.music.vivi.vivimusic.updater.getBetaUpdatesSetting
 import com.music.vivi.vivimusic.updater.getUpdateAvailableState
 import com.music.vivi.vivimusic.updater.shouldRunNightlyCheck
 import com.music.vivi.vivimusic.updater.markNightlyCheckDone
-import com.music.vivi.vivimusic.UpdateNotificationHelper
 import android.util.Log
 import androidx.compose.ui.platform.LocalContext
 import com.music.vivi.constants.PauseListenHistoryKey
@@ -216,7 +215,6 @@ import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.utils.reportException
 import com.music.vivi.utils.setAppLocale
-import com.music.vivi.viewmodels.HistoryViewModel
 import com.music.vivi.viewmodels.HomeViewModel
 import com.music.vivi.ui.screens.search.suggestions.SuggestionsViewModel
 import com.valentinilk.shimmer.LocalShimmerTheme
@@ -232,7 +230,6 @@ import timber.log.Timber
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Locale
-import com.music.vivi.github.GitHubViewModel
 import javax.inject.Inject
 import androidx.activity.viewModels
 import androidx.compose.material3.LocalContentColor
@@ -253,8 +250,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var syncUtils: SyncUtils
-
-    private val gitHubViewModel: GitHubViewModel by viewModels()
 
     private lateinit var navController: NavHostController
     private var pendingIntent: Intent? = null
@@ -445,7 +440,6 @@ class MainActivity : ComponentActivity() {
 
                         if (isAvailable && getUpdateNotificationsSetting(context)) {
                             Log.d("UpdateCheck", "Posting update notification for $latestVersion")
-                            UpdateNotificationHelper.showUpdateNotification(context, latestVersion)
                         }
 
                         // Stamp today so no more nightly checks until tomorrow 9 PM
@@ -500,8 +494,6 @@ class MainActivity : ComponentActivity() {
 
         val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
 
-        val (lastSeenStarPromptVersion, setLastSeenStarPromptVersion) = rememberPreference(LastSeenStarPromptVersionKey, "")
-        val (hasStarredRepo) = rememberPreference(HasStarredRepoKey, false)
         val uriHandler = LocalUriHandler.current
         val currentVersion = BuildConfig.VERSION_NAME
 
@@ -566,115 +558,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val gitHubViewModel: GitHubViewModel = hiltViewModel()
-        val isStarred by gitHubViewModel.isStarred.collectAsState()
-        val showThankYouDialog by gitHubViewModel.showThankYouDialog.collectAsState()
-
-        LaunchedEffect(Unit) {
-            gitHubViewModel.checkStarStatus(this@MainActivity)
-        }
-
         vivimusicTheme(
             darkTheme = useDarkTheme,
             pureBlack = pureBlack,
             themeColor = themeColor,
         ) {
-            if (lastSeenStarPromptVersion != currentVersion && !hasStarredRepo && !isStarred) {
-                ActionPromptDialog(
-                    title = "Support ViviMusic \u2B50",
-                    onDismiss = { setLastSeenStarPromptVersion(currentVersion) },
-                    onConfirm = {
-                        setLastSeenStarPromptVersion(currentVersion)
-                        uriHandler.openUri("https://github.com/vivizzz007/vivi-music")
-                    },
-                    onCancel = { setLastSeenStarPromptVersion(currentVersion) },
-                    content = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text(
-                                text = "If you enjoy using ViviMusic, would you consider starring our repository on GitHub?",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "It takes just a second and helps keep our open-source project alive and growing!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                )
-            }
-
-            if (showThankYouDialog) {
-                ActionPromptDialog(
-                    title = "Thank You!",
-                    onDismiss = { gitHubViewModel.dismissThankYouDialog() },
-                    onConfirm = { gitHubViewModel.dismissThankYouDialog() },
-                    content = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text(
-                                text = "Thank you so much for your support! \u2764\uFE0F",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Starring the repository helps us grow and keep the project alive. Enjoy the music!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val btnModifier = Modifier.size(44.dp)
-                                val btnColors = androidx.compose.material3.IconButtonDefaults.iconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                )
-                                val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                                
-                                IconButton(
-                                    onClick = { uriHandler.openUri("https://ko-fi.com/vivizzz007") },
-                                    modifier = btnModifier,
-                                    colors = btnColors
-                                ) {
-                                    Icon(painter = painterResource(R.drawable.buymeacoffee), contentDescription = "Buy Me A Coffee", tint = iconTint)
-                                }
-                                IconButton(
-                                    onClick = { uriHandler.openUri("https://paypal.me/vivizzz007") },
-                                    modifier = btnModifier,
-                                    colors = btnColors
-                                ) {
-                                    Icon(painter = painterResource(R.drawable.paypal), contentDescription = "PayPal", tint = iconTint)
-                                }
-                                IconButton(
-                                    onClick = { uriHandler.openUri("upi://pay?pa=vivizzz007@upi") },
-                                    modifier = btnModifier,
-                                    colors = btnColors
-                                ) {
-                                    Icon(painter = painterResource(R.drawable.currency_rupee_upi), contentDescription = "UPI", tint = iconTint)
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
@@ -690,9 +578,6 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
                 val homeViewModel: HomeViewModel = hiltViewModel()
-                // Pre-warm HistoryViewModel at Activity scope so history data loads
-                // in background immediately — zero lag when user taps the history icon
-                hiltViewModel<HistoryViewModel>()
                 // Pre-warm SuggestionsViewModel at Activity scope so suggestions data loads
                 // in background immediately — zero lag when user opens the Search screen
                 hiltViewModel<SuggestionsViewModel>()
@@ -1042,20 +927,6 @@ class MainActivity : ComponentActivity() {
                                         actions = {
                                             val (enableSettingsPopup) = rememberPreference(EnableSettingsPopupKey, defaultValue = true)
 
-                                            if (showHistoryButton) {
-                                                IconButton(onClick = { navController.navigate("history") }) {
-                                                    Icon(
-                                                        painter = painterResource(R.drawable.music_history),
-                                                        contentDescription = stringResource(R.string.history)
-                                                    )
-                                                }
-                                            }
-                                            IconButton(onClick = { navController.navigate("stats") }) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.stats),
-                                                    contentDescription = stringResource(R.string.stats)
-                                                )
-                                            }
                                             Box {
                                                 var showSettingsDropdown by remember { mutableStateOf(false) }
                                                 IconButton(onClick = { 

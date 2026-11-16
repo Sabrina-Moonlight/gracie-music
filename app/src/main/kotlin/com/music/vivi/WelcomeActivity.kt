@@ -169,7 +169,7 @@ class WelcomeActivity : ComponentActivity() {
             com.music.vivi.utils.setAppLocale(this, locale)
         }
 
-        if (!isFirstRun && !forceShow) {
+        if (!forceShow) {
             finishOnboarding()
             return
         }

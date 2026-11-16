@@ -297,7 +297,7 @@ fun YouTubeAlbumMenu(
                                 }
                             }
                         }
-                    )
+                    ),
                     NewAction(
                         icon = {
                             Icon(
@@ -316,7 +316,7 @@ fun YouTubeAlbumMenu(
                                 }
                             }
                         }
-                    )
+                    ),
                     NewAction(
                         icon = {
                             Icon(
@@ -362,7 +362,7 @@ fun YouTubeAlbumMenu(
                                 ?.let(playerConnection::playNext)
                             onDismiss()
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.add_to_queue)) },
                         description = { Text(text = stringResource(R.string.add_to_queue_desc)) },
@@ -379,7 +379,7 @@ fun YouTubeAlbumMenu(
                                 ?.let(playerConnection::addToQueue)
                             onDismiss()
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.add_to_playlist)) },
                         description = { Text(text = stringResource(R.string.add_to_playlist_desc)) },

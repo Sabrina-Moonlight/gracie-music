@@ -325,7 +325,7 @@ fun AlbumMenu(
                                 )
                             }
                         }
-                    )
+                    ),
 
                     NewAction(
                         icon = {
@@ -351,7 +351,7 @@ fun AlbumMenu(
                                 )
                             }
                         }
-                    )
+                    ),
                     NewAction(
                         icon = {
                             Icon(
@@ -394,7 +394,7 @@ fun AlbumMenu(
                             onDismiss()
                             playerConnection.playNext(songs.map { it.toMediaItem() })
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.add_to_queue)) },
                         description = { Text(text = stringResource(R.string.add_to_queue_desc)) },
@@ -408,7 +408,7 @@ fun AlbumMenu(
                             onDismiss()
                             playerConnection.addToQueue(songs.map { it.toMediaItem() })
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.add_to_playlist)) },
                         description = { Text(text = stringResource(R.string.add_to_playlist_desc)) },

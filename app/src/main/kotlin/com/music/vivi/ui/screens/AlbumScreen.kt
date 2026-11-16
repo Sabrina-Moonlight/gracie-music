@@ -134,7 +134,6 @@ import com.music.vivi.ui.menu.SongMenu
 import com.music.vivi.ui.menu.YouTubeAlbumMenu
 import com.music.vivi.ui.utils.backToMain
 import com.music.vivi.ui.utils.fadingEdge
-import com.music.vivi.ui.player.MotionartworkPlayer
 import com.music.vivi.utils.listItemShape
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.viewmodels.AlbumViewModel
@@ -168,12 +167,6 @@ fun AlbumScreen(
     val useExpressiveAlbumDesign by rememberPreference(key = UseExpressiveAlbumDesignKey, defaultValue = true)
     val hideVideoSongs by rememberPreference(key = HideVideoSongsKey, defaultValue = false)
     val albumCanvasEnabled by rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = false)
-
-    val canvasArtwork = rememberAlbumCanvas(
-        albumTitle = albumWithSongs?.album?.title,
-        artistName = albumWithSongs?.artists?.joinToString { it.name }?.takeIf { it.isNotEmpty() },
-        firstSongTitle = albumWithSongs?.songs?.firstOrNull()?.song?.title
-    )
 
     val filteredSongs = remember(albumWithSongs, hideExplicit, hideVideoSongs) {
         var songs = albumWithSongs?.songs ?: emptyList()
@@ -302,15 +295,6 @@ fun AlbumScreen(
                                     },
                                 contentScale = ContentScale.Crop
                             )
-
-                            if (albumCanvasEnabled && canvasArtwork != null) {
-                                MotionartworkPlayer(
-                                    primaryUrl = canvasArtwork.animated,
-                                    fallbackUrl = canvasArtwork.videoUrl,
-                                    isPlaying = true,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
 
                             // Re-adding the shadow gradient mask to ensure text readability
                             Box(

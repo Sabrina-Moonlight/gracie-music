@@ -284,7 +284,7 @@ fun PlayerMenu(
                             playerConnection.startRadioSeamlessly()
                             onDismiss()
                         }
-                    )
+                    ),
                     NewAction(
                         icon = {
                             Icon(

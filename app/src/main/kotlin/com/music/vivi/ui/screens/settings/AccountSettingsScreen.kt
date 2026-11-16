@@ -125,16 +125,7 @@ fun AccountSettingsScreen(
                             .padding(horizontal = 24.dp, vertical = 18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AccountSyncIndicator(
-                            artistsStatus = syncState.artists,
-                            playlistsStatus = syncState.playlists,
-                            albumsStatus = syncState.likedAlbums,
-                            lastSyncTime = lastFullSync,
-                            syncTriggerCount = syncTriggerCount,
-                            activeColor = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.25f),
-                            errorColor = MaterialTheme.colorScheme.error,
-                        ) {
+                        Box {
                             if (!accountImageUrl.isNullOrBlank()) {
                                 AsyncImage(
                                     model = accountImageUrl,

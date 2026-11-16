@@ -37,7 +37,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.music.vivi.extensions.filterVideoSongs as filterVideoSongsLocal
-import com.music.vivi.artistvideo.AppleMusicArtistBackgroundProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -105,13 +104,6 @@ class ArtistViewModel @Inject constructor(
                         }
                         .filter { section -> section.items.isNotEmpty() }
                     artistPage = page.copy(sections = filteredSections)
-                    
-                    val artistVideo = AppleMusicArtistBackgroundProvider.getByArtistName(page.artist?.title ?: "")
-                    if (artistVideo != null) {
-                        _artistVideoUrl.value = artistVideo
-                        _artistVideoSong.value = page.sections.firstOrNull()?.items?.filterIsInstance<com.music.innertube.models.SongItem>()?.firstOrNull()
-                    }
-
                 }.onFailure {
                     reportException(it)
                 }

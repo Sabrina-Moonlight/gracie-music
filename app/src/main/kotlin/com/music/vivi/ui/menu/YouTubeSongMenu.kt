@@ -274,7 +274,7 @@ fun YouTubeSongMenu(
                             playerConnection.playNext(song.copy(thumbnail = song.thumbnail.resize(1200, 1200)).toMediaItem())
                             onDismiss()
                         }
-                    )
+                    ),
                     NewAction(
                         icon = {
                             Icon(
@@ -332,7 +332,7 @@ fun YouTubeSongMenu(
                             playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
                             onDismiss()
                         }
-                    )
+                    ),
                     Material3MenuItemData(
                         title = { Text(text = stringResource(R.string.add_to_queue)) },
                         description = { Text(text = stringResource(R.string.add_to_queue_desc)) },

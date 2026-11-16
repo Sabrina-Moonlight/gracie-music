@@ -104,14 +104,6 @@ fun NavGraphBuilder.navigationBuilder(
         LocalMusicScreen(navController)
     }
 
-    composable("history") {
-        HistoryScreen(navController)
-    }
-
-    composable("stats") {
-        StatsScreen(navController)
-    }
-
     composable("mood_and_genres") {
         MoodAndGenresScreen(navController, scrollBehavior)
     }
@@ -122,10 +114,6 @@ fun NavGraphBuilder.navigationBuilder(
 
     composable("new_release") {
         NewReleaseScreen(navController, scrollBehavior)
-    }
-
-    composable("charts_screen") {
-        ChartsScreen(navController)
     }
 
     composable(
