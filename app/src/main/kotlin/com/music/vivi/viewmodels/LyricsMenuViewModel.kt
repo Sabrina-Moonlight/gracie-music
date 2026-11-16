@@ -59,6 +59,13 @@ constructor(
         }
     }
 
+    /** Estado de red al momento de preguntar (el flujo puede tardar en actualizarse). */
+    fun isOnlineNow(): Boolean = try {
+        networkConnectivity.isCurrentlyConnected()
+    } catch (e: Exception) {
+        true
+    }
+
     fun setCurrentSong(song: Song) {
         _currentSong.value = song
     }
@@ -94,12 +101,15 @@ constructor(
         lyricsEntity: LyricsEntity?,
     ) {
         database.query {
-            lyricsEntity?.let(::delete)
             val lyricsWithProvider =
                 runBlocking {
                     lyricsHelper.getLyrics(mediaMetadata)
                 }
-            upsert(LyricsEntity(mediaMetadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
+            // Si no se encuentra, se conserva la letra anterior y no se guarda "no encontrada".
+            if (lyricsWithProvider.lyrics != LyricsEntity.LYRICS_NOT_FOUND) {
+                lyricsEntity?.let(::delete)
+                upsert(LyricsEntity(mediaMetadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
+            }
         }
     }
 }

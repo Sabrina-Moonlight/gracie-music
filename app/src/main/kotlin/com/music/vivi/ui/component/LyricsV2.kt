@@ -53,7 +53,6 @@ fun LyricsLineV2(
     inactiveAlpha: Float,
     baseFontSize: Float,
     lineHeight: Float,
-    showTranslated: Boolean,
     agentAlignment: Alignment.Horizontal,
     agentTextAlign: TextAlign,
 ) {
@@ -109,22 +108,6 @@ fun LyricsLineV2(
             textAlign = agentTextAlign,
             modifier = Modifier.fillMaxWidth(),
         )
-    }
-
-    // Translated text support
-    if (showTranslated) {
-        val translatedText by entry.translatedTextFlow.collectAsState()
-        translatedText?.let { translated ->
-            Text(
-                text = translated,
-                fontSize = (baseFontSize * 0.7f).sp,
-                color = expressiveAccent.copy(alpha = if (isActive) 0.8f else inactiveAlpha * 0.8f),
-                textAlign = agentTextAlign,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
-                lineHeight = (baseFontSize * 0.7f * (lineHeight / baseFontSize).coerceAtMost(1.3f)).sp
-            )
-        }
     }
 }
 

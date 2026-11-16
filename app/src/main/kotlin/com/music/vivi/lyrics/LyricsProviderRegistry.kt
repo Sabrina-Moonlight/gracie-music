@@ -22,7 +22,6 @@ object LyricsProviderRegistry {
         "Kugou"           to KuGouLyricsProvider,
         "Unison"          to UnisonLyricsProvider,
         "BiniLyrics"      to BiniLyricsProvider,
-        "Spotify"         to SpotifyLyricsProvider,
         "LrcRed"          to LrcRedLyricsProvider,
         "YouTubeSubtitle" to YouTubeSubtitleLyricsProvider,
         "YouTubeMusic"    to YouTubeLyricsProvider,
@@ -49,7 +48,6 @@ object LyricsProviderRegistry {
         "Kugou",
         "Unison",
         "BiniLyrics",
-        "Spotify",
         "LrcRed",
         "YouTubeSubtitle",
         "YouTubeMusic",
@@ -67,7 +65,6 @@ object LyricsProviderRegistry {
         PreferredLyricsProvider.YOULYPLUS        -> "YouLyPlus"
         PreferredLyricsProvider.PAXSENIX         -> "Paxsenix"
         PreferredLyricsProvider.UNISON           -> "Unison"
-        PreferredLyricsProvider.SPOTIFY          -> "Spotify"
         PreferredLyricsProvider.BINI_LYRICS      -> "BiniLyrics"
         PreferredLyricsProvider.LRC_RED          -> "LrcRed"
         PreferredLyricsProvider.YOUTUBE_SUBTITLE -> "YouTubeSubtitle"
@@ -84,7 +81,6 @@ object LyricsProviderRegistry {
         "Kugou"           -> "KuGou"
         "Unison"          -> "Unison"
         "BiniLyrics"      -> "Bini Lyrics"
-        "Spotify"         -> "Spotify"
         "LrcRed"          -> "lrc.red"
         "YouTubeSubtitle" -> "YouTube Subtitle"
         "YouTubeMusic"    -> "YouTube Music"

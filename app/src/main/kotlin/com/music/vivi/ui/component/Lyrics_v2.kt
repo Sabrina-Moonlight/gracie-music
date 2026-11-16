@@ -1107,12 +1107,12 @@ fun LyricsV2(
                                                     lyricsTextPosition = LyricsPosition.LEFT,
                                                     textColor = adaptivePrimary,
                                                     showRomanized = showRomanized,
-                                                    showTranslated = false, // se quita en F4 parte 3 (MetroLyrics)
                                                     isAutoScrollActive = isAutoScrollEnabled,
                                                     isSelectionModeActive = isSelectionModeActive,
                                                     isSelected = isSelected,
                                                     expressiveAccent = adaptivePrimary,
                                                     bgVisible = bgVisible,
+                                                    bgInstantCollapse = isSeeking,
                                                     onClick = {
                                                         if (isSelectionModeActive) {
                                                             toggleSelection(index)

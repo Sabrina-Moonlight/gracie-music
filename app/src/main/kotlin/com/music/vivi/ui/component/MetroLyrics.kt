@@ -6,6 +6,7 @@ package com.music.vivi.ui.component
 
 import android.graphics.BlurMaskFilter
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -140,7 +141,6 @@ fun MetroLyricsLine(
     lyricsTextPosition: LyricsPosition,
     textColor: Color,
     showRomanized: Boolean,
-    showTranslated: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     isSelected: Boolean,
@@ -148,6 +148,7 @@ fun MetroLyricsLine(
     isAutoScrollActive: Boolean,
     expressiveAccent: Color,
     bgVisible: Boolean = true,
+    bgInstantCollapse: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val (romanizeAsMain) = rememberPreference(LyricsRomanizeAsMainKey, false)
@@ -314,21 +315,6 @@ fun MetroLyricsLine(
                     lineHeight = (18 * lyricsLineSpacing.coerceAtMost(1.3f)).sp
                 )
             }
-
-            if (showTranslated) {
-                val translatedText by entry.translatedTextFlow.collectAsState()
-                translatedText?.let { translated ->
-                    Text(
-                        text = translated,
-                        fontSize = 16.sp,
-                        color = expressiveAccent.copy(alpha = 0.8f),
-                        textAlign = agentTextAlign,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
-                        lineHeight = (16 * lyricsLineSpacing.coerceAtMost(1.3f)).sp
-                    )
-                }
-            }
         }
     }
 
@@ -336,7 +322,7 @@ fun MetroLyricsLine(
         AnimatedVisibility(
             visible = bgVisible,
             enter = fadeIn(tween(durationMillis = 250, delayMillis = 100)),
-            exit = fadeOut(tween(250))
+            exit = if (bgInstantCollapse) ExitTransition.None else fadeOut(tween(250))
         ) {
             LyricContent()
         }

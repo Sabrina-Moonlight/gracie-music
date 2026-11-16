@@ -497,7 +497,6 @@ enum class PreferredLyricsProvider {
     YOULYPLUS,
     PAXSENIX,
     UNISON,
-    SPOTIFY,
     BINI_LYRICS,
     LRC_RED,
     YOUTUBE_SUBTITLE,
