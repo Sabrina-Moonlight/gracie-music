@@ -137,6 +137,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import dev.chrisbanes.haze.HazeState
+import androidx.compose.ui.graphics.luminance
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -159,20 +160,16 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.music.vivi.LocalDatabase
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.LocalDownloadUtil
-import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.constants.AudioQuality
 import com.music.vivi.constants.AudioQualityKey
 import com.music.vivi.constants.CropAlbumArtKey
-import com.music.vivi.constants.DarkModeKey
 import com.music.vivi.constants.HidePlayerThumbnailKey
 import com.music.vivi.constants.EnableLyricsThumbnailPlayPauseKey
 import com.music.vivi.constants.KeepScreenOn
 import com.music.vivi.constants.PlayerBackgroundStyle
 import com.music.vivi.constants.PlayerBackgroundStyleKey
-import com.music.vivi.constants.PlayerButtonsStyle
-import com.music.vivi.constants.PlayerButtonsStyleKey
 import com.music.vivi.constants.PlayerHorizontalPadding
 import com.music.vivi.constants.QueuePeekHeight
 import com.music.vivi.constants.SliderStyle
@@ -180,14 +177,12 @@ import com.music.vivi.constants.SliderStyleKey
 import com.music.vivi.constants.SquigglySliderKey
 import com.music.vivi.constants.SwipeLyricsKey
 import com.music.vivi.constants.ThumbnailCornerRadius
-import com.music.vivi.constants.UseNewPlayerDesignKey
 import com.music.vivi.constants.UsePlayerV2Key
 import com.music.vivi.constants.ShowAudioQualityBadgeKey
 import com.music.vivi.db.entities.LyricsEntity
 import com.music.vivi.extensions.SwipeGesture
 import com.music.vivi.extensions.togglePlayPause
 import com.music.vivi.extensions.toggleRepeatMode
-import com.music.vivi.listentogether.RoomRole
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.playback.ExoDownloadService
 import com.music.vivi.vivimusic.getConnectedBluetoothDeviceName
@@ -240,21 +235,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil3.request.crossfade
-import com.music.vivi.Motionartwork.apple.AppleMusicMotionartworkProvider
-import com.music.vivi.Motionartwork.Motionartwork
-import com.music.vivi.Motionartwork.tidal.TidalMotionartworkProvider
-import com.music.vivi.Motionartwork.vivimusic.ViviMusicMotionartworkProvider
-import com.music.vivi.constants.MotionartworkSource
-import com.music.vivi.constants.MotionartworkSourceKey
-import com.music.vivi.constants.CanvasThumbnailAnimationKey
-import com.music.vivi.constants.SpotifyCanvasEnabledKey
-import com.music.spotify.Spotify
-import com.music.spotify.SpotifyCanvasProvider
-import com.music.vivi.constants.CanvasLoadOnlyWifiKey
 import com.music.vivi.extensions.metadata
-import com.music.vivi.ui.player.MotionartworkPlaybackCache
-import com.music.vivi.utils.isWifiConnected
-import com.music.vivi.utils.SpotifySessionManager
 import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -285,10 +266,9 @@ fun BottomSheetPlayer(
         }
     }
 
-    val (useNewPlayerDesign, onUseNewPlayerDesignChange) = rememberPreference(
-        UseNewPlayerDesignKey,
-        defaultValue = false
-    )
+    // Modo M3E eliminado (Gracie); sus ramas se quitan en la parte 3
+    val useNewPlayerDesign = false
+    val onUseNewPlayerDesignChange: (Boolean) -> Unit = {}
     val (showAudioQualityBadge) = rememberPreference(
         ShowAudioQualityBadgeKey,
         defaultValue = false
@@ -297,23 +277,11 @@ fun BottomSheetPlayer(
     val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
-        defaultValue = PlayerBackgroundStyle.LIVE_MESH
+        defaultValue = PlayerBackgroundStyle.GRADIENT
     )
-    val playerButtonsStyle by rememberEnumPreference(
-        key = PlayerButtonsStyleKey,
-        defaultValue = PlayerButtonsStyle.DEFAULT
-    )
+    // Tema oscuro por luminosidad (sin DarkModeKey)
+    val useDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    val isSystemInDarkTheme = isSystemInDarkTheme()
-    val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
-    val useDarkTheme = remember(darkTheme, isSystemInDarkTheme) {
-        if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
-    }
-
-    val enableCanvas by rememberPreference(CanvasThumbnailAnimationKey, true)
-    val (motionartworkSource) = rememberEnumPreference(MotionartworkSourceKey, defaultValue = MotionartworkSource.AUTO)
-    val canvasLoadOnlyWifi by rememberPreference(CanvasLoadOnlyWifiKey, defaultValue = false)
-    val spotifyCanvasEnabled by rememberPreference(SpotifyCanvasEnabledKey, false)
     val usePlayerV2 by rememberPreference(UsePlayerV2Key, true)
 
     val shouldUseDarkButtonColors = remember(playerBackground, useDarkTheme) {
@@ -364,12 +332,7 @@ fun BottomSheetPlayer(
         PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.onSurface
     }
-    val useBlackBackground =
-        remember(isSystemInDarkTheme, darkTheme, pureBlack) {
-            val useDarkTheme =
-                if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
-            useDarkTheme && pureBlack
-        }
+    val useBlackBackground = useDarkTheme && pureBlack
 
     val playbackState by playerConnection.playbackState.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
@@ -390,11 +353,9 @@ fun BottomSheetPlayer(
     val sliderStyle by rememberEnumPreference(SliderStyleKey, SliderStyle.SLIM)
     val squigglySlider by rememberPreference(SquigglySliderKey, defaultValue = false)
     
-    // Listen Together state (reactive)
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRoleState = listenTogetherManager?.role?.collectAsState(initial = RoomRole.NONE)
-    val isListenTogetherGuest = listenTogetherRoleState?.value == RoomRole.GUEST
-    
+    // Listen Together eliminado: el invitado nunca existe (se quita de las ramas en la parte 3)
+    val isListenTogetherGuest = false
+
     // Cast state - safely access castConnectionHandler to prevent crashes during service lifecycle changes
     val castHandler = remember(playerConnection) {
         try {
@@ -642,235 +603,14 @@ fun BottomSheetPlayer(
         label = "icBackgroundColor"
     )
 
-    val albumTitle = mediaMetadata?.album?.title
-    var canvasArtwork by remember(mediaMetadata?.id, albumTitle) { mutableStateOf<Motionartwork?>(null) }
-    var canvasFetchInFlight by remember(mediaMetadata?.id, albumTitle) { mutableStateOf(false) }
-    var spotifyCanvasUrl by remember(mediaMetadata?.id, albumTitle) { mutableStateOf<String?>(null) }
-    
-    val isNetworkConnected by (LocalPlayerConnection.current?.service?.connectivityObserver?.networkStatus ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState(initial = false)
+    // Colores de botones (estilo único)
+    val usesLightContent = playerBackground != PlayerBackgroundStyle.DEFAULT
+    val (textButtonColor, iconButtonColor) =
+        if (usesLightContent || useDarkTheme) Pair(Color.White, Color.Black) else Pair(Color.Black, Color.White)
 
-    LaunchedEffect(mediaMetadata?.id, albumTitle, playerBackground, motionartworkSource, spotifyCanvasEnabled, Spotify.accessToken, isNetworkConnected) {
-        val item = mediaMetadata ?: return@LaunchedEffect
-        
-        if (!spotifyCanvasEnabled) {
-            spotifyCanvasUrl = null
-        } else {
-            val prefs = context.getSharedPreferences("spotify_canvas_url_map", android.content.Context.MODE_PRIVATE)
-            val cachedUrl = prefs.getString(item.id, null)
-            if (cachedUrl != null) {
-                spotifyCanvasUrl = cachedUrl
-                timber.log.Timber.d("SpotifyCanvas: Loaded url from local SharedPreferences cache for offline bypass - ID: ${item.id}")
-            } else {
-                val accessToken = SpotifySessionManager.getValidAccessToken(context)
-                if (accessToken != null && (!canvasLoadOnlyWifi || isWifiConnected(context))) {
-                    timber.log.Timber.d("SpotifyCanvas: Triggering Canvas fetch for track: ${item.title}")
-                    withContext(Dispatchers.IO) {
-                        // Try REST API first as it's more reliable
-                        val trackId = Spotify.searchTrackRest("${item.title} ${item.artists.joinToString { it.name }}") 
-                            ?: Spotify.searchTrack("${item.title} ${item.artists.joinToString { it.name }}")?.id
-
-                        timber.log.Timber.d("SpotifyCanvas: Resolved Track ID from search: $trackId")
-
-                        if (trackId != null) {
-                            val canvasRes = SpotifyCanvasProvider.getCanvasUrl(trackId, accessToken)
-                            timber.log.Timber.d("SpotifyCanvas: Canvas URL extraction result: $canvasRes")
-                            val fetchedUrl = canvasRes.getOrNull()
-                            if (fetchedUrl != null) {
-                                prefs.edit().putString(item.id, fetchedUrl).apply()
-                            }
-                            withContext(Dispatchers.Main) {
-                                spotifyCanvasUrl = fetchedUrl
-                            }
-                        }
-                    }
-                } else {
-                    timber.log.Timber.d("SpotifyCanvas: Conditions not met to fetch. canvasEnabled=$spotifyCanvasEnabled, tokenReady=${Spotify.accessToken != null}, itemReady=${item != null}")
-                }
-            }
-        }
-
-        if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC || !enableCanvas) {
-            canvasArtwork = null
-            return@LaunchedEffect
-        }
-        if (canvasLoadOnlyWifi && !isWifiConnected(context)) {
-            canvasArtwork = null
-            return@LaunchedEffect
-        }
-        
-        val cacheKey = "${item.id}:${motionartworkSource.name}"
-        // Use cached artwork if available
-        MotionartworkPlaybackCache.get(cacheKey)?.let { cached ->
-            canvasArtwork = cached
-            spotifyCanvasUrl = null // Prioritize Motionartwork, disable Spotify Canvas
-            return@LaunchedEffect
-        }
-
-        if (canvasFetchInFlight) return@LaunchedEffect
-        canvasFetchInFlight = true
-        
-        withContext(Dispatchers.IO) {
-            val storefront = Locale.getDefault().country.lowercase(Locale.ROOT).takeIf { it.length == 2 } ?: "us"
-            val requestedTitle = item.title
-            val requestedArtist = item.artists.joinToString { it.name }
-            val requestedAlbum = item.album?.title ?: ""
-
-            val s = requestedTitle
-            val a = requestedArtist
-
-            android.util.Log.d("CanvasDebug", "=== Canvas Fetch START ===")
-            android.util.Log.d("CanvasDebug", "Source     : $motionartworkSource")
-            android.util.Log.d("CanvasDebug", "Storefront : $storefront")
-            android.util.Log.d("CanvasDebug", "Title      : '$requestedTitle'")
-            android.util.Log.d("CanvasDebug", "Artist     : '$requestedArtist'")
-            android.util.Log.d("CanvasDebug", "Album      : '$requestedAlbum' (blank=${requestedAlbum.isBlank()})")
-
-            val fetched = when (motionartworkSource) {
-                MotionartworkSource.AUTO -> {
-                    AppleMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum, storefront)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
-                        ?: TidalMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
-                        ?: ViviMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
-                }
-                MotionartworkSource.APPLE_MUSIC -> {
-                    AppleMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum, storefront)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
-                MotionartworkSource.VIVIMUSIC -> {
-                    ViviMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
-                MotionartworkSource.TIDAL -> {
-                    TidalMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
-                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
-            }
-
-            android.util.Log.d("CanvasDebug", "Fetched artwork: ${if (fetched == null) "NULL" else "non-null"}")
-            if (fetched != null) {
-                android.util.Log.d("CanvasDebug", "  artwork.name      : '${fetched.name}'")
-                android.util.Log.d("CanvasDebug", "  artwork.artist    : '${fetched.artist}'")
-                android.util.Log.d("CanvasDebug", "  artwork.albumName : '${fetched.albumName}'")
-                android.util.Log.d("CanvasDebug", "  artwork.animUrl   : '${fetched.preferredAnimationUrl}'")
-            }
-
-            val validated = fetched?.let { artwork ->
-                // For AUTO mode validation is already done per-provider inside takeIf.
-                // For single-source modes this block acts as the safety net.
-                val passes = validateMotionartworkMatch(artwork, requestedTitle, requestedArtist, requestedAlbum)
-
-                android.util.Log.d("CanvasDebug", "Validation:")
-                android.util.Log.d("CanvasDebug", "  artistMatches  : ${artwork.artist.orEmpty().trim().equals(requestedArtist.trim(), ignoreCase = true)}  ('${artwork.artist?.trim()}' vs '${requestedArtist.trim()}')")
-                android.util.Log.d("CanvasDebug", "  songMatches    : ${artwork.name.orEmpty().trim().equals(requestedTitle.trim(), ignoreCase = true)}  ('${artwork.name?.trim()}' vs '${requestedTitle.trim()}')")
-                android.util.Log.d("CanvasDebug", "  albumMatches   : ${artwork.albumName.orEmpty().trim().equals(requestedAlbum.trim(), ignoreCase = true)}  ('${artwork.albumName?.trim()}' vs '${requestedAlbum.trim()}')")
-                android.util.Log.d("CanvasDebug", "  RESULT         : $passes")
-
-                if (passes) artwork else null
-            }
-
-            android.util.Log.d("CanvasDebug", "Final validated: ${if (validated == null) "NULL (canvas will NOT show)" else "OK (canvas will show)"}")
-            android.util.Log.d("CanvasDebug", "=== Canvas Fetch END ===")
-
-            withContext(Dispatchers.Main) {
-                canvasArtwork = validated
-                if (validated != null) {
-                    MotionartworkPlaybackCache.put(cacheKey, validated)
-                    spotifyCanvasUrl = null // Prioritize Motionartwork, disable Spotify Canvas
-                }
-                canvasFetchInFlight = false
-            }
-        }
-    }
-
-    val (textButtonColor, iconButtonColor) = when {
-        playerBackground == PlayerBackgroundStyle.BLUR || 
-        playerBackground == PlayerBackgroundStyle.GRADIENT ||
-        playerBackground == PlayerBackgroundStyle.GLOW_ANIMATED ||
-        playerBackground == PlayerBackgroundStyle.APPLE_MUSIC ||
-        playerBackground == PlayerBackgroundStyle.LIVE_MESH -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT -> Pair(Color.White, Color.Black)
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.onPrimary
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiary,
-                    MaterialTheme.colorScheme.onTertiary
-                )
-            }
-        }
-        else -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT ->
-                    if (useDarkTheme) Pair(Color.White, Color.Black)
-                    else Pair(Color.Black, Color.White)
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.onPrimary
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiary,
-                    MaterialTheme.colorScheme.onTertiary
-                )
-            }
-        }
-    }
-
-    // Separate colors for Previous/Next buttons in PRIMARY/TERTIARY modes
-    val (sideButtonContainerColor, sideButtonContentColor) = when {
-        playerBackground == PlayerBackgroundStyle.BLUR || 
-        playerBackground == PlayerBackgroundStyle.GRADIENT -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT -> Pair(
-                    Color.White.copy(alpha = 0.2f), 
-                    Color.White
-                )
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primaryContainer,
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiaryContainer,
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-        }
-        playerBackground == PlayerBackgroundStyle.GLOW_ANIMATED -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT -> Pair(
-                    Color.White.copy(alpha = 0.2f), 
-                    Color.White
-                )
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primaryContainer,
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiaryContainer,
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-        }
-        else -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT -> Pair(
-                    MaterialTheme.colorScheme.surfaceContainerHighest,
-                    MaterialTheme.colorScheme.onSurface
-                )
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primaryContainer,
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiaryContainer,
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-        }
-    }
+    val (sideButtonContainerColor, sideButtonContentColor) =
+        if (usesLightContent) Pair(Color.White.copy(alpha = 0.2f), Color.White)
+        else Pair(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurface)
 
     val download by LocalDownloadUtil.current.getDownload(mediaMetadata?.id ?: "")
         .collectAsState(initial = null)
