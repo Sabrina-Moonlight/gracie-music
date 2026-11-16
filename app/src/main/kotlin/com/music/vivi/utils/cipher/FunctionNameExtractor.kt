@@ -337,6 +337,45 @@ object FunctionNameExtractor {
         return null
     }
 
+    /**
+     * Full analysis of player.js - extracts all cipher info
+     * @param playerJs The player.js content
+     * @param knownHash Optional hash from PlayerJsFetcher (preferred over computed)
+     */
+    fun analyzePlayerJs(playerJs: String, knownHash: String? = null): PlayerAnalysis {
+        Timber.tag(TAG).d("=== PLAYER.JS CIPHER ANALYSIS ===")
+
+        // Use knownHash from PlayerJsFetcher if provided, otherwise extract/compute
+        val playerHash = if (knownHash != null) {
+            Timber.tag(TAG).d("Using known hash from PlayerJsFetcher: $knownHash")
+            knownHash
+        } else {
+            extractPlayerHash(playerJs)
+        }
+
+        val hasQArray = hasQArrayObfuscation(playerJs)
+        val sigInfo = extractSigFunctionInfo(playerJs, playerHash)
+        val nFuncInfo = extractNFunctionInfo(playerJs, playerHash)
+        val signatureTimestamp = extractSignatureTimestamp(playerJs)
+
+        Timber.tag(TAG).d("=== ANALYSIS SUMMARY ===")
+        Timber.tag(TAG).d("Player Hash:        ${playerHash ?: "unknown"}")
+        Timber.tag(TAG).d("Q-Array Obfuscated: $hasQArray")
+        Timber.tag(TAG).d("Sig Function:       ${sigInfo?.name ?: "NOT FOUND"} (hardcoded=${sigInfo?.isHardcoded})")
+        Timber.tag(TAG).d("Sig Constant Arg:   ${sigInfo?.constantArg}")
+        Timber.tag(TAG).d("N-Function:         ${nFuncInfo?.name ?: "NOT FOUND"} (hardcoded=${nFuncInfo?.isHardcoded})")
+        Timber.tag(TAG).d("N-Array Index:      ${nFuncInfo?.arrayIndex}")
+        Timber.tag(TAG).d("Signature TS:       $signatureTimestamp")
+
+        return PlayerAnalysis(
+            playerHash = playerHash,
+            hasQArrayObfuscation = hasQArray,
+            sigInfo = sigInfo,
+            nFuncInfo = nFuncInfo,
+            signatureTimestamp = signatureTimestamp
+        )
+    }
+
     data class PlayerAnalysis(
         val playerHash: String?,
         val hasQArrayObfuscation: Boolean,

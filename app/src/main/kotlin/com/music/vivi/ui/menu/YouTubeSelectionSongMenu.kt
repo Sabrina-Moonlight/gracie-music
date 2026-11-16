@@ -70,7 +70,8 @@ fun YouTubeSelectionSongMenu(
         mutableStateOf(false)
     }
 
-    val isGuest = false
+    val listenTogetherManager = com.music.vivi.LocalListenTogetherManager.current
+    val isGuest = listenTogetherManager?.isInRoom == true && listenTogetherManager.isHost == false
 
     var downloadState by remember {
         mutableIntStateOf(Download.STATE_STOPPED)

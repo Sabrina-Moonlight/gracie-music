@@ -154,6 +154,19 @@ class YTMusicCommentViewModel @Inject constructor() : ViewModel() {
     }
 
     /**
+     * Select a comment thread to view its replies in detail view.
+     */
+    fun selectThread(thread: CommentThreadRenderer?) {
+        _selectedThread.value = thread
+        if (thread != null) {
+            loadReplies(thread)
+        } else {
+            _replies.value = emptyList()
+            nextRepliesToken = null
+        }
+    }
+
+    /**
      * Fetch replies for a given comment thread.
      */
     fun loadReplies(thread: CommentThreadRenderer) {

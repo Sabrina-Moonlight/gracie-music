@@ -5,6 +5,8 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
+-dontusemixedcaseclassnames
+
 ##──────────────────────────────────────────────────────────────────────────────
 ## 1. PoToken / WebView JS Interface
 ##──────────────────────────────────────────────────────────────────────────────
@@ -13,11 +15,6 @@
 }
 -keep class com.music.vivi.utils.potoken.** { *; }
 
-# Keep coroutine continuation for WebView callbacks
--keepclassmembers class * {
-    void resume(...);
-    void resumeWithException(...);
-}
 
 
 ##──────────────────────────────────────────────────────────────────────────────
@@ -130,12 +127,43 @@
 -dontwarn com.google.re2j.**
 
 ##──────────────────────────────────────────────────────────────────────────────
+## 13. Vibra Fingerprint (native JNI)
+##──────────────────────────────────────────────────────────────────────────────
+-keep class com.music.vivi.recognition.VibraSignature { *; }
+-keepclassmembers class com.music.vivi.recognition.VibraSignature {
+    native <methods>;
+}
+
+##──────────────────────────────────────────────────────────────────────────────
 ## 14. Ktor
 ##──────────────────────────────────────────────────────────────────────────────
 -keep class io.ktor.** { *; }
 -keepclassmembers class io.ktor.** { *; }
 -dontwarn io.ktor.**
 
+##──────────────────────────────────────────────────────────────────────────────
+## 15. Shazam Models
+##──────────────────────────────────────────────────────────────────────────────
+-keep class com.music.shazamkit.models.** { *; }
+-keepclassmembers class com.music.shazamkit.models.** { *; }
+-keepclassmembers class com.music.shazamkit.models.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.music.shazamkit.models.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+##──────────────────────────────────────────────────────────────────────────────
+## 16. Listen Together
+##──────────────────────────────────────────────────────────────────────────────
+-keep class com.music.vivi.listentogether.** { *; }
+-keepclassmembers class com.music.vivi.listentogether.** { *; }
+-keepclassmembers class com.music.vivi.listentogether.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.music.vivi.listentogether.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
 
 
 

@@ -10,6 +10,7 @@ import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -63,6 +64,14 @@ val PlusJakartaSansFontFamily = FontFamily(
             FontVariation.weight(700)
         )
     )
+)
+
+val SfProDisplayFontFamily = FontFamily(
+    Font(com.music.vivi.R.font.sf_pro_display_regular, FontWeight.Normal),
+    Font(com.music.vivi.R.font.sf_pro_display_medium, FontWeight.Medium),
+    Font(com.music.vivi.R.font.sf_pro_display_semibold, FontWeight.SemiBold),
+    Font(com.music.vivi.R.font.sf_pro_display_bold, FontWeight.Bold),
+    Font(com.music.vivi.R.font.sf_pro_display_heavy, FontWeight.Black)
 )
 
 // Define M3 Expressive Typography based on Material Design guidelines
@@ -175,3 +184,5 @@ fun getTypography(brandFont: FontFamily, plainFont: FontFamily = FontFamily.Defa
         letterSpacing = 0.5.sp
     )
 )
+
+val AppTypography = getTypography(FontFamily.Default)

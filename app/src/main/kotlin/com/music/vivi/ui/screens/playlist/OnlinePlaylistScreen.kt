@@ -29,7 +29,9 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -40,6 +42,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,7 +78,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -89,12 +92,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEachReversed
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -163,6 +168,7 @@ fun OnlinePlaylistScreen(
     val songs by viewModel.playlistSongs.collectAsState()
     val dbPlaylist by viewModel.dbPlaylist.collectAsState()
     val relatedItems by viewModel.relatedItems.collectAsState()
+    val relatedTitle by viewModel.relatedTitle.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -343,62 +349,70 @@ fun OnlinePlaylistScreen(
                     if (relatedItems.isNotEmpty() && !isSearching) {
                         item(key = "related_title") {
                             NavigationTitle(
-                                title = stringResource(R.string.you_might_also_like),
+                                title = relatedTitle ?: stringResource(R.string.you_might_also_like),
                                 modifier = Modifier.animateItem()
                             )
                         }
 
                         item(key = "related_items") {
                             LazyRow(
-                                contentPadding = PaddingValues(horizontal = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal).asPaddingValues(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .animateItem()
                             ) {
-                                items(relatedItems) { item ->
+                                items(
+                                    items = relatedItems,
+                                    key = { it.id }
+                                ) { item ->
                                     YouTubeGridItem(
                                         item = item,
-                                        modifier = Modifier
-                                            .width(160.dp)
-                                            .combinedClickable(
-                                                onClick = {
+                                        isActive = when (item) {
+                                            is SongItem -> mediaMetadata?.id == item.id
+                                            is AlbumItem -> mediaMetadata?.album?.id == item.id
+                                            else -> false
+                                        },
+                                        isPlaying = isPlaying,
+                                        coroutineScope = coroutineScope,
+                                        thumbnailRatio = 1f,
+                                        modifier = Modifier.combinedClickable(
+                                            onClick = {
+                                                when (item) {
+                                                    is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
+                                                    is AlbumItem -> navController.navigate("album/${item.id}")
+                                                    is ArtistItem -> navController.navigate("artist/${item.id}")
+                                                    is SongItem -> playerConnection.playQueue(
+                                                        YouTubeQueue(WatchEndpoint(videoId = item.id))
+                                                    )
+                                                }
+                                            },
+                                            onLongClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                menuState.show {
                                                     when (item) {
-                                                        is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
-                                                        is AlbumItem -> navController.navigate("album/${item.browseId}")
-                                                        is ArtistItem -> navController.navigate("artist/${item.id}")
-                                                        is SongItem -> playerConnection.playQueue(
-                                                            YouTubeQueue(WatchEndpoint(videoId = item.id))
+                                                        is PlaylistItem -> YouTubePlaylistMenu(
+                                                            playlist = item,
+                                                            coroutineScope = coroutineScope,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                        is SongItem -> YouTubeSongMenu(
+                                                            song = item,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                        is AlbumItem -> YouTubeAlbumMenu(
+                                                            albumItem = item,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                        is ArtistItem -> YouTubeArtistMenu(
+                                                            artist = item,
+                                                            onDismiss = menuState::dismiss
                                                         )
                                                     }
-                                                },
-                                                onLongClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    menuState.show {
-                                                        when (item) {
-                                                            is PlaylistItem -> YouTubePlaylistMenu(
-                                                                playlist = item,
-                                                                coroutineScope = coroutineScope,
-                                                                onDismiss = menuState::dismiss
-                                                            )
-                                                            is SongItem -> YouTubeSongMenu(
-                                                                song = item,
-                                                                navController = navController,
-                                                                onDismiss = menuState::dismiss
-                                                            )
-                                                            is AlbumItem -> YouTubeAlbumMenu(
-                                                                albumItem = item,
-                                                                navController = navController,
-                                                                onDismiss = menuState::dismiss
-                                                            )
-                                                            is ArtistItem -> YouTubeArtistMenu(
-                                                                artist = item,
-                                                                onDismiss = menuState::dismiss
-                                                            )
-                                                        }
-                                                    }
                                                 }
-                                            )
+                                            }
+                                        )
                                     )
                                 }
                             }
@@ -411,6 +425,24 @@ fun OnlinePlaylistScreen(
                 }
             }
         }
+
+        val isFloating = transparentAppBar && !isSearching && !inSelectMode
+        val buttonContainerColor by animateColorAsState(
+            targetValue = if (isFloating) {
+                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+            } else {
+                Color.Transparent
+            },
+            label = "topBarButtonContainerColor"
+        )
+        val buttonBorderColor by animateColorAsState(
+            targetValue = if (isFloating) {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+            } else {
+                Color.Transparent
+            },
+            label = "topBarButtonBorderColor"
+        )
 
         TopAppBar(
             title = {
@@ -443,6 +475,24 @@ fun OnlinePlaylistScreen(
                             .fillMaxWidth()
                             .focusRequester(focusRequester)
                     )
+                } else {
+                    AnimatedContent(
+                        targetState = !transparentAppBar,
+                        transitionSpec = {
+                            fadeIn().togetherWith(fadeOut())
+                        },
+                        label = "TopAppBarTitle"
+                    ) { show ->
+                        if (show) {
+                            Text(
+                                text = playlist?.title ?: "",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                modifier = Modifier.basicMarquee()
+                            )
+                        }
+                    }
                 }
             },
             navigationIcon = {
@@ -463,13 +513,15 @@ fun OnlinePlaylistScreen(
                         }
                     },
                     colors = IconButtonDefaults.outlinedIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+                        containerColor = buttonContainerColor
                     ),
                     modifier = Modifier
                         .padding(start = 8.dp)
                         .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = buttonBorderColor
+                            ),
                             shape = CircleShape
                         )
                 ) {
@@ -516,16 +568,19 @@ fun OnlinePlaylistScreen(
                     Row(
                         modifier = Modifier
                             .padding(end = 8.dp)
+                            .height(48.dp)
                             .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(24.dp)
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = buttonBorderColor
+                                ),
+                                shape = CircleShape
                             )
                             .background(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                                shape = RoundedCornerShape(24.dp)
+                                color = buttonContainerColor,
+                                shape = CircleShape
                             )
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(
@@ -559,7 +614,11 @@ fun OnlinePlaylistScreen(
                     }
                 }
             },
-            colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            colors = if (transparentAppBar && !isSearching && !inSelectMode) {
+                androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            } else {
+                androidx.compose.material3.TopAppBarDefaults.topAppBarColors()
+            }
         )
 
         SnackbarHost(
@@ -640,12 +699,51 @@ private fun OnlinePlaylistHeader(
             // Title
             Text(
                 text = playlist.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
+
+            // Author Name
+            playlist.author?.name?.let { authorName ->
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = playlist.author?.id != null) {
+                            playlist.author?.id?.let { authorId ->
+                                navController.navigate("artist/$authorId")
+                            }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    if (playlist.authorThumbnail != null) {
+                        AsyncImage(
+                            model = playlist.authorThumbnail,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = authorName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
 
             Spacer(Modifier.height(8.dp))
 
@@ -857,17 +955,6 @@ private fun OnlinePlaylistHeader(
 
             Spacer(Modifier.height(16.dp))
 
-            // Author Name
-            playlist.author?.name?.let { authorName ->
-                Text(
-                    text = authorName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp)
-                )
-            }
 
             // Description
             val description = playlist.description

@@ -31,6 +31,21 @@ import java.util.zip.ZipEntry
 object AutoBackupHelper {
     private const val WEEKLY_WORK_NAME = "weekly_auto_backup"
 
+    fun getBackupDir(context: Context): File {
+        val dir = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            File(context.getExternalFilesDir(null), "backups")
+        } else {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS
+            )
+            File(downloadsDir, "vivimusic")
+        }
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        return dir
+    }
+
     fun performBackup(context: Context, backupType: String): Boolean {
         val database = InternalDatabase.newInstance(context)
         try {

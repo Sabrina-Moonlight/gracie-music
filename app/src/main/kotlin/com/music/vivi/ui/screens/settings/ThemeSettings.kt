@@ -450,6 +450,151 @@ fun ThemeControls(
 }
 
 @Composable
+fun ModeCircle(
+    darkMode: DarkMode,
+    pureBlack: Boolean,
+    targetMode: DarkMode,
+    targetPureBlack: Boolean,
+    showIcon: Boolean,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val isSystemDark = isSystemInDarkTheme()
+    val isSelected = darkMode == targetMode && pureBlack == targetPureBlack
+    
+    val effectiveDark = when (targetMode) {
+        DarkMode.AUTO -> isSystemDark
+        DarkMode.ON -> true
+        DarkMode.OFF -> false
+    }
+    
+    // Use actual system colors for AUTO mode on Android 12+
+    val modeColorScheme = if (targetMode == DarkMode.AUTO && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (effectiveDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        rememberDynamicColorScheme(
+            seedColor = DefaultThemeColor,
+            isDark = effectiveDark,
+            style = PaletteStyle.TonalSpot
+        )
+    }
+    
+    val fillColor = when {
+        targetPureBlack -> Color.Black
+        effectiveDark -> modeColorScheme.surface
+        else -> modeColorScheme.surface
+    }
+    
+    // Scale animation on selection
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.06f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "scale"
+    )
+    
+    val interactionSource = remember { MutableInteractionSource() }
+    
+    val contentDesc = when {
+        targetPureBlack -> stringResource(R.string.cd_pure_black_mode)
+        targetMode == DarkMode.OFF -> stringResource(R.string.cd_light_mode)
+        targetMode == DarkMode.ON -> stringResource(R.string.cd_dark_mode)
+        else -> stringResource(R.string.cd_system_mode)
+    }
+    
+    // Outer card container similar to ReadYou's SelectableMiniPalette
+    Box(
+        modifier = Modifier
+            .size(72.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (isSelected) {
+                    MaterialTheme.colorScheme.surfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                }
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = onClick
+            )
+            .semantics {
+                contentDescription = contentDesc
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(fillColor)
+                .then(
+                    if (targetPureBlack) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = modeColorScheme.outlineVariant,
+                            shape = CircleShape
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                showIcon -> {
+                    Icon(
+                        painter = painterResource(R.drawable.sync),
+                        contentDescription = null,
+                        tint = modeColorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                else -> {
+                    // Scaled checkmark animation overlaid on color circle (ReadYou style)
+                    AnimatedVisibility(
+                        visible = isSelected,
+                        enter = fadeIn() + scaleIn(
+                            initialScale = 0.4f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
+                        ),
+                        exit = fadeOut() + scaleOut(
+                            targetScale = 0.4f,
+                            animationSpec = tween(150)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.check),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun PaletteItem(
     palette: ThemePalette,
     isSelected: Boolean,

@@ -77,6 +77,7 @@ fun LocalSearchScreen(
     query: String,
     navController: NavController,
     onDismiss: () -> Unit,
+    isFromCache: Boolean = false,
     pureBlack: Boolean,
     viewModel: LocalSearchViewModel = hiltViewModel(),
 ) {
@@ -204,7 +205,8 @@ fun LocalSearchScreen(
                                             onDismiss = {
                                                 onDismiss()
                                                 menuState.dismiss()
-                                            }
+                                            },
+                                            isFromCache = isFromCache
                                         )
                                     }
                                 }
@@ -242,7 +244,8 @@ fun LocalSearchScreen(
                                             onDismiss = {
                                                 onDismiss()
                                                 menuState.dismiss()
-                                            }
+                                            },
+                                            isFromCache = isFromCache
                                         )
                                     }
                                 }

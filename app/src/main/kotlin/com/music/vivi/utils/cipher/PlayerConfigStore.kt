@@ -145,6 +145,22 @@ object PlayerConfigStore {
         false
     }
 
+    /**
+     * Manually trigger updates and return status in callback on main thread (for Settings UI).
+     */
+    fun forceUpdateNow(onResult: (success: Boolean, message: String) -> Unit) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val success = triggerUpdate()
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    onResult(true, "")
+                } else {
+                    onResult(false, "Download failed or invalid configurations")
+                }
+            }
+        }
+    }
+
     fun get(hash: String): FunctionNameExtractor.HardcodedPlayerConfig? = configs[hash]
 
     fun knownHashes(): Set<String> = configs.keys

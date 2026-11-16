@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
+import com.music.vivi.utils.AppleMusicAboutAlbum
 import javax.inject.Inject
 
 @HiltViewModel
@@ -36,16 +39,37 @@ constructor(
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     var otherVersions = MutableStateFlow<List<AlbumItem>>(emptyList())
     var releasesForYou = MutableStateFlow<List<AlbumItem>>(emptyList())
+    var description = MutableStateFlow<String?>(null)
+    var descriptionRuns = MutableStateFlow<List<com.music.innertube.models.Run>?>(null)
 
     init {
         viewModelScope.launch {
             val album = database.album(albumId).first()
+            if (album?.description != null) {
+                description.value = album.description
+            }
+
+            // Pre-fetch Apple Music description concurrently if we have basic metadata and no description yet
+            var appleDescDeferred: Deferred<String?>? = null
+            if (album?.description == null && album?.album?.title != null) {
+                val artistName = album.artists.firstOrNull()?.name
+                if (artistName != null) {
+                    appleDescDeferred = async(Dispatchers.IO) {
+                        AppleMusicAboutAlbum.fetchAlbumDescription(album.album.title, artistName)
+                    }
+                }
+            }
+
             YouTube
                 .album(albumId)
                 .onSuccess {
                     playlistId.value = it.album.playlistId
                     otherVersions.value = it.otherVersions
                     releasesForYou.value = it.releasesForYou
+                    if (it.description != null) {
+                        description.value = it.description
+                    }
+                    descriptionRuns.value = it.descriptionRuns
                     database.transaction {
                         if (album == null) {
                             insert(it)
@@ -70,6 +94,30 @@ constructor(
                                 }
                             }
                         }
+                    }
+                    
+                    if (description.value == null && descriptionRuns.value == null) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val appleDescription = if (appleDescDeferred != null) {
+                                appleDescDeferred?.await()
+                            } else {
+                                val artistName = album?.artists?.firstOrNull()?.name 
+                                    ?: database.albumWithSongs(albumId).first()?.artists?.firstOrNull()?.name
+                                AppleMusicAboutAlbum.fetchAlbumDescription(it.album.title, artistName)
+                            }
+                            
+                            if (appleDescription != null) {
+                                description.value = appleDescription
+                                val currentAlbum = database.album(albumId).first()
+                                if (currentAlbum != null) {
+                                    database.query {
+                                        update(currentAlbum.album.copy(description = appleDescription))
+                                    }
+                                }
+                            }
+                        }
+                    } else if (it.description != null && appleDescDeferred != null) {
+                        appleDescDeferred?.cancel()
                     }
                 }.onFailure {
                     reportException(it)

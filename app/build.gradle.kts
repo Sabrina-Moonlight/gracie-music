@@ -25,13 +25,22 @@ android {
         applicationId = "com.vivi.vivimusic"
         minSdk = 26
         targetSdk = 37
-        versionCode = 79
+        versionCode = 80
         val betaVersionName = project.findProperty("betaVersionName") as String?
-        versionName = betaVersionName ?: "7.0.0"
+        versionName = betaVersionName ?: "7.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
+        // LastFM API keys from GitHub Secrets
+//        val lastFmKey = localProperties.getProperty("LASTFM_API_KEY") ?: System.getenv("LASTFM_API_KEY") ?: ""
+//        val lastFmSecret = localProperties.getProperty("LASTFM_SECRET") ?: System.getenv("LASTFM_SECRET") ?: ""
+        
+        val lastFmKey = "694cbaa17c78202a133eac4656dff651"
+        val lastFmSecret = "a0fdaf6060f19128c4a84f297c71e627"
+
+        buildConfigField("String", "LASTFM_API_KEY", "\"$lastFmKey\"")
+        buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
 
 
 
@@ -274,7 +283,13 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     implementation(project(":innertube"))
+    implementation(project(":kizzy"))
+    implementation(project(":lastfm"))
+    implementation(project(":Motionartwork"))
+    implementation(project(":shazamkit"))
+    implementation(project(":artistvideo"))
     implementation(project(":jiosaavn"))
+    implementation(project(":spotify"))
     implementation(project(":lyricsProvider"))
 
     implementation(libs.innertubex)

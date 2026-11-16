@@ -15,6 +15,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -92,11 +93,13 @@ import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import com.music.vivi.LocalDatabase
+import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerAwareWindowInsets
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.constants.AppBarHeight
 import com.music.vivi.constants.HideExplicitKey
+import com.music.vivi.constants.ShowArtistDescriptionKey
 import com.music.vivi.constants.ShowArtistSubscriberCountKey
 import com.music.vivi.constants.ShowMonthlyListenersKey
 import com.music.vivi.db.entities.ArtistEntity
@@ -105,8 +108,10 @@ import com.music.vivi.models.toMediaMetadata
 import com.music.vivi.playback.queues.ListQueue
 import com.music.vivi.playback.queues.YouTubeQueue
 import com.music.vivi.ui.component.AlbumGridItem
+import com.music.vivi.ui.component.ExpandableText
 import com.music.vivi.ui.component.HideOnScrollFAB
 import com.music.vivi.ui.component.IconButton
+import com.music.vivi.ui.component.LinkSegment
 import com.music.vivi.ui.component.LocalMenuState
 import com.music.vivi.ui.component.NavigationTitle
 import com.music.vivi.ui.component.SongListItem
@@ -130,9 +135,13 @@ import com.music.vivi.utils.listItemShape
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.viewmodels.ArtistViewModel
 import com.valentinilk.shimmer.shimmer
+import com.music.vivi.artistvideo.ArtistVideo
+import com.music.vivi.constants.ShowArtistVideoKey
+import com.music.vivi.constants.ShowArtistBackgroundVideoKey
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
+import com.music.vivi.artistvideo.AppleMusicArtistBackgroundProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,16 +159,22 @@ fun ArtistScreen(
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current ?: return
-    val isGuest = false
+    val listenTogetherManager = LocalListenTogetherManager.current
+    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val artistPage = viewModel.artistPage
     val libraryArtist by viewModel.libraryArtist.collectAsState()
     val librarySongs by viewModel.librarySongs.collectAsState()
     val libraryAlbums by viewModel.libraryAlbums.collectAsState()
+    val artistVideoUrl by viewModel.artistVideoUrl.collectAsState()
+    val artistVideoSong by viewModel.artistVideoSong.collectAsState()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
+    val showArtistDescription by rememberPreference(key = ShowArtistDescriptionKey, defaultValue = true)
     val showArtistSubscriberCount by rememberPreference(key = ShowArtistSubscriberCountKey, defaultValue = true)
     val showMonthlyListeners by rememberPreference(key = ShowMonthlyListenersKey, defaultValue = true)
+    val showArtistVideo by rememberPreference(key = ShowArtistVideoKey, defaultValue = true)
+    val showArtistBackgroundVideo by rememberPreference(key = ShowArtistBackgroundVideoKey, defaultValue = true)
 
     val lazyListState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -284,9 +299,18 @@ fun ArtistScreen(
                     val thumbnail = artistPage?.artist?.thumbnail ?: libraryArtist?.artist?.thumbnailUrl
                     val artistName = artistPage?.artist?.title ?: libraryArtist?.artist?.name
 
+                    var backgroundVideoUrl by remember { mutableStateOf<String?>(null) }
+                    LaunchedEffect(artistName, showArtistBackgroundVideo) {
+                        if (artistName != null && showArtistBackgroundVideo) {
+                            withContext(Dispatchers.IO) {
+                                backgroundVideoUrl = AppleMusicArtistBackgroundProvider.getByArtistName(artistName)
+                            }
+                        }
+                    }
+
                     Box {
                         // Artist Image with offset
-                        if (thumbnail != null) {
+                        if (thumbnail != null || backgroundVideoUrl != null) {
                             val screenHeight = LocalResources.current.displayMetrics.heightPixels
                             val headerHeight = with(density) { (screenHeight * 0.40f).toDp() }
                             Box(
@@ -312,6 +336,13 @@ fun ArtistScreen(
                                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                         )
                                     }
+                                    if (backgroundVideoUrl != null && showArtistBackgroundVideo) {
+                                        ArtistVideo(
+                                            videoUrl = backgroundVideoUrl!!,
+                                            modifier = Modifier.fillMaxSize(),
+                                            onClick = { }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -322,7 +353,7 @@ fun ArtistScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(
-                                    top = if (thumbnail != null) {
+                                    top = if (thumbnail != null || backgroundVideoUrl != null) {
                                         // Push content down to sit at the bottom edge of the video header
                                         // headerHeight (40% screen height) minus overlap for text/controls
                                         val screenHeight = LocalResources.current.displayMetrics.heightPixels
@@ -342,6 +373,28 @@ fun ArtistScreen(
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 ) {
 
+                                    //artist video
+                                    if (showArtistVideo && !(showArtistBackgroundVideo && backgroundVideoUrl != null)) {
+                                        artistVideoUrl?.let { videoUrl ->
+                                            artistPage?.artist?.radioEndpoint?.let { radioEndpoint ->
+                                                Spacer(modifier = Modifier.width(5.dp))
+                                                ArtistVideo(
+                                                    videoUrl = videoUrl,
+                                                    modifier = Modifier
+                                                        .height(45.dp)
+                                                        .aspectRatio(16f / 9f),
+                                                    onClick = {
+                                                        val watchEndpoint = artistVideoSong?.endpoint
+                                                            ?: artistPage?.artist?.radioEndpoint
+                                                        watchEndpoint?.let {
+                                                            playerConnection.playQueue(YouTubeQueue(it))
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+
                                     Spacer(modifier = Modifier.width(5.dp))
 
                                     // Artist Name
@@ -356,9 +409,9 @@ fun ArtistScreen(
                                     )
                                 }
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
+                                FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 ) {
                                     if (showArtistSubscriberCount) {
@@ -381,7 +434,9 @@ fun ArtistScreen(
                                                     text = "${subscribers.split(' ').firstOrNull() ?: ""} ${stringResource(R.string.subscribers)}",
                                                     style = MaterialTheme.typography.labelLarge,
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                    fontWeight = FontWeight.Medium
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
@@ -407,9 +462,42 @@ fun ArtistScreen(
                                                     text = "${monthlyListeners.split(' ').firstOrNull() ?: ""} ${stringResource(R.string.monthly_listeners)}",
                                                     style = MaterialTheme.typography.labelLarge,
                                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                    fontWeight = FontWeight.Medium
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
+                                        }
+                                    }
+                                }
+
+                                if (!showLocal && showArtistDescription && artistPage != null) {
+                                    val description = artistPage?.description
+                                    val descriptionRuns = artistPage?.descriptionRuns
+                                    
+                                    if (!description.isNullOrEmpty() || !descriptionRuns.isNullOrEmpty()) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 16.dp)
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.about_artist),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(bottom = 8.dp)
+                                            )
+                                            
+                                            ExpandableText(
+                                                text = description.orEmpty(),
+                                                runs = descriptionRuns?.map {
+                                                    LinkSegment(
+                                                        text = it.text,
+                                                        url = it.navigationEndpoint?.urlEndpoint?.url
+                                                    )
+                                                },
+                                                collapsedMaxLines = 3
+                                            )
                                         }
                                     }
                                 }
@@ -798,7 +886,7 @@ fun ArtistScreen(
                                             },
                                             isPlaying = isPlaying,
                                             coroutineScope = coroutineScope,
-                                            thumbnailRatio = 1f, // Use square thumbnails for all items in horizontal scroll
+                                            thumbnailRatio = if (item is SongItem) 16f / 9f else 1f,
                                             modifier = Modifier
                                                 .combinedClickable(
                                                     onClick = {

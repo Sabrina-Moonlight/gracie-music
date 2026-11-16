@@ -59,6 +59,7 @@ import androidx.media3.exoplayer.offline.DownloadService
 import com.music.innertube.YouTube
 import com.music.vivi.LocalDatabase
 import com.music.vivi.LocalDownloadUtil
+import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.db.entities.Playlist
@@ -92,12 +93,16 @@ fun PlaylistMenu(
     playlist: Playlist,
     coroutineScope: CoroutineScope,
     onDismiss: () -> Unit,
+    autoPlaylist: Boolean? = false,
+    downloadPlaylist: Boolean? = false,
+    songList: List<Song>? = emptyList(),
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val isGuest = false
+    val listenTogetherManager = LocalListenTogetherManager.current
+    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
     val dbPlaylist by database.playlist(playlist.id).collectAsState(initial = playlist)
     var songs by remember {
         mutableStateOf(emptyList<Song>())
@@ -115,8 +120,14 @@ fun PlaylistMenu(
     var showExportDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        database.playlistSongs(playlist.id).collect {
-            songs = it.map(PlaylistSong::song)
+        if (autoPlaylist == false) {
+            database.playlistSongs(playlist.id).collect {
+                songs = it.map(PlaylistSong::song)
+            }
+        } else {
+            if (songList != null) {
+                songs = songList
+            }
         }
     }
 
@@ -462,7 +473,7 @@ fun PlaylistMenu(
             Material3MenuGroup(
                 expressive = true,
                 items = buildList {
-                    if (editable && !isGuest) {
+                    if (editable && autoPlaylist != true && !isGuest) {
                         add(
                             Material3MenuItemData(
                                 title = { Text(text = stringResource(R.string.edit)) },
@@ -513,7 +524,7 @@ fun PlaylistMenu(
                         )
                     )
 
-                    run {
+                    if (downloadPlaylist != true) {
                         add(
                             when (downloadState) {
                                 Download.STATE_COMPLETED -> {
@@ -592,7 +603,7 @@ fun PlaylistMenu(
                             onClick = { showExportDialog = true },
                         )
                     )
-                    if (!isGuest) {
+                    if (autoPlaylist != true && !isGuest) {
                         add(
                             Material3MenuItemData(
                                 title = { Text(text = stringResource(R.string.delete)) },

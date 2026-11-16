@@ -4,6 +4,7 @@
  */
 package com.music.vivi.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
@@ -36,9 +37,12 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.music.innertube.utils.parseCookieString
+import com.music.vivi.BuildConfig
 import com.music.vivi.R
 import com.music.vivi.constants.AccountEmailKey
 import com.music.vivi.constants.InnerTubeCookieKey
+import com.music.vivi.constants.HasStarredRepoKey
+import com.music.vivi.github.GitHubViewModel
 import com.music.vivi.utils.rememberPreference
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -46,6 +50,7 @@ import com.music.vivi.utils.listItemShape
 import com.music.vivi.viewmodels.AccountSettingsViewModel
 import com.music.vivi.utils.SyncStatus
 import com.music.vivi.viewmodels.HomeViewModel
+import com.music.vivi.vivimusic.updater.getUpdateAvailableState
 import kotlinx.coroutines.flow.map
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -55,14 +60,24 @@ fun SettingsDropdownMenu(
     onDismissRequest: () -> Unit,
     onNavigate: (String) -> Unit,
     homeViewModel: HomeViewModel,
+    gitHubViewModel: GitHubViewModel = hiltViewModel(),
     accountSettingsViewModel: AccountSettingsViewModel = hiltViewModel(),
 ) {
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     
+    var isUpdateAvailable by remember { mutableStateOf(getUpdateAvailableState(context)) }
     val (innerTubeCookie, _) = rememberPreference(InnerTubeCookieKey, "")
     val isLoggedIn = remember(innerTubeCookie) {
         innerTubeCookie.isNotEmpty() && "SAPISID" in parseCookieString(innerTubeCookie)
+    }
+
+    val isStarred by gitHubViewModel.isStarred.collectAsState()
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            isUpdateAvailable = getUpdateAvailableState(context)
+            gitHubViewModel.checkStarStatus(context)
+        }
     }
 
     val (accountEmail, _) = rememberPreference(AccountEmailKey, "")
@@ -87,8 +102,94 @@ fun SettingsDropdownMenu(
             .width(280.dp) // Ensures consistent wide size inspired by Chrome menus
             .background(MaterialTheme.colorScheme.surface),
     ) {
+        // --- 0. Chrome-like Top Icons Row with Circular Backgrounds ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val iconButtonModifier = Modifier.size(40.dp)
+            val iconButtonColors = IconButtonDefaults.iconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+
+            IconButton(
+                onClick = { 
+                    gitHubViewModel.toggleStar(context) {
+                        uriHandler.openUri("https://github.com/vivizzz007/vivi-music")
+                    }
+                }, 
+                modifier = iconButtonModifier,
+                colors = iconButtonColors,
+                shapes = IconButtonDefaults.shapes()
+            ) {
+                Icon(
+                    painter = painterResource(if (isStarred) R.drawable.star else R.drawable.star_border), 
+                    contentDescription = "Star Repo",
+                    tint = if (isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(
+                onClick = { 
+                    onDismissRequest()
+                    onNavigate("settings/update")
+                }, 
+                modifier = iconButtonModifier,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = if (isUpdateAvailable) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shapes = IconButtonDefaults.shapes()
+            ) {
+                Icon(
+                    painter = painterResource(if (isUpdateAvailable) R.drawable.update_alert else R.drawable.system_update_uptodate),
+                    contentDescription = "Update",
+                    tint = if (isUpdateAvailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(
+                onClick = { 
+                    onDismissRequest()
+                    onNavigate("settings/changelog")
+                }, 
+                modifier = iconButtonModifier,
+                colors = iconButtonColors,
+                shapes = IconButtonDefaults.shapes()
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.changelog_paper),
+                    contentDescription = "History",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(
+                onClick = { 
+                    onDismissRequest()
+                    val targetApkName = if (BuildConfig.FLAVOR.contains("foss", ignoreCase = true)) "izzydroid-universal-foss-release.apk" else "vivi.apk"
+                    val shareUrl = "https://github.com/vivizzz007/vivi-music/releases/latest/download/$targetApkName"
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        putExtra(Intent.EXTRA_TEXT, shareUrl)
+                        type = "text/plain"
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, null))
+                }, 
+                modifier = iconButtonModifier,
+                colors = iconButtonColors,
+                shapes = IconButtonDefaults.shapes()
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.share_hotspot),
+                    contentDescription = "Share App",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(4.dp))
+
         // --- Section 1: Account, Sync & Integrations ---
-        val section1Count = if (isLoggedIn) 2 else 1
+        val section1Count = if (isLoggedIn) 3 else 2
         Surface(
             shape = listItemShape(0, section1Count, 16.dp),
             color = itemContainerColor,
@@ -151,20 +252,62 @@ fun SettingsDropdownMenu(
             )
         }
         
+        DropdownMenuIconItem(
+            title = stringResource(R.string.integrations),
+            icon = R.drawable.extension,
+            shape = listItemShape(section1Count - 1, section1Count, 16.dp),
+            containerColor = itemContainerColor,
+            onClick = {
+                onDismissRequest()
+                onNavigate("settings/integrations")
+            }
+        )
+
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // --- Section 3: Settings ---
+        // --- Section 3: Settings & About ---
         DropdownMenuIconItem(
             title = stringResource(R.string.settings),
             icon = R.drawable.settings,
-            shape = listItemShape(0, 1, 16.dp),
+            shape = listItemShape(0, 2, 16.dp),
             containerColor = itemContainerColor,
             onClick = {
                 onDismissRequest()
                 onNavigate("settings")
             }
         )
+        Surface(
+            shape = listItemShape(1, 2, 16.dp),
+            color = itemContainerColor,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 1.dp)
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.about),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                },
+                leadingIcon = {
+                    Image(
+                        painter = painterResource(id = R.drawable.icon),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    onNavigate("settings/about")
+                },
+                modifier = Modifier.height(48.dp)
+            )
+        }
     }
 }
 

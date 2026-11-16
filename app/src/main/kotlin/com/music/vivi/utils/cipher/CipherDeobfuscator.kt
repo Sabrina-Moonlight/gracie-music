@@ -64,6 +64,34 @@ object CipherDeobfuscator {
         }
     }
 
+    /**
+     * Deobfuscate a signatureCipher stream URL.
+     */
+    suspend fun deobfuscateStreamUrl(signatureCipher: String, videoId: String): String? = deobfuscateMutex.withLock {
+        try {
+            deobfuscateInternal(signatureCipher, videoId, isRetry = false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Cipher deobfuscation failed, retrying with fresh JS: ${e.message}")
+            try {
+                PlayerJsFetcher.invalidateCache()
+                closeWebView()
+
+                // Trigger remote update first to self-heal
+                Timber.tag(TAG).d("Playback failure. Triggering remote config update...")
+                PlayerConfigStore.triggerUpdate()
+
+                deobfuscateInternal(signatureCipher, videoId, isRetry = true)
+            } catch (retryE: CancellationException) {
+                throw retryE
+            } catch (retryE: Exception) {
+                Timber.tag(TAG).e(retryE, "Cipher deobfuscation retry also failed: ${retryE.message}")
+                null
+            }
+        }
+    }
+
     private suspend fun deobfuscateInternal(signatureCipher: String, videoId: String, isRetry: Boolean): String? {
         // Parse the signatureCipher query string
         val params = parseQueryParams(signatureCipher)

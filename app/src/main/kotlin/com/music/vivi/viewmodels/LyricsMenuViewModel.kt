@@ -59,13 +59,9 @@ constructor(
         }
     }
 
-    /** Comprueba la conexión en este momento (la misma comprobación que usa la búsqueda). */
-    fun isOnlineNow(): Boolean =
-        try {
-            networkConnectivity.isCurrentlyConnected()
-        } catch (e: Exception) {
-            true // Si falla la comprobación, no se avisa
-        }
+    fun setCurrentSong(song: Song) {
+        _currentSong.value = song
+    }
 
     fun search(
         mediaId: String,

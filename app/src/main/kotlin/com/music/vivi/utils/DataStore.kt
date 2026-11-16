@@ -78,21 +78,16 @@ inline fun <reified T : Enum<T>> enumPreference(
 fun <T> rememberPreference(
     key: Preferences.Key<T>,
     defaultValue: T,
-    readInitialSync: Boolean = false,
 ): MutableState<T> {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-
-    val initialValue = remember {
-        if (readInitialSync) context.dataStore[key] ?: defaultValue else defaultValue
-    }
 
     val state =
         remember {
             context.dataStore.data
                 .map { it[key] ?: defaultValue }
                 .distinctUntilChanged()
-        }.collectAsStateWithLifecycle(initialValue)
+        }.collectAsStateWithLifecycle(defaultValue)
 
     return remember {
         object : MutableState<T> {
@@ -117,22 +112,16 @@ fun <T> rememberPreference(
 inline fun <reified T : Enum<T>> rememberEnumPreference(
     key: Preferences.Key<String>,
     defaultValue: T,
-    readInitialSync: Boolean = false,
 ): MutableState<T> {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-
-    // Con readInitialSync el valor guardado se lee al instante (evita ver el valor por defecto un momento).
-    val initialValue = remember {
-        if (readInitialSync) context.dataStore[key].toEnum(defaultValue = defaultValue) else defaultValue
-    }
 
     val state =
         remember {
             context.dataStore.data
                 .map { it[key].toEnum(defaultValue = defaultValue) }
                 .distinctUntilChanged()
-        }.collectAsStateWithLifecycle(initialValue)
+        }.collectAsStateWithLifecycle(defaultValue)
 
     return remember {
         object : MutableState<T> {

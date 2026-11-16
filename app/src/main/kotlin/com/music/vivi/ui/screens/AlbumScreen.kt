@@ -114,12 +114,15 @@ import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.constants.HideExplicitKey
 import com.music.vivi.constants.HideVideoSongsKey
+import com.music.vivi.constants.AlbumCanvasEnabledKey
 import com.music.vivi.db.entities.Album
 import com.music.vivi.playback.ExoDownloadService
 import com.music.vivi.playback.queues.LocalAlbumRadio
 import com.music.vivi.constants.UseExpressiveAlbumDesignKey
 import com.music.vivi.ui.component.AlbumGradient
+import com.music.vivi.ui.component.ExpandableText
 import com.music.vivi.ui.component.IconButton
+import com.music.vivi.ui.component.LinkSegment
 import com.music.vivi.ui.component.LocalMenuState
 import com.music.vivi.ui.component.NavigationTitle
 import com.music.vivi.ui.component.SongListItem
@@ -131,6 +134,7 @@ import com.music.vivi.ui.menu.SongMenu
 import com.music.vivi.ui.menu.YouTubeAlbumMenu
 import com.music.vivi.ui.utils.backToMain
 import com.music.vivi.ui.utils.fadingEdge
+import com.music.vivi.ui.player.MotionartworkPlayer
 import com.music.vivi.utils.listItemShape
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.viewmodels.AlbumViewModel
@@ -158,9 +162,18 @@ fun AlbumScreen(
     val albumWithSongs by viewModel.albumWithSongs.collectAsState()
     val otherVersions by viewModel.otherVersions.collectAsState()
     val releasesForYou by viewModel.releasesForYou.collectAsState()
+    val description by viewModel.description.collectAsState()
+    val descriptionRuns by viewModel.descriptionRuns.collectAsState()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
     val useExpressiveAlbumDesign by rememberPreference(key = UseExpressiveAlbumDesignKey, defaultValue = true)
     val hideVideoSongs by rememberPreference(key = HideVideoSongsKey, defaultValue = false)
+    val albumCanvasEnabled by rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = false)
+
+    val canvasArtwork = rememberAlbumCanvas(
+        albumTitle = albumWithSongs?.album?.title,
+        artistName = albumWithSongs?.artists?.joinToString { it.name }?.takeIf { it.isNotEmpty() },
+        firstSongTitle = albumWithSongs?.songs?.firstOrNull()?.song?.title
+    )
 
     val filteredSongs = remember(albumWithSongs, hideExplicit, hideVideoSongs) {
         var songs = albumWithSongs?.songs ?: emptyList()
@@ -289,6 +302,15 @@ fun AlbumScreen(
                                     },
                                 contentScale = ContentScale.Crop
                             )
+
+                            if (albumCanvasEnabled && canvasArtwork != null) {
+                                MotionartworkPlayer(
+                                    primaryUrl = canvasArtwork.animated,
+                                    fallbackUrl = canvasArtwork.videoUrl,
+                                    isPlaying = true,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
 
                             // Re-adding the shadow gradient mask to ensure text readability
                             Box(
@@ -645,6 +667,37 @@ fun AlbumScreen(
                     }
 
                     Spacer(Modifier.height(5.dp))
+
+                    val staticDescription = remember(albumWithSongs) {
+                        "${albumWithSongs.album.title} is an album by ${albumWithSongs.artists.joinToString { it.name }}${
+                            if (albumWithSongs.album.year != null) ", released in ${albumWithSongs.album.year}" else ""
+                        }. This collection features ${albumWithSongs.songs.size} tracks showcasing their musical artistry."
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.about_album),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        ExpandableText(
+                            text = description ?: staticDescription,
+                            runs = descriptionRuns?.map {
+                                LinkSegment(
+                                    text = it.text,
+                                    url = it.navigationEndpoint?.urlEndpoint?.url
+                                )
+                            },
+                            collapsedMaxLines = 3
+                        )
+                    }
 
                     if (albumWithSongs.artists.size > 1) {
                         Spacer(Modifier.height(16.dp))

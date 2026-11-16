@@ -149,6 +149,20 @@ class EQProfileRepository @Inject constructor(
     }
 
     /**
+     * Get all saved profiles
+     */
+    fun getAllProfiles(): List<SavedEQProfile> {
+        return _profiles.value
+    }
+
+    /**
+     * Get active profile
+     */
+    fun getActiveProfile(): SavedEQProfile? {
+        return _activeProfile.value
+    }
+
+    /**
      * Import a custom EQ profile from ParametricEQ data
      */
     suspend fun importCustomProfile(

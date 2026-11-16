@@ -22,7 +22,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -53,8 +52,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -96,23 +93,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -132,6 +124,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -143,12 +137,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.hazeEffect
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.Player.STATE_ENDED
@@ -168,6 +159,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.music.vivi.LocalDatabase
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.LocalDownloadUtil
+import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.constants.AudioQuality
@@ -195,6 +187,7 @@ import com.music.vivi.db.entities.LyricsEntity
 import com.music.vivi.extensions.SwipeGesture
 import com.music.vivi.extensions.togglePlayPause
 import com.music.vivi.extensions.toggleRepeatMode
+import com.music.vivi.listentogether.RoomRole
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.playback.ExoDownloadService
 import com.music.vivi.vivimusic.getConnectedBluetoothDeviceName
@@ -246,8 +239,22 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import coil3.request.crossfade
+import com.music.vivi.Motionartwork.apple.AppleMusicMotionartworkProvider
+import com.music.vivi.Motionartwork.Motionartwork
+import com.music.vivi.Motionartwork.tidal.TidalMotionartworkProvider
+import com.music.vivi.Motionartwork.vivimusic.ViviMusicMotionartworkProvider
+import com.music.vivi.constants.MotionartworkSource
+import com.music.vivi.constants.MotionartworkSourceKey
+import com.music.vivi.constants.CanvasThumbnailAnimationKey
+import com.music.vivi.constants.SpotifyCanvasEnabledKey
+import com.music.spotify.Spotify
+import com.music.spotify.SpotifyCanvasProvider
+import com.music.vivi.constants.CanvasLoadOnlyWifiKey
 import com.music.vivi.extensions.metadata
+import com.music.vivi.ui.player.MotionartworkPlaybackCache
 import com.music.vivi.utils.isWifiConnected
+import com.music.vivi.utils.SpotifySessionManager
 import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -264,8 +271,24 @@ fun BottomSheetPlayer(
     val bottomSheetPageState = LocalBottomSheetPageState.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val playerHazeState = remember { HazeState() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
-    val useNewPlayerDesign = false // M3E player eliminado
+    LaunchedEffect(state.isCollapsed, state.isDismissed) {
+        if (!state.isCollapsed && !state.isDismissed) {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+            (context as? android.app.Activity)?.let { activity ->
+                WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                    .hide(WindowInsetsCompat.Type.ime())
+            }
+        }
+    }
+
+    val (useNewPlayerDesign, onUseNewPlayerDesignChange) = rememberPreference(
+        UseNewPlayerDesignKey,
+        defaultValue = false
+    )
     val (showAudioQualityBadge) = rememberPreference(
         ShowAudioQualityBadgeKey,
         defaultValue = false
@@ -274,7 +297,7 @@ fun BottomSheetPlayer(
     val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
-        defaultValue = PlayerBackgroundStyle.GRADIENT
+        defaultValue = PlayerBackgroundStyle.LIVE_MESH
     )
     val playerButtonsStyle by rememberEnumPreference(
         key = PlayerButtonsStyleKey,
@@ -287,7 +310,11 @@ fun BottomSheetPlayer(
         if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
     }
 
-    val usePlayerV2 by rememberPreference(UsePlayerV2Key, false)
+    val enableCanvas by rememberPreference(CanvasThumbnailAnimationKey, true)
+    val (motionartworkSource) = rememberEnumPreference(MotionartworkSourceKey, defaultValue = MotionartworkSource.AUTO)
+    val canvasLoadOnlyWifi by rememberPreference(CanvasLoadOnlyWifiKey, defaultValue = false)
+    val spotifyCanvasEnabled by rememberPreference(SpotifyCanvasEnabledKey, false)
+    val usePlayerV2 by rememberPreference(UsePlayerV2Key, true)
 
     val shouldUseDarkButtonColors = remember(playerBackground, useDarkTheme) {
         when (playerBackground) {
@@ -305,7 +332,9 @@ fun BottomSheetPlayer(
     DisposableEffect(playerBackground, state.isExpanded, useDarkTheme, keepScreenOn) {
         val window = (context as? android.app.Activity)?.window
         if (window != null && state.isExpanded) {
+            WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.ime())
             val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+
             
             when (playerBackground) {
                 PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT, PlayerBackgroundStyle.GLOW_ANIMATED, PlayerBackgroundStyle.APPLE_MUSIC, PlayerBackgroundStyle.LIVE_MESH -> {
@@ -325,6 +354,7 @@ fun BottomSheetPlayer(
         onDispose {
             if (window != null) {
                 val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+
                 insetsController.isAppearanceLightStatusBars = !useDarkTheme
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
@@ -343,6 +373,8 @@ fun BottomSheetPlayer(
 
     val playbackState by playerConnection.playbackState.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val nextMediaMetadata by playerConnection.nextMediaMetadata.collectAsState()
+    val crossfadeIncomingItem by playerConnection.crossfadeIncomingItem.collectAsState()
     val currentSong by playerConnection.currentSong.collectAsState(initial = null)
     val automix by playerConnection.service.automixItems.collectAsState()
     val repeatMode by playerConnection.repeatMode.collectAsState()
@@ -358,7 +390,10 @@ fun BottomSheetPlayer(
     val sliderStyle by rememberEnumPreference(SliderStyleKey, SliderStyle.SLIM)
     val squigglySlider by rememberPreference(SquigglySliderKey, defaultValue = false)
     
-    val isListenTogetherGuest = false
+    // Listen Together state (reactive)
+    val listenTogetherManager = LocalListenTogetherManager.current
+    val listenTogetherRoleState = listenTogetherManager?.role?.collectAsState(initial = RoomRole.NONE)
+    val isListenTogetherGuest = listenTogetherRoleState?.value == RoomRole.GUEST
     
     // Cast state - safely access castConnectionHandler to prevent crashes during service lifecycle changes
     val castHandler = remember(playerConnection) {
@@ -525,6 +560,64 @@ fun BottomSheetPlayer(
         }
     }
 
+    // Preload incoming background thumbnail and gradient colors so the transition into next song has ZERO splash
+    val incomingBackgroundItem = crossfadeIncomingItem ?: nextMediaMetadata
+    LaunchedEffect(incomingBackgroundItem?.id, playerBackground) {
+        val nextThumbnail = incomingBackgroundItem?.thumbnailUrl ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            val req100 = ImageRequest.Builder(context)
+                .data(nextThumbnail)
+                .size(100, 100)
+                .allowHardware(false)
+                .build()
+            context.imageLoader.execute(req100)
+
+            val req128 = ImageRequest.Builder(context)
+                .data(nextThumbnail)
+                .size(128, 128)
+                .allowHardware(false)
+                .build()
+            context.imageLoader.execute(req128)
+
+            if ((playerBackground == PlayerBackgroundStyle.GRADIENT || playerBackground == PlayerBackgroundStyle.GLOW_ANIMATED) &&
+                !gradientColorsCache.containsKey(incomingBackgroundItem.id)
+            ) {
+                val reqGradient = ImageRequest.Builder(context)
+                    .data(nextThumbnail)
+                    .size(100, 100)
+                    .allowHardware(false)
+                    .memoryCacheKey("gradient_${incomingBackgroundItem.id}")
+                    .build()
+                val result = runCatching { context.imageLoader.execute(reqGradient) }.getOrNull()
+                val bitmap = result?.image?.toBitmap()
+                if (bitmap != null) {
+                    val palette = withContext(Dispatchers.Default) {
+                        Palette.from(bitmap)
+                            .maximumColorCount(8)
+                            .resizeBitmapArea(100 * 100)
+                            .generate()
+                    }
+                    val extractedColors = if (playerBackground == PlayerBackgroundStyle.GLOW_ANIMATED) {
+                        listOfNotNull(
+                            palette.getVibrantColor(fallbackColor).let { Color(it) },
+                            palette.getLightVibrantColor(fallbackColor).let { Color(it) },
+                            palette.getDarkVibrantColor(fallbackColor).let { Color(it) },
+                            palette.getMutedColor(fallbackColor).let { Color(it) },
+                            palette.getLightMutedColor(fallbackColor).let { Color(it) },
+                            palette.getDarkMutedColor(fallbackColor).let { Color(it) }
+                        ).distinct()
+                    } else {
+                        PlayerColorExtractor.extractGradientColors(
+                            palette = palette,
+                            fallbackColor = fallbackColor
+                        )
+                    }
+                    gradientColorsCache[incomingBackgroundItem.id] = extractedColors
+                }
+            }
+        }
+    }
+
     val TextBackgroundColor by animateColorAsState(
         targetValue = when (playerBackground) {
             PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.onBackground
@@ -550,8 +643,146 @@ fun BottomSheetPlayer(
     )
 
     val albumTitle = mediaMetadata?.album?.title
+    var canvasArtwork by remember(mediaMetadata?.id, albumTitle) { mutableStateOf<Motionartwork?>(null) }
+    var canvasFetchInFlight by remember(mediaMetadata?.id, albumTitle) { mutableStateOf(false) }
+    var spotifyCanvasUrl by remember(mediaMetadata?.id, albumTitle) { mutableStateOf<String?>(null) }
     
     val isNetworkConnected by (LocalPlayerConnection.current?.service?.connectivityObserver?.networkStatus ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState(initial = false)
+
+    LaunchedEffect(mediaMetadata?.id, albumTitle, playerBackground, motionartworkSource, spotifyCanvasEnabled, Spotify.accessToken, isNetworkConnected) {
+        val item = mediaMetadata ?: return@LaunchedEffect
+        
+        if (!spotifyCanvasEnabled) {
+            spotifyCanvasUrl = null
+        } else {
+            val prefs = context.getSharedPreferences("spotify_canvas_url_map", android.content.Context.MODE_PRIVATE)
+            val cachedUrl = prefs.getString(item.id, null)
+            if (cachedUrl != null) {
+                spotifyCanvasUrl = cachedUrl
+                timber.log.Timber.d("SpotifyCanvas: Loaded url from local SharedPreferences cache for offline bypass - ID: ${item.id}")
+            } else {
+                val accessToken = SpotifySessionManager.getValidAccessToken(context)
+                if (accessToken != null && (!canvasLoadOnlyWifi || isWifiConnected(context))) {
+                    timber.log.Timber.d("SpotifyCanvas: Triggering Canvas fetch for track: ${item.title}")
+                    withContext(Dispatchers.IO) {
+                        // Try REST API first as it's more reliable
+                        val trackId = Spotify.searchTrackRest("${item.title} ${item.artists.joinToString { it.name }}") 
+                            ?: Spotify.searchTrack("${item.title} ${item.artists.joinToString { it.name }}")?.id
+
+                        timber.log.Timber.d("SpotifyCanvas: Resolved Track ID from search: $trackId")
+
+                        if (trackId != null) {
+                            val canvasRes = SpotifyCanvasProvider.getCanvasUrl(trackId, accessToken)
+                            timber.log.Timber.d("SpotifyCanvas: Canvas URL extraction result: $canvasRes")
+                            val fetchedUrl = canvasRes.getOrNull()
+                            if (fetchedUrl != null) {
+                                prefs.edit().putString(item.id, fetchedUrl).apply()
+                            }
+                            withContext(Dispatchers.Main) {
+                                spotifyCanvasUrl = fetchedUrl
+                            }
+                        }
+                    }
+                } else {
+                    timber.log.Timber.d("SpotifyCanvas: Conditions not met to fetch. canvasEnabled=$spotifyCanvasEnabled, tokenReady=${Spotify.accessToken != null}, itemReady=${item != null}")
+                }
+            }
+        }
+
+        if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC || !enableCanvas) {
+            canvasArtwork = null
+            return@LaunchedEffect
+        }
+        if (canvasLoadOnlyWifi && !isWifiConnected(context)) {
+            canvasArtwork = null
+            return@LaunchedEffect
+        }
+        
+        val cacheKey = "${item.id}:${motionartworkSource.name}"
+        // Use cached artwork if available
+        MotionartworkPlaybackCache.get(cacheKey)?.let { cached ->
+            canvasArtwork = cached
+            spotifyCanvasUrl = null // Prioritize Motionartwork, disable Spotify Canvas
+            return@LaunchedEffect
+        }
+
+        if (canvasFetchInFlight) return@LaunchedEffect
+        canvasFetchInFlight = true
+        
+        withContext(Dispatchers.IO) {
+            val storefront = Locale.getDefault().country.lowercase(Locale.ROOT).takeIf { it.length == 2 } ?: "us"
+            val requestedTitle = item.title
+            val requestedArtist = item.artists.joinToString { it.name }
+            val requestedAlbum = item.album?.title ?: ""
+
+            val s = requestedTitle
+            val a = requestedArtist
+
+            android.util.Log.d("CanvasDebug", "=== Canvas Fetch START ===")
+            android.util.Log.d("CanvasDebug", "Source     : $motionartworkSource")
+            android.util.Log.d("CanvasDebug", "Storefront : $storefront")
+            android.util.Log.d("CanvasDebug", "Title      : '$requestedTitle'")
+            android.util.Log.d("CanvasDebug", "Artist     : '$requestedArtist'")
+            android.util.Log.d("CanvasDebug", "Album      : '$requestedAlbum' (blank=${requestedAlbum.isBlank()})")
+
+            val fetched = when (motionartworkSource) {
+                MotionartworkSource.AUTO -> {
+                    AppleMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum, storefront)
+                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
+                        ?: TidalMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
+                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
+                        ?: ViviMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
+                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() && validateMotionartworkMatch(it, s, a, requestedAlbum) }
+                }
+                MotionartworkSource.APPLE_MUSIC -> {
+                    AppleMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum, storefront)
+                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
+                }
+                MotionartworkSource.VIVIMUSIC -> {
+                    ViviMusicMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
+                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
+                }
+                MotionartworkSource.TIDAL -> {
+                    TidalMotionartworkProvider.getBySongArtist(s, a, requestedAlbum)
+                        ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
+                }
+            }
+
+            android.util.Log.d("CanvasDebug", "Fetched artwork: ${if (fetched == null) "NULL" else "non-null"}")
+            if (fetched != null) {
+                android.util.Log.d("CanvasDebug", "  artwork.name      : '${fetched.name}'")
+                android.util.Log.d("CanvasDebug", "  artwork.artist    : '${fetched.artist}'")
+                android.util.Log.d("CanvasDebug", "  artwork.albumName : '${fetched.albumName}'")
+                android.util.Log.d("CanvasDebug", "  artwork.animUrl   : '${fetched.preferredAnimationUrl}'")
+            }
+
+            val validated = fetched?.let { artwork ->
+                // For AUTO mode validation is already done per-provider inside takeIf.
+                // For single-source modes this block acts as the safety net.
+                val passes = validateMotionartworkMatch(artwork, requestedTitle, requestedArtist, requestedAlbum)
+
+                android.util.Log.d("CanvasDebug", "Validation:")
+                android.util.Log.d("CanvasDebug", "  artistMatches  : ${artwork.artist.orEmpty().trim().equals(requestedArtist.trim(), ignoreCase = true)}  ('${artwork.artist?.trim()}' vs '${requestedArtist.trim()}')")
+                android.util.Log.d("CanvasDebug", "  songMatches    : ${artwork.name.orEmpty().trim().equals(requestedTitle.trim(), ignoreCase = true)}  ('${artwork.name?.trim()}' vs '${requestedTitle.trim()}')")
+                android.util.Log.d("CanvasDebug", "  albumMatches   : ${artwork.albumName.orEmpty().trim().equals(requestedAlbum.trim(), ignoreCase = true)}  ('${artwork.albumName?.trim()}' vs '${requestedAlbum.trim()}')")
+                android.util.Log.d("CanvasDebug", "  RESULT         : $passes")
+
+                if (passes) artwork else null
+            }
+
+            android.util.Log.d("CanvasDebug", "Final validated: ${if (validated == null) "NULL (canvas will NOT show)" else "OK (canvas will show)"}")
+            android.util.Log.d("CanvasDebug", "=== Canvas Fetch END ===")
+
+            withContext(Dispatchers.Main) {
+                canvasArtwork = validated
+                if (validated != null) {
+                    MotionartworkPlaybackCache.put(cacheKey, validated)
+                    spotifyCanvasUrl = null // Prioritize Motionartwork, disable Spotify Canvas
+                }
+                canvasFetchInFlight = false
+            }
+        }
+    }
 
     val (textButtonColor, iconButtonColor) = when {
         playerBackground == PlayerBackgroundStyle.BLUR || 
@@ -729,9 +960,9 @@ fun BottomSheetPlayer(
 
     val bottomSheetBackgroundColor = when (playerBackground) {
         PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT, PlayerBackgroundStyle.GLOW_ANIMATED, PlayerBackgroundStyle.APPLE_MUSIC ->
-            MaterialTheme.colorScheme.surfaceContainer
-        PlayerBackgroundStyle.LIVE_MESH ->
             Color.Black
+        PlayerBackgroundStyle.LIVE_MESH ->
+            if (useDarkTheme) Color(0xFF191919) else Color(0xFFE6E6E6)
         else ->
             if (useBlackBackground) Color.Black
             else MaterialTheme.colorScheme.surfaceContainer
@@ -748,57 +979,38 @@ fun BottomSheetPlayer(
                     .fillMaxSize()
                     .background(bottomSheetBackgroundColor)
             ) {
-                when (playerBackground) {
-                    PlayerBackgroundStyle.BLUR -> {
-                      BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                        // Apple Music v17: al abrir las letras, la carátula difuminada se acerca y
-                        // "vaga" por la pantalla (como el Wandering backdrop de Natune).
-                        val lyricsOpen = usePlayerV2 && PlayerV2Backdrop.lyricsOpen
-                        // Entrada/salida de 1200 ms (la duración original del fork).
-                        val lyricsProgress by animateFloatAsState(
-                            targetValue = if (lyricsOpen) 1f else 0f,
-                            animationSpec = tween(1200, easing = FastOutSlowInEasing),
-                            label = "lyricsBackdropProgress"
-                        )
-                        // Cada vez que las letras se cierran del todo, el vagabundeo se reinicia:
-                        // así el ángulo no se acumula entre aperturas y no hay "giro" al volver a entrar.
-                        var wanderEpoch by remember { mutableIntStateOf(0) }
-                        // Movimiento (0..1) que tenía el fondo justo al cerrar las letras. Al salir
-                        // NO se deshace el giro/desplazamiento (acumulado, podía ser de cientos de
-                        // grados y se veía como un giro brusco): se queda congelado y se funde
-                        // suavemente con el fondo en reposo mientras el zoom vuelve a su tamaño.
-                        var motionAtClose by remember { mutableFloatStateOf(1f) }
-                        val exitingBackdrop by remember(lyricsOpen) {
-                            derivedStateOf { !lyricsOpen && lyricsProgress > 0f }
-                        }
-                        LaunchedEffect(lyricsOpen) {
-                            if (!lyricsOpen) {
-                                motionAtClose = ((lyricsProgress - 0.35f) / 0.65f).coerceIn(0f, 1f)
-                                snapshotFlow { lyricsProgress }.first { it <= 0f }
-                                wanderEpoch++
+                if (spotifyCanvasUrl != null && !usePlayerV2) {
+                    val overlayAlpha by animateFloatAsState(
+                        targetValue = if (showInlineLyrics) 0.85f else 0.4f,
+                        label = "canvasDimmer"
+                    )
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = spotifyCanvasUrl,
+                        transitionSpec = { fadeIn(tween(800)) togetherWith fadeOut(tween(800)) },
+                        label = "spotifyCanvasBackground"
+                    ) { url ->
+                        if (url != null) {
+                            Box(modifier = Modifier.fillMaxSize().alpha(backgroundAlpha)) {
+                                if (backgroundAlpha > 0.01f) {
+                                    BackgroundVideoView(
+                                        videoUrl = url,
+                                        isPlaying = isPlaying,
+                                        resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = overlayAlpha))
+                                )
                             }
                         }
-                        // Zoom y recorrido moderados: con zoom 2.4 solo se veía el centro de la carátula (un solo color).
-                        val wanderMaxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight) * 0.6f
-                        val blurWander = rememberBlurWanderDrift(
-                            // Se congela al cerrar: la salida solo deshace el zoom, sin seguir moviéndose.
-                            active = false,
-                            maxDriftDp = wanderMaxDrift,
-                            resetKey = wanderEpoch
-                        )
-                        val backdropFootprint = remember(maxWidth, maxHeight, wanderMaxDrift) {
-                            blurBackdropFootprint(
-                                width = maxWidth,
-                                height = maxHeight,
-                                restScale = 1.2f,
-                                driftScale = 1.8f,
-                                maxDriftDp = wanderMaxDrift
-                            )
-                        }
-                        // Mientras la canción real no ha cargado, se usa la carátula guardada de la última vez.
-                        val lastSavedThumb = remember { com.music.vivi.lyrics.LastLyricsCache.thumbnail(context) }
+                    }
+                } else when (playerBackground) {
+                    PlayerBackgroundStyle.BLUR -> {
                         AnimatedContent(
-                            targetState = mediaMetadata?.thumbnailUrl ?: lastSavedThumb,
+                            targetState = mediaMetadata?.thumbnailUrl,
                             transitionSpec = {
                                 fadeIn(tween(800)).togetherWith(fadeOut(tween(800)))
                             },
@@ -809,51 +1021,12 @@ fun BottomSheetPlayer(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .alpha(backgroundAlpha)
-                                        .graphicsLayer { clip = true }
                                 ) {
-                                    if (usePlayerV2) {
-                                        // Igual que el Apple Music de ArchiveTune: la carátula difuminada, en un
-                                        // cuadrado más grande que la pantalla, que se expande al abrir las letras
-                                        // y se desplaza/gira despacio (giro limitado a +-30 grados).
-                                        Box(
-                                            modifier = Modifier.fillMaxSize().clipToBounds(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(context)
-                                                    .data(thumbnailUrl)
-                                                    .size(200, 200)
-                                                    .allowHardware(false)
-                                                    .build(),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .requiredSize(backdropFootprint.width, backdropFootprint.height)
-                                                    .graphicsLayer {
-                                                        // Fondo quieto: igual con o sin letras (sin zoom ni movimiento).
-                                                        scaleX = 1.2f
-                                                        scaleY = 1.2f
-                                                        compositingStrategy = CompositingStrategy.Offscreen
-                                                    }
-                                                    .blur(64.dp)
-                                            )
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        0f to Color.Black.copy(alpha = 0.15f),
-                                                        0.5f to Color.Black.copy(alpha = 0.28f),
-                                                        1f to Color.Black.copy(alpha = 0.50f)
-                                                    )
-                                                )
-                                        )
-                                    } else {
                                     AsyncImage(
                                         model = ImageRequest.Builder(context)
                                             .data(thumbnailUrl)
                                             .size(100, 100) // Lower resolution for better performance
+                                            .crossfade(600)
                                             .allowHardware(false)
                                             .build(),
                                         contentDescription = null,
@@ -868,11 +1041,9 @@ fun BottomSheetPlayer(
                                             .fillMaxSize()
                                             .background(Color.Black.copy(alpha = 0.30f))
                                     )
-                                    }
                                 }
                             }
                         }
-                      }
                     }
                     PlayerBackgroundStyle.GRADIENT -> {
                         AnimatedContent(
@@ -1076,22 +1247,35 @@ fun BottomSheetPlayer(
                                         .fillMaxSize()
                                         .alpha(backgroundAlpha)
                                 ) {
-                                    // Layer 1: Full-Screen Blurred Background
+                                    // Layer 1: Full-Screen Blurred Backdrop
                                     AsyncImage(
                                         model = ImageRequest.Builder(context)
                                             .data(thumbnailUrl)
-                                            .size(128, 128) // Downsample significantly for performance
+                                            .size(128, 128)
+                                            .crossfade(600)
                                             .allowHardware(false)
                                             .build(),
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .blur(150.dp)
+                                            .blur(100.dp)
                                     )
 
-                                    // Layer 2: Clear Artwork (Limited to top 60% of screen)
-                                    // Fades out when lyrics are shown to provide a full-screen blur
+                                    // Layer 1.5: Artwork Depth Scrim
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    0.00f to Color.Black.copy(alpha = 0.34f),
+                                                    0.55f to Color.Black.copy(alpha = 0.48f),
+                                                    1.00f to Color.Black.copy(alpha = 0.64f)
+                                                )
+                                            )
+                                    )
+
+                                    // Layer 2: Clear Artwork (Dissolves along smootherStep into backdrop)
                                     val clearArtworkAlpha by animateFloatAsState(
                                         targetValue = if (showInlineLyrics) 0f else 1f,
                                         animationSpec = tween(500),
@@ -1106,15 +1290,15 @@ fun BottomSheetPlayer(
                                             .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                                             .drawWithContent {
                                                 drawContent()
-                                                // Fade the bottom edge of the clear box for a cloudy blend
+                                                // Along smootherstep, so neither end of the dissolve shows as a line
                                                 drawRect(
                                                     brush = Brush.verticalGradient(
-                                                        colorStops = arrayOf(
-                                                            0.00f to Color.Black,
-                                                            0.75f to Color.Black,
-                                                            0.92f to Color.Black.copy(alpha = 0.4f),
-                                                            1.00f to Color.Transparent,
-                                                        )
+                                                        colorStops = Array(17) { i ->
+                                                            val t = i / 16f
+                                                            t to Color.Black.copy(alpha = 1f - smootherStep(t))
+                                                        },
+                                                        startY = size.height * (1f - 0.42f),
+                                                        endY = size.height,
                                                     ),
                                                     blendMode = BlendMode.DstIn
                                                 )
@@ -1124,165 +1308,32 @@ fun BottomSheetPlayer(
                                             model = ImageRequest.Builder(context)
                                                 .data(thumbnailUrl)
                                                 .size(CoilSize.ORIGINAL)
+                                                .crossfade(600)
                                                 .build(),
                                             contentDescription = null,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
                                         )
 
+                                        if (enableCanvas && canvasArtwork != null && backgroundAlpha > 0.01f) {
+                                            BackgroundVideoView(
+                                                videoUrl = canvasArtwork?.animatedTall ?: canvasArtwork?.animated ?: canvasArtwork?.videoUrl ?: "",
+                                                isPlaying = isPlaying,
+                                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
                                     }
                                     
-                                    // Layer 3: Dynamic overlay for depth
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(
-                                                        Color.Black.copy(alpha = 0.05f),
-                                                        Color.Black.copy(alpha = 0.4f)
-                                                    )
-                                                )
-                                            )
-                                    )
+
                                 }
                             }
                         }
                     }
                     PlayerBackgroundStyle.LIVE_MESH -> {
-                        val infiniteTransition = rememberInfiniteTransition(label = "liveMeshRotation")
-                        
-                        val anchorRotation by infiniteTransition.animateFloat(
-                            initialValue = 0f,
-                            targetValue = -360f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(80000, easing = LinearEasing),
-                                repeatMode = RepeatMode.Restart
-                            ),
-                            label = "anchorRotation"
-                        )
-                        
-                        val fastRotation by infiniteTransition.animateFloat(
-                            initialValue = 0f,
-                            targetValue = 360f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(40000, easing = LinearEasing),
-                                repeatMode = RepeatMode.Restart
-                            ),
-                            label = "fastRotation"
-                        )
-                        
-                        val slowRotation by infiniteTransition.animateFloat(
-                            initialValue = 0f,
-                            targetValue = 360f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(60000, easing = LinearEasing),
-                                repeatMode = RepeatMode.Restart
-                            ),
-                            label = "slowRotation"
-                        )
-
-                        AnimatedContent(
-                            targetState = mediaMetadata?.thumbnailUrl,
-                            transitionSpec = {
-                                fadeIn(tween(1500)).togetherWith(fadeOut(tween(1500)))
-                            },
-                            label = "liveMeshBackground"
-                        ) { thumbnailUrl ->
-                            if (thumbnailUrl != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .alpha(backgroundAlpha)
-                                        .graphicsLayer {
-                                            // Scale up to avoid showing edges during rotation
-                                            scaleX = 1.7f
-                                            scaleY = 1.7f
-                                        }
-                                ) {
-                                    val matrix = remember { 
-                                        val m = ColorMatrix()
-                                        m.setToSaturation(1.8f) // Reduced to avoid neon look
-                                        m
-                                    }
-                                    val colorFilter = ColorFilter.colorMatrix(matrix)
-
-                                    // Layer 1: The Anchor (Full Image, Counter-Clockwise)
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(thumbnailUrl)
-                                            .size(128, 128) // Downsample significantly for performance
-                                            .allowHardware(false)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        colorFilter = colorFilter,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .blur(100.dp)
-                                            .graphicsLayer { rotationZ = anchorRotation }
-                                    )
-
-                                    // Layer 2: Fast Rotating Crop (Top-Left)
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(thumbnailUrl)
-                                            .size(128, 128) // Downsample significantly for performance
-                                            .allowHardware(false)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        colorFilter = colorFilter,
-                                        alignment = Alignment.TopStart,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .blur(120.dp)
-                                            .graphicsLayer { 
-                                                rotationZ = fastRotation
-                                                alpha = 0.6f
-                                            }
-                                    )
-
-                                    // Layer 3: Slow Rotating Crop (Bottom-Right)
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(thumbnailUrl)
-                                            .size(128, 128) // Downsample significantly for performance
-                                            .allowHardware(false)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        colorFilter = colorFilter,
-                                        alignment = Alignment.BottomEnd,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .blur(120.dp)
-                                            .graphicsLayer { 
-                                                rotationZ = slowRotation
-                                                alpha = 0.5f
-                                            }
-                                    )
-                                    
-                                    // Global dark tint to prevent neon look + vertical gradient for depth
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(Color.Black.copy(alpha = 0.2f))
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(
-                                                        Color.Transparent,
-                                                        Color.Black.copy(alpha = 0.25f)
-                                                    )
-                                                )
-                                            )
-                                    )
-                                }
-                            }
+                        if (backgroundAlpha > 0.01f) {
+                            val thumbnailUrl = mediaMetadata?.thumbnailUrl
+                            AndroidView<BlendView>(factory = { ctx -> BlendView(ctx) }, update = { blendView -> if (isPlaying) blendView.startRotationAnimation() else blendView.stopRotationAnimation(); blendView.setImageUrl(thumbnailUrl) }, modifier = Modifier.fillMaxSize())
                         }
                     }
                     PlayerBackgroundStyle.DEFAULT -> {
@@ -1322,7 +1373,7 @@ fun BottomSheetPlayer(
                     .padding(horizontal = PlayerHorizontalPadding),
             ) {
                 AnimatedContent(
-                    targetState = showInlineLyrics,
+                    targetState = showInlineLyrics || spotifyCanvasUrl != null,
                     label = "ThumbnailAnimation"
                 ) { showSmallThumbnail ->
                     if (showSmallThumbnail) {
@@ -1453,18 +1504,21 @@ fun BottomSheetPlayer(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (mediaMetadata.explicit) MIcon.Explicit()
+                        if (mediaMetadata.explicit) {
+                            MIcon.Explicit(tint = TextBackgroundColor)
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
 
                         if (mediaMetadata.artists.any { it.name.isNotBlank() }) {
                             val annotatedString = buildAnnotatedString {
-                                mediaMetadata.artists.forEachIndexed { index, artist ->
-                                    val tag = "artist_${artist.id.orEmpty()}"
-                                    pushStringAnnotation(tag = tag, annotation = artist.id.orEmpty())
-                                    withStyle(SpanStyle(color = TextBackgroundColor, fontSize = 16.sp)) {
+                                withStyle(SpanStyle(color = TextBackgroundColor, fontSize = 16.sp)) {
+                                    mediaMetadata.artists.forEachIndexed { index, artist ->
+                                        val tag = "artist_${artist.id.orEmpty()}"
+                                        pushStringAnnotation(tag = tag, annotation = artist.id.orEmpty())
                                         append(artist.name)
+                                        pop()
+                                        if (index != mediaMetadata.artists.lastIndex) append(", ")
                                     }
-                                    pop()
-                                    if (index != mediaMetadata.artists.lastIndex) append(", ")
                                 }
                             }
 
@@ -2623,7 +2677,7 @@ fun BottomSheetPlayer(
                                     showLyrics = showLyrics,
                                     positionProvider = { sliderPosition ?: effectivePosition }
                                 )
-                            } else if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
+                            } else if (spotifyCanvasUrl == null && playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
                                 Thumbnail(
                                     sliderPositionProvider = sliderPositionProvider,
                                     modifier = Modifier.animateContentSize(),
@@ -2685,7 +2739,7 @@ fun BottomSheetPlayer(
                                     showLyrics = showLyrics,
                                     positionProvider = { sliderPosition ?: effectivePosition }
                                 )
-                            } else if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
+                            } else if (spotifyCanvasUrl == null && playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
                                 Thumbnail(
                                     sliderPositionProvider = sliderPositionProvider,
                                     modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection),
@@ -2812,6 +2866,97 @@ fun InlineLyricsView(
 
 
 @Composable
+fun MoreActionsButton(
+    mediaMetadata: MediaMetadata,
+    navController: NavController,
+    state: BottomSheetState,
+    textButtonColor: Color,
+    iconButtonColor: Color
+) {
+    val menuState = LocalMenuState.current
+    val bottomSheetPageState = LocalBottomSheetPageState.current
+
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(textButtonColor)
+            .clickable {
+                menuState.show {
+                    PlayerMenu(
+                        mediaMetadata = mediaMetadata,
+                        navController = navController,
+                        playerBottomSheetState = state,
+                        onShowDetailsDialog = {
+                            mediaMetadata.id.let {
+                                bottomSheetPageState.show {
+                                    ShowMediaInfo(it)
+                                }
+                            }
+                        },
+                        onDismiss = menuState::dismiss
+                    )
+                }
+            }
+    ) {
+        Image(
+            painter = painterResource(R.drawable.more_vert),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(iconButtonColor)
+        )
+    }
+}
+
+@Composable
+private fun PlayerMoreMenuButton(
+    mediaMetadata: MediaMetadata,
+    navController: NavController,
+    state: BottomSheetState,
+    textButtonColor: Color,
+    iconButtonColor: Color,
+) {
+    val menuState = LocalMenuState.current
+    val bottomSheetPageState = LocalBottomSheetPageState.current
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier =
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(textButtonColor)
+            .clickable {
+                menuState.show {
+                    PlayerMenu(
+                        mediaMetadata = mediaMetadata,
+                        navController = navController,
+                        playerBottomSheetState = state,
+                        onShowDetailsDialog = {
+                            mediaMetadata.id.let {
+                                bottomSheetPageState.show {
+                                    ShowMediaInfo(it)
+                                }
+                            }
+                        },
+                        onDismiss = menuState::dismiss,
+                    )
+                }
+            },
+    ) {
+        Image(
+            painter = painterResource(R.drawable.more_horiz),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(iconButtonColor),
+        )
+    }
+}
+
+private fun smootherStep(t: Float): Float {
+    val x = t.coerceIn(0f, 1f)
+    return x * x * x * (x * (x * 6f - 15f) + 10f)
+}
+
+@Composable
 private fun BackgroundVideoView(
     videoUrl: String,
     isPlaying: Boolean,
@@ -2830,8 +2975,20 @@ private fun BackgroundVideoView(
         }
     }
 
+    val spotifyCanvasCache = LocalPlayerConnection.current?.service?.spotifyCanvasCache
+
     val exoPlayer = remember {
-        val mediaSourceFactory = DefaultMediaSourceFactory(context)
+        val defaultDataSourceFactory = DefaultDataSource.Factory(context)
+        val mediaSourceFactory = if (spotifyCanvasCache != null) {
+            val cacheDataSourceFactory = CacheDataSource.Factory()
+                .setCache(spotifyCanvasCache)
+                .setUpstreamDataSourceFactory(defaultDataSourceFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            DefaultMediaSourceFactory(context)
+                .setDataSourceFactory(cacheDataSourceFactory)
+        } else {
+            DefaultMediaSourceFactory(context)
+        }
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -2924,126 +3081,5 @@ private fun BackgroundVideoView(
             }
         },
         modifier = modifier.alpha(alpha)
-    )
-}
-
-
-private val backdropPaletteCache = HashMap<String, List<Color>>()
-
-private fun backdropBrighten(rgb: Int): Color {
-    val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(rgb, hsv)
-    hsv[2] = hsv[2].coerceAtLeast(0.6f)
-    return Color(android.graphics.Color.HSVToColor(hsv))
-}
-
-private suspend fun extractBackdropColors(context: Context, url: String): List<Color> {
-    val request = ImageRequest.Builder(context)
-        .data(url)
-        .size(128, 128)
-        .allowHardware(false)
-        .build()
-    val bitmap = runCatching { context.imageLoader.execute(request).image?.toBitmap() }
-        .getOrNull() ?: return emptyList()
-    val palette = withContext(Dispatchers.Default) {
-        Palette.from(bitmap)
-            .maximumColorCount(24)
-            .resizeBitmapArea(128 * 128)
-            .generate()
-    }
-    val picked = ArrayList<Int>()
-    for (swatch in palette.swatches.sortedByDescending { it.population }) {
-        val c = swatch.rgb
-        val far = picked.none { o ->
-            val dr = android.graphics.Color.red(o) - android.graphics.Color.red(c)
-            val dg = android.graphics.Color.green(o) - android.graphics.Color.green(c)
-            val db = android.graphics.Color.blue(o) - android.graphics.Color.blue(c)
-            dr * dr + dg * dg + db * db < 60 * 60
-        }
-        if (far) picked.add(c)
-        if (picked.size == 6) break
-    }
-    return picked.map { backdropBrighten(it) }
-}
-
-/**
- * Fondo de las letras: manchas suaves con los colores principales de la carátula, en posiciones
- * aleatorias (siempre las mismas para la misma canción). Al abrir las letras se mueven despacio.
- */
-@Composable
-private fun PaletteBlobBackdrop(
-    thumbnailUrl: String,
-    moving: Boolean,
-    progress: Float
-) {
-    val context = LocalContext.current
-    val colors by produceState(
-        initialValue = backdropPaletteCache[thumbnailUrl] ?: emptyList(),
-        key1 = thumbnailUrl
-    ) {
-        val cached = backdropPaletteCache[thumbnailUrl]
-        if (cached != null) {
-            value = cached
-        } else {
-            val extracted = extractBackdropColors(context, thumbnailUrl)
-            if (extracted.isNotEmpty()) backdropPaletteCache[thumbnailUrl] = extracted
-            value = extracted
-        }
-    }
-    val fade by animateFloatAsState(
-        targetValue = if (colors.isNotEmpty()) 1f else 0f,
-        animationSpec = tween(600),
-        label = "blobBackdropFade"
-    )
-    val animate = moving || progress > 0f
-    val t = if (animate) {
-        rememberInfiniteTransition(label = "blobBackdropDrift").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(40_000, easing = LinearEasing)),
-            label = "blobBackdropT"
-        ).value
-    } else 0f
-
-    // Posiciones, tamaños y fases al azar, pero fijos para esta canción.
-    val blobs = remember(thumbnailUrl) {
-        val rnd = java.util.Random(thumbnailUrl.hashCode().toLong())
-        List(6) {
-            floatArrayOf(
-                rnd.nextFloat(),                    // x base (0..1)
-                rnd.nextFloat(),                    // y base (0..1)
-                0.55f + rnd.nextFloat() * 0.35f,    // radio (fracción del lado largo)
-                rnd.nextFloat(),                    // fase
-                1f + rnd.nextInt(3)                 // velocidad (vueltas)
-            )
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .alpha(fade)
-            .drawBehind {
-                if (colors.isEmpty()) return@drawBehind
-                val w = size.width
-                val h = size.height
-                val longSide = max(w, h)
-                drawRect(androidx.compose.ui.graphics.lerp(colors.last(), Color.Black, 0.55f))
-                blobs.forEachIndexed { i, b ->
-                    val color = colors[i % colors.size]
-                    val ang = 2f * Math.PI.toFloat() * (t * b[4] + b[3])
-                    val dx = kotlin.math.sin(ang) * 0.18f * progress
-                    val dy = kotlin.math.cos(ang) * 0.18f * progress
-                    val center = Offset((b[0] + dx) * w, (b[1] + dy) * h)
-                    val radius = b[2] * longSide * (1f + 0.12f * progress * kotlin.math.sin(ang))
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(color.copy(alpha = 0.9f), color.copy(alpha = 0f)),
-                            center = center,
-                            radius = radius
-                        )
-                    )
-                }
-            }
     )
 }

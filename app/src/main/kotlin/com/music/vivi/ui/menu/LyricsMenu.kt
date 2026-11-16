@@ -73,8 +73,15 @@ import com.music.vivi.ui.component.NewAction
 import com.music.vivi.ui.component.NewActionGrid
 import com.music.vivi.ui.component.TextFieldDialog
 import com.music.vivi.viewmodels.LyricsMenuViewModel
-import com.music.vivi.constants.DefaultLyricsOffsetMs
-import com.music.vivi.constants.LyricsKeepControlsKey
+import com.music.vivi.constants.OpenRouterApiKey
+import com.music.vivi.constants.DeeplApiKey
+import com.music.vivi.constants.AiProviderKey
+import com.music.vivi.constants.TranslateLanguageKey
+import com.music.vivi.constants.TranslateModeKey
+import com.music.vivi.constants.OpenRouterBaseUrlKey
+import com.music.vivi.constants.OpenRouterModelKey
+import com.music.vivi.constants.DeeplFormalityKey
+import com.music.vivi.lyrics.LyricsTranslationHelper
 import com.music.vivi.utils.rememberPreference
 import androidx.compose.runtime.collectAsState
 
@@ -90,8 +97,22 @@ fun LyricsMenu(
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
-    var keepControls by rememberPreference(LyricsKeepControlsKey, defaultValue = false)
     
+    val openRouterApiKey by rememberPreference(OpenRouterApiKey, "")
+    val deeplApiKey by rememberPreference(DeeplApiKey, "")
+    val aiProvider by rememberPreference(AiProviderKey, "OpenRouter")
+    val translateLanguage by rememberPreference(TranslateLanguageKey, "en")
+    val translateMode by rememberPreference(TranslateModeKey, "Literal")
+    val openRouterBaseUrl by rememberPreference(OpenRouterBaseUrlKey, "https://openrouter.ai/api/v1/chat/completions")
+    val openRouterModel by rememberPreference(OpenRouterModelKey, "google/gemini-2.5-flash-lite")
+    val deeplFormality by rememberPreference(DeeplFormalityKey, "default")
+
+    val hasApiKey = if (aiProvider == "DeepL") deeplApiKey.isNotBlank() else openRouterApiKey.isNotBlank()
+
+    // Observe the authoritative translation-active state from the singleton; this persists
+    // correctly across menu open/close cycles and avoids the lyricsProvider() race condition.
+    val hasTranslations by LyricsTranslationHelper.hasActiveTranslations.collectAsState()
+
     var showEditDialog by rememberSaveable {
         mutableStateOf(false)
     }
@@ -145,6 +166,7 @@ fun LyricsMenu(
             )
         }
 
+    val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsState()
 
     if (showSearchDialog) {
         DefaultDialog(
@@ -201,9 +223,8 @@ fun LyricsMenu(
                         )
                         showSearchResultDialog = true
                         
-                        // Aviso solo si ahora mismo no hay conexión (misma comprobación que
-                        // usa la búsqueda), no con un valor guardado que puede estar viejo.
-                        if (!viewModel.isOnlineNow()) {
+                        // Show warning only if network is definitely unavailable
+                        if (!isNetworkAvailable) {
                             Toast.makeText(context, context.getString(R.string.error_no_internet), Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -347,7 +368,7 @@ fun LyricsMenu(
     var showRomanization by rememberSaveable { mutableStateOf(false) }
     var isChecked by remember { mutableStateOf(songProvider()?.romanizeLyrics ?: true) }
 
-    var lyricsOffset by rememberSaveable { mutableIntStateOf((songProvider()?.lyricsOffset ?: 0) + DefaultLyricsOffsetMs) }
+    var lyricsOffset by rememberSaveable { mutableIntStateOf(songProvider()?.lyricsOffset ?: 0) }
 
     // Sync isChecked with song changes
     LaunchedEffect(songProvider()) {
@@ -355,7 +376,7 @@ fun LyricsMenu(
     }
 
     LaunchedEffect(songProvider()) {
-        lyricsOffset = (songProvider()?.lyricsOffset ?: 0) + DefaultLyricsOffsetMs
+        lyricsOffset = songProvider()?.lyricsOffset ?: 0
     }
 
     val configuration = LocalConfiguration.current
@@ -424,6 +445,66 @@ fun LyricsMenu(
             Material3MenuGroup(
                 expressive = true,
                 items = buildList {
+                    // Add "Translate with AI" option if API key is configured
+                    if (hasApiKey) {
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(stringResource(R.string.ai_lyrics_translation)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.translate),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    if (hasTranslations) {
+                                        // Remove translations
+                                        lyricsProvider()?.let { lyrics ->
+                                            val clearedLyrics = LyricsTranslationHelper.clearTranslations(lyrics)
+                                            database.query {
+                                                upsert(clearedLyrics)
+                                            }
+                                            // Resets hasActiveTranslations and clears in-memory translations
+                                            LyricsTranslationHelper.triggerClearTranslations()
+                                        }
+                                    } else {
+                                        // Trigger translation
+                                        LyricsTranslationHelper.triggerManualTranslation()
+                                    }
+                                },
+                                trailingContent = {
+                                    Switch(
+                                        checked = hasTranslations,
+                                        onCheckedChange = { newCheckedState ->
+                                            if (newCheckedState) {
+                                                // Enable translations – hasActiveTranslations updates when done
+                                                LyricsTranslationHelper.triggerManualTranslation()
+                                            } else {
+                                                // Disable translations – triggerClearTranslations resets hasActiveTranslations
+                                                lyricsProvider()?.let { lyrics ->
+                                                    val clearedLyrics = LyricsTranslationHelper.clearTranslations(lyrics)
+                                                    database.query {
+                                                        upsert(clearedLyrics)
+                                                    }
+                                                    LyricsTranslationHelper.triggerClearTranslations()
+                                                }
+                                            }
+                                        },
+                                        thumbContent = {
+                                            Icon(
+                                                painter = painterResource(
+                                                    id = if (hasTranslations) R.drawable.check else R.drawable.close
+                                                ),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
+                                    )
+                                },
+                            )
+                        )
+                    }
+                    
                     add(
                         Material3MenuItemData(
                             title = { Text(stringResource(R.string.lyrics_offset)) },
@@ -447,34 +528,6 @@ fun LyricsMenu(
                         )
                     )
                     
-                    add(
-                        Material3MenuItemData(
-                            title = { Text(text = stringResource(R.string.lyrics_keep_controls)) },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.lock),
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = { keepControls = !keepControls },
-                            trailingContent = {
-                                Switch(
-                                    checked = keepControls,
-                                    onCheckedChange = { keepControls = it },
-                                    thumbContent = {
-                                        Icon(
-                                            painter = painterResource(
-                                                id = if (keepControls) R.drawable.check else R.drawable.close
-                                            ),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(SwitchDefaults.IconSize)
-                                        )
-                                    }
-                                )
-                            }
-                        )
-                    )
-
                     add(
                         Material3MenuItemData(
                             title = { Text(text = stringResource(R.string.romanize_current_track)) },

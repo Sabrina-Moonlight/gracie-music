@@ -56,6 +56,9 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.music.vivi.constants.LastSeenStarPromptVersionKey
+import com.music.vivi.constants.HasStarredRepoKey
+import com.music.vivi.ui.component.ActionPromptDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
@@ -90,10 +93,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -124,9 +124,6 @@ import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
@@ -153,10 +150,22 @@ import com.music.vivi.constants.DisableScreenshotKey
 import com.music.vivi.constants.DynamicThemeKey
 import com.music.vivi.constants.EnableHighRefreshRateKey
 import com.music.vivi.constants.EnableSettingsPopupKey
+import com.music.vivi.constants.ListenTogetherInTopBarKey
+import com.music.vivi.constants.ListenTogetherUsernameKey
 import com.music.vivi.constants.MiniPlayerBottomSpacing
 import com.music.vivi.constants.MiniPlayerHeight
 import com.music.vivi.constants.NavigationBarAnimationSpec
 import com.music.vivi.constants.NavigationBarHeight
+import com.music.vivi.vivimusic.updater.checkForUpdate
+import com.music.vivi.vivimusic.updater.getAutoUpdateCheckSetting
+import com.music.vivi.vivimusic.updater.isNewerVersion
+import com.music.vivi.vivimusic.updater.saveUpdateAvailableState
+import com.music.vivi.vivimusic.updater.getUpdateNotificationsSetting
+import com.music.vivi.vivimusic.updater.getBetaUpdatesSetting
+import com.music.vivi.vivimusic.updater.getUpdateAvailableState
+import com.music.vivi.vivimusic.updater.shouldRunNightlyCheck
+import com.music.vivi.vivimusic.updater.markNightlyCheckDone
+import com.music.vivi.vivimusic.UpdateNotificationHelper
 import android.util.Log
 import androidx.compose.ui.platform.LocalContext
 import com.music.vivi.constants.PauseListenHistoryKey
@@ -202,15 +211,12 @@ import com.music.vivi.ui.utils.appBarScrollBehavior
 import com.music.vivi.ui.utils.resetHeightOffset
 import com.music.vivi.utils.SyncUtils
 import com.music.vivi.utils.dataStore
-import androidx.datastore.preferences.core.edit
-import com.music.vivi.constants.LastDynamicThemeColorKey
-import com.music.vivi.constants.LastPlayerExpandedKey
-import com.music.vivi.constants.PersistentQueueKey
 import com.music.vivi.utils.get
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.utils.reportException
 import com.music.vivi.utils.setAppLocale
+import com.music.vivi.viewmodels.HistoryViewModel
 import com.music.vivi.viewmodels.HomeViewModel
 import com.music.vivi.ui.screens.search.suggestions.SuggestionsViewModel
 import com.valentinilk.shimmer.LocalShimmerTheme
@@ -219,7 +225,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -227,14 +232,12 @@ import timber.log.Timber
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Locale
+import com.music.vivi.github.GitHubViewModel
 import javax.inject.Inject
 import androidx.activity.viewModels
 import androidx.compose.material3.LocalContentColor
 
 @Suppress("DEPRECATION", "ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-// Una sola vez por proceso: la restauración del reproductor solo ocurre al abrir la app desde cero.
-private var playerRestoreAlreadyDone = false
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     companion object {
@@ -251,8 +254,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var syncUtils: SyncUtils
 
-    // Se crea al abrir la app para que la librería (carga Eager) ya esté lista al mostrarla.
-    private val libraryMixViewModel: com.music.vivi.viewmodels.LibraryMixViewModel by viewModels()
+    @Inject
+    lateinit var listenTogetherManager: com.music.vivi.listentogether.ListenTogetherManager
+
+    private val gitHubViewModel: GitHubViewModel by viewModels()
 
     private lateinit var navController: NavHostController
     private var pendingIntent: Intent? = null
@@ -263,15 +268,20 @@ class MainActivity : ComponentActivity() {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             if (service is MusicBinder) {
                 try {
-                    playerConnection = PlayerConnection(this@MainActivity, service, database, lifecycleScope)
+                    playerConnection?.dispose()
+                    playerConnection = PlayerConnection(applicationContext, service, database, lifecycleScope)
                     Timber.tag("MainActivity").d("PlayerConnection created successfully")
+                    // Connect Listen Together manager to player
+                    listenTogetherManager.setPlayerConnection(playerConnection)
                 } catch (e: Exception) {
                     Timber.tag("MainActivity").e(e, "Failed to create PlayerConnection")
                     // Retry after a delay of 500ms
                     lifecycleScope.launch {
                         delay(500)
                         try {
-                            playerConnection = PlayerConnection(this@MainActivity, service, database, lifecycleScope)
+                            playerConnection?.dispose()
+                            playerConnection = PlayerConnection(applicationContext, service, database, lifecycleScope)
+                            listenTogetherManager.setPlayerConnection(playerConnection)
                         } catch (e2: Exception) {
                             Timber.tag("MainActivity").e(e2, "Failed to create PlayerConnection on retry")
                         }
@@ -281,6 +291,8 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            // Disconnect Listen Together manager
+            listenTogetherManager.setPlayerConnection(null)
             playerConnection?.dispose()
             playerConnection = null
         }
@@ -317,9 +329,10 @@ class MainActivity : ComponentActivity() {
             isFinishing
         ) {
             stopService(Intent(this, MusicService::class.java))
-            unbindService(serviceConnection)
-            playerConnection = null
         }
+        listenTogetherManager.setPlayerConnection(null)
+        playerConnection?.dispose()
+        playerConnection = null
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -334,16 +347,21 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
-        super.onCreate(savedInstanceState)
-        // Pantalla nueva (no rotación): vuelve a restaurar dónde estaba el reproductor aunque el proceso siga vivo.
-        if (savedInstanceState == null) {
-            playerRestoreAlreadyDone = false
-            com.music.vivi.ui.player.PlayerRestore.internalStateConsumed = false
+        val splashScreen = installSplashScreen()
+        var isStartupTimeoutReached by mutableStateOf(false)
+        lifecycleScope.launch {
+            delay(2000L)
+            isStartupTimeoutReached = true
         }
-        libraryMixViewModel.isLibraryLoaded // crea el ViewModel ya, para que la librería empiece a cargar
+        splashScreen.setKeepOnScreenCondition {
+            playerConnection == null && !isStartupTimeoutReached
+        }
+        super.onCreate(savedInstanceState)
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Initialize Listen Together manager
+        listenTogetherManager.initialize()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             val locale = dataStore[AppLanguageKey]
@@ -388,7 +406,7 @@ class MainActivity : ComponentActivity() {
         downloadUtil: DownloadUtil,
         syncUtils: SyncUtils,
     ) {
-        val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true, readInitialSync = true)
+        val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
         val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
         val context = LocalContext.current
         val snackbarHostState = remember { SnackbarHostState() }
@@ -406,6 +424,46 @@ class MainActivity : ComponentActivity() {
                 if (result == SnackbarResult.ActionPerformed) {
                     event.onAction?.invoke()
                 }
+            }
+        }
+
+        LaunchedEffect(Unit) {
+            if (getAutoUpdateCheckSetting(context)) {
+                val betaEnabled = getBetaUpdatesSetting(context)
+
+                // Beta/nightly path: only run once per day at 9 PM or later.
+                // The run-number comparison ("is there a new commit?") is already
+                // handled inside checkForUpdate — we just gate WHEN it is allowed
+                // to execute so it doesn't fire on every single app launch.
+                if (betaEnabled && !shouldRunNightlyCheck(context)) {
+                    Log.d("UpdateCheck", "Beta check skipped: outside 9 PM window or already ran today")
+                    return@LaunchedEffect
+                }
+
+                // Delay to not block app startup
+                delay(2000L)
+                checkForUpdate(
+                    context = context,
+                    onSuccess = { latestVersion, isAvailable, _, _, _, _, _, _ ->
+                        val currentVersion = BuildConfig.VERSION_NAME
+                        Log.d("UpdateCheck", "Startup check success. Latest: $latestVersion, Current: $currentVersion, isAvailable: $isAvailable")
+                        saveUpdateAvailableState(context, isAvailable)
+
+                        if (isAvailable && getUpdateNotificationsSetting(context)) {
+                            Log.d("UpdateCheck", "Posting update notification for $latestVersion")
+                            UpdateNotificationHelper.showUpdateNotification(context, latestVersion)
+                        }
+
+                        // Stamp today so no more nightly checks until tomorrow 9 PM
+                        if (betaEnabled) markNightlyCheckDone(context)
+                    },
+                    onError = {
+                        Log.e("UpdateCheck", "Startup check failed")
+                        // Do not clear the state on error, in case of offline launch
+                        // Note: we do NOT stamp markNightlyCheckDone on error so it
+                        // can retry later the same night if the user reopens the app.
+                    }
+                )
             }
         }
 
@@ -448,7 +506,12 @@ class MainActivity : ComponentActivity() {
 
         val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
 
+        val (lastSeenStarPromptVersion, setLastSeenStarPromptVersion) = rememberPreference(LastSeenStarPromptVersionKey, "")
+        val (hasStarredRepo) = rememberPreference(HasStarredRepoKey, false)
         val uriHandler = LocalUriHandler.current
+        val currentVersion = BuildConfig.VERSION_NAME
+
+
         val isSystemInDarkTheme = isSystemInDarkTheme()
         val useDarkTheme = remember(darkTheme, isSystemInDarkTheme) {
             if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
@@ -463,14 +526,11 @@ class MainActivity : ComponentActivity() {
             pureBlackEnabled && useDarkTheme
         }
 
-        val (selectedThemeColorInt) = rememberPreference(SelectedThemeColorKey, defaultValue = DefaultThemeColor.toArgb(), readInitialSync = true)
+        val (selectedThemeColorInt) = rememberPreference(SelectedThemeColorKey, defaultValue = DefaultThemeColor.toArgb())
         val selectedThemeColor = Color(selectedThemeColorInt)
 
         var themeColor by rememberSaveable(stateSaver = ColorSaver) {
-            val lastDynamicColor = dataStore[LastDynamicThemeColorKey]
-            mutableStateOf(
-                if (enableDynamicTheme && lastDynamicColor != null) Color(lastDynamicColor) else selectedThemeColor
-            )
+            mutableStateOf(selectedThemeColor)
         }
 
         LaunchedEffect(selectedThemeColor) {
@@ -481,17 +541,12 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(playerConnection, enableDynamicTheme, selectedThemeColor) {
             val playerConnection = playerConnection
-            if (!enableDynamicTheme) {
+            if (!enableDynamicTheme || playerConnection == null) {
                 themeColor = selectedThemeColor
                 return@LaunchedEffect
             }
-            // Mientras el reproductor aún conecta, se conserva el último color (evita el parpadeo azul).
-            if (playerConnection == null) return@LaunchedEffect
 
-            var firstEmission = true
             playerConnection.service.currentMediaMetadata.collectLatest { song ->
-                val isFirst = firstEmission
-                firstEmission = false
                 if (song?.thumbnailUrl != null) {
                     withContext(Dispatchers.IO) {
                         try {
@@ -505,20 +560,24 @@ class MainActivity : ComponentActivity() {
                                     .crossfade(false)
                                     .build()
                             )
-                            val extracted = result.image?.toBitmap()?.extractThemeColor()
-                            themeColor = extracted ?: selectedThemeColor
-                            if (extracted != null) {
-                                dataStore.edit { it[LastDynamicThemeColorKey] = extracted.toArgb() }
-                            }
+                            themeColor = result.image?.toBitmap()?.extractThemeColor() ?: selectedThemeColor
                         } catch (e: Exception) {
                             // Fallback to default on error
                             themeColor = selectedThemeColor
                         }
                     }
-                } else if (!isFirst) {
+                } else {
                     themeColor = selectedThemeColor
                 }
             }
+        }
+
+        val gitHubViewModel: GitHubViewModel = hiltViewModel()
+        val isStarred by gitHubViewModel.isStarred.collectAsState()
+        val showThankYouDialog by gitHubViewModel.showThankYouDialog.collectAsState()
+
+        LaunchedEffect(Unit) {
+            gitHubViewModel.checkStarStatus(this@MainActivity)
         }
 
         vivimusicTheme(
@@ -526,6 +585,102 @@ class MainActivity : ComponentActivity() {
             pureBlack = pureBlack,
             themeColor = themeColor,
         ) {
+            if (lastSeenStarPromptVersion != currentVersion && !hasStarredRepo && !isStarred) {
+                ActionPromptDialog(
+                    title = "Support ViviMusic \u2B50",
+                    onDismiss = { setLastSeenStarPromptVersion(currentVersion) },
+                    onConfirm = {
+                        setLastSeenStarPromptVersion(currentVersion)
+                        uriHandler.openUri("https://github.com/vivizzz007/vivi-music")
+                    },
+                    onCancel = { setLastSeenStarPromptVersion(currentVersion) },
+                    content = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "If you enjoy using ViviMusic, would you consider starring our repository on GitHub?",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "It takes just a second and helps keep our open-source project alive and growing!",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                )
+            }
+
+            if (showThankYouDialog) {
+                ActionPromptDialog(
+                    title = "Thank You!",
+                    onDismiss = { gitHubViewModel.dismissThankYouDialog() },
+                    onConfirm = { gitHubViewModel.dismissThankYouDialog() },
+                    content = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "Thank you so much for your support! \u2764\uFE0F",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Starring the repository helps us grow and keep the project alive. Enjoy the music!",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val btnModifier = Modifier.size(44.dp)
+                                val btnColors = androidx.compose.material3.IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                                val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
+                                
+                                IconButton(
+                                    onClick = { uriHandler.openUri("https://ko-fi.com/vivizzz007") },
+                                    modifier = btnModifier,
+                                    colors = btnColors
+                                ) {
+                                    Icon(painter = painterResource(R.drawable.buymeacoffee), contentDescription = "Buy Me A Coffee", tint = iconTint)
+                                }
+                                IconButton(
+                                    onClick = { uriHandler.openUri("https://paypal.me/vivizzz007") },
+                                    modifier = btnModifier,
+                                    colors = btnColors
+                                ) {
+                                    Icon(painter = painterResource(R.drawable.paypal), contentDescription = "PayPal", tint = iconTint)
+                                }
+                                IconButton(
+                                    onClick = { uriHandler.openUri("upi://pay?pa=vivizzz007@upi") },
+                                    modifier = btnModifier,
+                                    colors = btnColors
+                                ) {
+                                    Icon(painter = painterResource(R.drawable.currency_rupee_upi), contentDescription = "UPI", tint = iconTint)
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
@@ -541,6 +696,9 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
                 val homeViewModel: HomeViewModel = hiltViewModel()
+                // Pre-warm HistoryViewModel at Activity scope so history data loads
+                // in background immediately — zero lag when user taps the history icon
+                hiltViewModel<HistoryViewModel>()
                 // Pre-warm SuggestionsViewModel at Activity scope so suggestions data loads
                 // in background immediately — zero lag when user opens the Search screen
                 hiltViewModel<SuggestionsViewModel>()
@@ -548,7 +706,14 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val (previousTab, setPreviousTab) = rememberSaveable { mutableStateOf("home") }
 
-                val navigationItems = Screens.MainScreens
+                val (listenTogetherInTopBar) = rememberPreference(ListenTogetherInTopBarKey, defaultValue = true)
+                val navigationItems = remember(listenTogetherInTopBar) { 
+                    if (listenTogetherInTopBar) {
+                        Screens.MainScreens.filter { it != Screens.ListenTogether }
+                    } else {
+                        Screens.MainScreens
+                    }
+                }
                 val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
                 val (floatingNav) = rememberPreference(FloatingNavBarKey, defaultValue = false)
                 val (useNewMiniPlayerDesign) = rememberPreference(UseNewMiniPlayerDesignKey, defaultValue = true)
@@ -568,6 +733,7 @@ class MainActivity : ComponentActivity() {
                     listOf(
                         Screens.Home.route,
                         Screens.Library.route,
+                        Screens.ListenTogether.route,
                         "settings",
                     )
                 }
@@ -632,10 +798,7 @@ class MainActivity : ComponentActivity() {
                     label = "snackbarHeight"
                 )
 
-                // Si el reproductor estaba abierto al cerrar la app, la hoja se crea ya abierta (sin esperar ni animar después).
-                val startExpanded = remember { !playerRestoreAlreadyDone && dataStore[LastPlayerExpandedKey] == true }
                 val playerBottomSheetState = rememberBottomSheetState(
-                    initialAnchor = if (startExpanded) com.music.vivi.ui.component.expandedAnchor else com.music.vivi.ui.component.dismissedAnchor,
                     dismissedBound = 0.dp,
                     collapsedBound = bottomInset +
                         (if (!showRail && shouldShowNavigationBar) navPadding else 0.dp) +
@@ -712,60 +875,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Al abrir la app desde cero, vuelve a abrir el reproductor si estaba abierto al cerrarla.
-                val restoreContext = LocalContext.current
-                var playerRestoreDone by remember { mutableStateOf(playerRestoreAlreadyDone) }
-                // Recuerda si el reproductor estaba abierto al salir de la app (gesto de inicio o recientes)
-                // y lo vuelve a abrir al regresar, aunque Android haya cerrado el servicio mientras tanto.
-                var expandedOnStop by rememberSaveable { mutableStateOf(false) }
-                val appLifecycleOwner = LocalLifecycleOwner.current
-                DisposableEffect(appLifecycleOwner, playerBottomSheetState) {
-                    val observer = LifecycleEventObserver { _, event ->
-                        if (event == Lifecycle.Event.ON_STOP) expandedOnStop = playerBottomSheetState.isExpanded
-                    }
-                    appLifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { appLifecycleOwner.lifecycle.removeObserver(observer) }
-                }
                 LaunchedEffect(playerConnection) {
                     val player = playerConnection?.player ?: return@LaunchedEffect
-                    // Espera a que el servicio cargue la cola antes de decidir si hay algo que mostrar.
-                    // Si Android cerró el servicio mientras la app estaba en segundo plano, al volver
-                    // tiene que cargar la cola guardada y eso puede tardar varios segundos: con una
-                    // espera corta se cerraba el reproductor abierto. Con cola guardada se espera más.
-                    val hasSavedQueue = withContext(Dispatchers.IO) {
-                        restoreContext.dataStore.get(PersistentQueueKey, true) &&
-                            restoreContext.filesDir.resolve(MusicService.PERSISTENT_QUEUE_FILE).exists()
-                    }
-                    val maxTries = if (hasSavedQueue) 300 else 15
-                    var tries = 0
-                    while (player.currentMediaItem == null && player.mediaItemCount == 0 && tries < maxTries) {
-                        delay(100)
-                        tries++
-                    }
-                    val hasMedia = player.currentMediaItem != null || player.mediaItemCount > 0
-                    if (!hasMedia) {
-                        if (!playerBottomSheetState.isDismissed) playerBottomSheetState.dismiss()
-                    } else if (playerBottomSheetState.isDismissed && !(startExpanded && !playerRestoreDone)) {
-                        playerBottomSheetState.collapseSoft()
-                    }
-                    // Al volver a la app: si estaba abierto al salir, se deja abierto otra vez.
-                    if (hasMedia && expandedOnStop && !playerBottomSheetState.isExpanded) {
-                        playerBottomSheetState.expandSoft()
-                    }
-                    expandedOnStop = false
-                    playerRestoreAlreadyDone = true
-                    playerRestoreDone = true
-                }
-                // Guarda si el reproductor está abierto (solo después de restaurar, para no pisar el valor).
-                LaunchedEffect(playerRestoreDone) {
-                    if (!playerRestoreDone) return@LaunchedEffect
-                    var seenExpanded = !startExpanded
-                    androidx.compose.runtime.snapshotFlow { playerBottomSheetState.isExpanded }
-                        .distinctUntilChanged()
-                        .collect { expanded ->
-                            if (expanded) seenExpanded = true
-                            if (seenExpanded) restoreContext.dataStore.edit { it[LastPlayerExpandedKey] = expanded }
+                    if (player.currentMediaItem == null) {
+                        if (!playerBottomSheetState.isDismissed) {
+                            playerBottomSheetState.dismiss()
                         }
+                    } else {
+                        if (playerBottomSheetState.isDismissed) {
+                            playerBottomSheetState.collapseSoft()
+                        }
+                    }
                 }
 
                 DisposableEffect(playerConnection, playerBottomSheetState) {
@@ -775,7 +895,7 @@ class MainActivity : ComponentActivity() {
                             mediaItem: MediaItem?,
                             reason: Int,
                         ) {
-                            if (mediaItem != null && playerBottomSheetState.isDismissed && !(startExpanded && !playerRestoreDone)) {
+                            if (mediaItem != null && playerBottomSheetState.isDismissed) {
                                 playerBottomSheetState.collapseSoft()
                             }
                         }
@@ -784,8 +904,7 @@ class MainActivity : ComponentActivity() {
                             if (playbackState == Player.STATE_READY &&
                                 player.playWhenReady &&
                                 player.currentMediaItem != null &&
-                                playerBottomSheetState.isDismissed &&
-                                !(startExpanded && !playerRestoreDone)
+                                playerBottomSheetState.isDismissed
                             ) {
                                 playerBottomSheetState.collapseSoft()
                             }
@@ -799,12 +918,33 @@ class MainActivity : ComponentActivity() {
 
                 var shouldShowTopBar by rememberSaveable { mutableStateOf(false) }
 
-                LaunchedEffect(navBackStackEntry) {
+                LaunchedEffect(navBackStackEntry, listenTogetherInTopBar) {
                     val currentRoute = navBackStackEntry?.destination?.route
+                    val isListenTogetherScreen = currentRoute == Screens.ListenTogether.route || 
+                        currentRoute == "listen_together_from_topbar"
                     shouldShowTopBar = currentRoute in topLevelScreens &&
-                        currentRoute != "settings"
+                        currentRoute != "settings" &&
+                        !(isListenTogetherScreen && listenTogetherInTopBar)
                 }
 
+                val sharedPrefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+                val isUpdateAvailable = remember { mutableStateOf(getUpdateAvailableState(context)) }
+                
+                val updateListener = remember {
+                    SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                        if (key == "update_available") {
+                            isUpdateAvailable.value = getUpdateAvailableState(context)
+                        }
+                    }
+                }
+                
+                DisposableEffect(sharedPrefs, updateListener) {
+                    sharedPrefs.registerOnSharedPreferenceChangeListener(updateListener)
+                    onDispose {
+                        sharedPrefs.unregisterOnSharedPreferenceChangeListener(updateListener)
+                    }
+                }
+                // Snackbar is now triggered in checkForUpdate directly
                 val coroutineScope = rememberCoroutineScope()
                 var sharedSong: SongItem? by remember {
                     mutableStateOf(null)
@@ -830,14 +970,21 @@ class MainActivity : ComponentActivity() {
 
                 val currentTitleRes = remember(navBackStackEntry) {
                     when (navBackStackEntry?.destination?.route) {
-                        Screens.Home.route -> R.string.gracie_home_title
+                        Screens.Home.route -> R.string.music
                         Screens.Search.route -> R.string.search
-                        Screens.Library.route -> R.string.gracie_library_title
+                        Screens.Library.route -> R.string.filter_library
+                        Screens.ListenTogether.route -> R.string.together
                         else -> null
                     }
                 }
 
 
+
+                val pauseListenHistory by rememberPreference(PauseListenHistoryKey, defaultValue = false)
+                val eventCount by database.eventCount().collectAsState(initial = 0)
+                val showHistoryButton = remember(pauseListenHistory, eventCount) {
+                    !(pauseListenHistory && eventCount == 0)
+                }
 
                 val baseBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
 
@@ -849,29 +996,11 @@ class MainActivity : ComponentActivity() {
                     LocalDownloadUtil provides downloadUtil,
                     LocalShimmerTheme provides ShimmerTheme,
                     LocalSyncUtils provides syncUtils,
+                    LocalListenTogetherManager provides listenTogetherManager,
                     LocalSnackbarHostState provides snackbarHostState,
                 ) {
-                    // Estilo Natune: en Home y Library el fondo lleva un degradado con los colores
-                    // del tema y la barra de arriba es transparente para que se vea a través.
-                    val currentTintRoute = navBackStackEntry?.destination?.route
-                    val tintedRoute = currentTintRoute == Screens.Home.route ||
-                        currentTintRoute == Screens.Library.route ||
-                        currentTintRoute == "album/{albumId}" ||
-                        currentTintRoute == "local_playlist/{playlistId}" ||
-                        currentTintRoute == "online_playlist/{playlistId}"
-                    val tintTop = MaterialTheme.colorScheme.primaryContainer
-                    val tintMiddle = MaterialTheme.colorScheme.secondaryContainer
-                    val pageColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface
-                    // Álbum y playlist comparten la barra de scroll con Library: al volver, se
-                    // quedaba "bajada" (banda oscura). Se reinicia al llegar a Home/Library.
-                    LaunchedEffect(currentTintRoute) {
-                        if (currentTintRoute == Screens.Home.route || currentTintRoute == Screens.Library.route) {
-                            topAppBarScrollBehavior.state.contentOffset = 0f
-                            topAppBarScrollBehavior.state.heightOffset = 0f
-                        }
-                    }
                     Scaffold(
-                        containerColor = if (tintedRoute) Color.Transparent else pageColor,
+                        containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
                         topBar = {
                             AnimatedVisibility(
                                 visible = shouldShowTopBar,
@@ -904,6 +1033,28 @@ class MainActivity : ComponentActivity() {
                                         actions = {
                                             val (enableSettingsPopup) = rememberPreference(EnableSettingsPopupKey, defaultValue = true)
 
+                                            if (showHistoryButton) {
+                                                IconButton(onClick = { navController.navigate("history") }) {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.music_history),
+                                                        contentDescription = stringResource(R.string.history)
+                                                    )
+                                                }
+                                            }
+                                            IconButton(onClick = { navController.navigate("stats") }) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.stats),
+                                                    contentDescription = stringResource(R.string.stats)
+                                                )
+                                            }
+                                            if (listenTogetherInTopBar) {
+                                                IconButton(onClick = { navController.navigate("listen_together_from_topbar") }) {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.group_outlined),
+                                                        contentDescription = stringResource(R.string.together)
+                                                    )
+                                                }
+                                            }
                                             Box {
                                                 var showSettingsDropdown by remember { mutableStateOf(false) }
                                                 IconButton(onClick = { 
@@ -952,8 +1103,8 @@ class MainActivity : ComponentActivity() {
                                         },
                                         scrollBehavior = topAppBarScrollBehavior,
                                         colors = TopAppBarDefaults.topAppBarColors(
-                                            containerColor = if (tintedRoute) Color.Transparent else pageColor,
-                                            scrolledContainerColor = if (tintedRoute) Color.Transparent else pageColor,
+                                            containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
+                                            scrolledContainerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
                                             titleContentColor = MaterialTheme.colorScheme.onSurface,
                                             actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                             navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -995,13 +1146,17 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val onSearchLongClick: () -> Unit = remember(navController) {
-                                { }
+                                {
+                                    navController.navigate("recognition") {
+                                        launchSingleTop = true
+                                    }
+                                }
                             }
 
                             // Pre-calculate values for graphicsLayer to avoid reading state during composition
                             val navBarTotalHeight = bottomInset + NavigationBarHeight
 
-                            if (!showRail && currentRoute != "wrapped" && currentRoute != "update") {
+                            if (!showRail && currentRoute != "wrapped" && currentRoute != "update" && currentRoute != "listen_together/chat") {
                                 Box {
                                     BottomSheetPlayer(
                                         state = playerBottomSheetState,
@@ -1080,7 +1235,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             } else {
-                                if (currentRoute != "wrapped" && currentRoute != "update") {
+                                if (currentRoute != "wrapped" && currentRoute != "update" && currentRoute != "listen_together/chat") {
                                     BottomSheetPlayer(
                                         state = playerBottomSheetState,
                                         navController = navController,
@@ -1104,22 +1259,6 @@ class MainActivity : ComponentActivity() {
                         },
                         modifier = Modifier
                             .fillMaxSize()
-                            .then(
-                                if (tintedRoute) {
-                                    Modifier
-                                        .background(pageColor)
-                                        .drawBehind {
-                                            drawRect(
-                                                Brush.verticalGradient(
-                                                    0f to tintTop.copy(alpha = 0.30f),
-                                                    0.42f to tintMiddle.copy(alpha = 0.14f),
-                                                    1f to Color.Transparent,
-                                                    endY = 430.dp.toPx()
-                                                )
-                                            )
-                                        }
-                                } else Modifier
-                            )
                             .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
                     ) {
                         Row(Modifier.fillMaxSize()) {
@@ -1147,7 +1286,11 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val onRailSearchLongClick: () -> Unit = remember(navController) {
-                                { }
+                                {
+                                    navController.navigate("recognition") {
+                                        launchSingleTop = true
+                                    }
+                                }
                             }
 
                             if (showRail && currentRoute != "wrapped" && currentRoute != "update") {
@@ -1166,7 +1309,6 @@ class MainActivity : ComponentActivity() {
                                     startDestination = when (tabOpenedFromShortcut ?: defaultOpenTab) {
                                         NavigationTab.HOME -> Screens.Home
                                         NavigationTab.LIBRARY -> Screens.Library
-                                        NavigationTab.DOWNLOADS -> Screens.Local
                                         else -> Screens.Home
                                     }.route,
                                     // Enter Transition - smoother with smaller offset and longer duration
@@ -1287,6 +1429,16 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_TEXT)
         val coroutineScope = lifecycle.coroutineScope
 
+        val listenCode = uri.getQueryParameter("code")
+            ?: uri.getQueryParameter("room")
+            ?: uri.pathSegments.getOrNull(1)
+        val isListenLink = uri.pathSegments.firstOrNull() == "listen" || uri.host?.equals("listen", ignoreCase = true) == true
+        if (!listenCode.isNullOrBlank() && isListenLink) {
+            val username = dataStore.get(ListenTogetherUsernameKey, "").ifBlank { "Guest" }
+            listenTogetherManager.joinRoom(listenCode, username)
+            return
+        }
+
 
 
         when (val path = uri.pathSegments.firstOrNull()) {
@@ -1385,4 +1537,5 @@ val LocalPlayerConnection = staticCompositionLocalOf<PlayerConnection?> { error(
 val LocalPlayerAwareWindowInsets = compositionLocalOf<WindowInsets> { error("No WindowInsets provided") }
 val LocalDownloadUtil = staticCompositionLocalOf<DownloadUtil> { error("No DownloadUtil provided") }
 val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils provided") }
+val LocalListenTogetherManager = staticCompositionLocalOf<com.music.vivi.listentogether.ListenTogetherManager?> { null }
 val LocalIsPlayerExpanded = compositionLocalOf { false }

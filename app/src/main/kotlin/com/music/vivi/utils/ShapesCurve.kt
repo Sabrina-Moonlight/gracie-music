@@ -16,6 +16,11 @@ import androidx.compose.ui.unit.dp
 private const val ConnectedCornerRadius = 4
 private const val EndCornerRadius = 16
 
+@Composable
+fun listItemColors(): ListItemColors {
+    return ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+}
+
 fun leadingItemShape(): RoundedCornerShape = RoundedCornerShape(
     topStart = EndCornerRadius.dp,
     topEnd = EndCornerRadius.dp,

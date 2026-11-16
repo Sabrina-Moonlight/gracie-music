@@ -78,6 +78,8 @@ import com.music.vivi.constants.EnableYouLyPlusKey
 import com.music.vivi.constants.EnablePaxsenixKey
 import com.music.vivi.constants.EnableUnisonKey
 import com.music.vivi.constants.EnableBiniLyricsKey
+import com.music.vivi.constants.EnableSpotifyLyricsKey
+import com.music.vivi.constants.SpotifySessionKey
 import com.music.vivi.constants.HideExplicitKey
 import com.music.vivi.constants.HideVideoSongsKey
 import com.music.vivi.constants.HideYoutubeShortsKey
@@ -93,11 +95,13 @@ import com.music.vivi.constants.QuickPicks
 import com.music.vivi.constants.QuickPicksKey
 import com.music.vivi.constants.RandomizeHomeOrderKey
 import com.music.vivi.constants.SYSTEM_DEFAULT
+import com.music.vivi.constants.ShowArtistDescriptionKey
 import com.music.vivi.constants.ShowArtistSubscriberCountKey
 import com.music.vivi.constants.ShowMonthlyListenersKey
 import com.music.vivi.constants.ShowArtistVideoKey
 import com.music.vivi.constants.ShowArtistBackgroundVideoKey
 import com.music.vivi.constants.ShowWrappedCardKey
+import com.music.vivi.constants.TopSize
 import com.music.vivi.ui.component.EnumDialog
 import com.music.vivi.ui.component.IconButton
 import com.music.vivi.ui.component.ExpressiveSettingGroup
@@ -111,7 +115,6 @@ import com.music.innertube.models.IpVersion
 import com.music.vivi.constants.IpVersionKey
 
 import com.music.vivi.constants.LyricsPrioritizeSyncAccuracyKey
-import com.music.vivi.constants.LyricsPreloadCountKey
 import com.music.vivi.lyrics.LyricsProviderRegistry
 import com.music.vivi.ui.component.DraggableLyricsProviderItem
 import com.music.vivi.ui.component.DraggableLyricsProviderList
@@ -179,8 +182,11 @@ fun ContentSettings(
     val (hideVideoSongs, onHideVideoSongsChange) = rememberPreference(key = HideVideoSongsKey, defaultValue = false)
 
     val (hideYoutubeShorts, onHideYoutubeShortsChange) = rememberPreference(key = HideYoutubeShortsKey, defaultValue = false)
+    val (showArtistDescription, onShowArtistDescriptionChange) = rememberPreference(key = ShowArtistDescriptionKey, defaultValue = true)
     val (showArtistSubscriberCount, onShowArtistSubscriberCountChange) = rememberPreference(key = ShowArtistSubscriberCountKey, defaultValue = true)
     val (showMonthlyListeners, onShowMonthlyListenersChange) = rememberPreference(key = ShowMonthlyListenersKey, defaultValue = true)
+    val (showArtistVideo, onShowArtistVideoChange) = rememberPreference(key = ShowArtistVideoKey, defaultValue = true)
+    val (showArtistBackgroundVideo, onShowArtistBackgroundVideoChange) = rememberPreference(key = ShowArtistBackgroundVideoKey, defaultValue = true)
     val (proxyEnabled, onProxyEnabledChange) = rememberPreference(key = ProxyEnabledKey, defaultValue = false)
     val (proxyType, onProxyTypeChange) = rememberEnumPreference(key = ProxyTypeKey, defaultValue = Proxy.Type.HTTP)
     val (proxyUrl, onProxyUrlChange) = rememberPreference(key = ProxyUrlKey, defaultValue = "host:port")
@@ -195,12 +201,15 @@ fun ContentSettings(
     val (enablePaxsenix, onEnablePaxsenixChange) = rememberPreference(key = EnablePaxsenixKey, defaultValue = true)
     val (enableUnison, onEnableUnisonChange) = rememberPreference(key = EnableUnisonKey, defaultValue = true)
     val (enableBiniLyrics, onEnableBiniLyricsChange) = rememberPreference(key = EnableBiniLyricsKey, defaultValue = true)
+    val (enableSpotifyLyrics, onEnableSpotifyLyricsChange) = rememberPreference(key = EnableSpotifyLyricsKey, defaultValue = false)
+    val (spotifySessionJson, _) = rememberPreference(key = SpotifySessionKey, defaultValue = "")
+    val isSpotifySignedIn = spotifySessionJson.isNotBlank()
     val (lyricsProviderOrder, onLyricsProviderOrderChange) = rememberPreference(
         key = LyricsProviderOrderKey,
         defaultValue = "",
     )
     val (lyricsPrioritizeSyncAccuracy, onLyricsPrioritizeSyncAccuracyChange) = rememberPreference(key = LyricsPrioritizeSyncAccuracyKey, defaultValue = true)
-    val (lyricsPreloadCount, onLyricsPreloadCountChange) = rememberPreference(key = LyricsPreloadCountKey, defaultValue = 3)
+    val (lengthTop, onLengthTopChange) = rememberPreference(key = TopSize, defaultValue = "50")
     val (quickPicks, onQuickPicksChange) = rememberEnumPreference(key = QuickPicksKey, defaultValue = QuickPicks.QUICK_PICKS)
     val (showWrappedCard, onShowWrappedCardChange) = rememberPreference(key = ShowWrappedCardKey, defaultValue = false)
     val (randomizeHomeOrder, onRandomizeHomeOrderChange) = rememberPreference(
@@ -211,6 +220,7 @@ fun ContentSettings(
         IpVersionKey,
         defaultValue = IpVersion.AUTO
     )
+    val (albumCanvasEnabled, onAlbumCanvasEnabledChange) = rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = false)
 
     var showPlaybackLogsDialog by rememberSaveable { mutableStateOf(false) }
     var showSuggestionSheet by rememberSaveable { mutableStateOf(false) }
@@ -406,7 +416,7 @@ fun ContentSettings(
     if (showProviderPriorityDialog) {
         val defaultOrder = LyricsProviderRegistry.getDefaultProviderOrder()
         // User-toggleable provider names (excludes always-on YouTube providers)
-        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "Musixmatch", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics")
+        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "Musixmatch", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics", "Spotify")
         val enabledProviders = setOfNotNull(
             "LrcLib".takeIf { enableLrclib },
             "LrcRed".takeIf { enableLrcRed },
@@ -417,6 +427,7 @@ fun ContentSettings(
             "Paxsenix".takeIf { enablePaxsenix },
             "Unison".takeIf { enableUnison },
             "BiniLyrics".takeIf { enableBiniLyrics },
+            "Spotify".takeIf { enableSpotifyLyrics },
         )
 
         // Build a normalized order: saved order first (only known providers), then any missing ones
@@ -570,36 +581,36 @@ fun ContentSettings(
         )
     }
 
-    var showLyricsPreloadDialog by rememberSaveable {
+    var showTopLengthDialog by rememberSaveable {
         mutableStateOf(false)
     }
 
-    if (showLyricsPreloadDialog) {
-        var tempPreload by rememberSaveable { mutableFloatStateOf(lyricsPreloadCount.toFloat()) }
+    if (showTopLengthDialog) {
+        var tempLength by rememberSaveable { mutableFloatStateOf(lengthTop.toFloat()) }
 
         AlertDialog(
-            onDismissRequest = { showLyricsPreloadDialog = false },
-            title = { Text(stringResource(R.string.lyrics_preload)) },
+            onDismissRequest = { showTopLengthDialog = false },
+            title = { Text(stringResource(R.string.top_length)) },
             text = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(tempPreload.toInt().toString())
+                    Text(tempLength.toInt().toString())
                     Slider(
-                        value = tempPreload,
-                        onValueChange = { tempPreload = it },
-                        valueRange = 1f..10f,
-                        steps = 8
+                        value = tempLength,
+                        onValueChange = { tempLength = it },
+                        valueRange = 1f..100f,
+                        steps = 98
                     )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onLyricsPreloadCountChange(tempPreload.toInt())
-                        showLyricsPreloadDialog = false
+                        onLengthTopChange(tempLength.toInt().toString())
+                        showTopLengthDialog = false
                     }
                 ) {
                     Text(stringResource(R.string.save))
@@ -660,7 +671,7 @@ fun ContentSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.language),
                     title = { Text(stringResource(R.string.content_language)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             if (contentLanguage == SYSTEM_DEFAULT) stringResource(R.string.system_default)
                             else LanguageCodeToName.getOrElse(contentLanguage) { stringResource(R.string.system_default) }
@@ -671,7 +682,7 @@ fun ContentSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.location_on),
                     title = { Text(stringResource(R.string.content_country)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             if (contentCountry == SYSTEM_DEFAULT) stringResource(R.string.system_default)
                             else CountryCodeToName.getOrElse(contentCountry) { stringResource(R.string.system_default) }
@@ -682,7 +693,7 @@ fun ContentSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.globe_location_pin),
                     title = { Text("Suggestions Region") },
-                    trailingContent = {
+                    description = {
                         Text(
                             SuggestionRegionSlugToName.getOrElse(suggestionRegion) { "Global Charts" }
                         )
@@ -780,6 +791,26 @@ fun ContentSettings(
             title = stringResource(R.string.artist_page_settings),
             items = listOf(
                 Material3SettingsItem(
+                    icon = painterResource(R.drawable.info),
+                    title = { Text(stringResource(R.string.show_artist_description)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showArtistDescription,
+                            onCheckedChange = onShowArtistDescriptionChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showArtistDescription) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowArtistDescriptionChange(!showArtistDescription) }
+                ),
+                Material3SettingsItem(
                     icon = painterResource(R.drawable.person),
                     title = { Text(stringResource(R.string.show_artist_subscriber_count)) },
                     trailingContent = {
@@ -819,6 +850,75 @@ fun ContentSettings(
                     },
                     onClick = { onShowMonthlyListenersChange(!showMonthlyListeners) }
                 ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.slow_motion_video),
+                    title = { Text(stringResource(R.string.show_artist_video)) },
+                    description = { Text(stringResource(R.string.show_artist_video_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showArtistVideo,
+                            onCheckedChange = onShowArtistVideoChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showArtistVideo) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowArtistVideoChange(!showArtistVideo) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.slow_motion_video),
+                    title = { Text(stringResource(R.string.show_artist_background_video)) },
+                    description = { Text(stringResource(R.string.show_artist_background_video_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showArtistBackgroundVideo,
+                            onCheckedChange = onShowArtistBackgroundVideoChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showArtistBackgroundVideo) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowArtistBackgroundVideoChange(!showArtistBackgroundVideo) }
+                )
+            )
+        )
+
+        ExpressiveSettingGroup(
+            title = stringResource(R.string.album_text),
+            items = listOf(
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.slow_motion_video),
+                    title = { Text(stringResource(R.string.show_album_canvas)) },
+                    description = { Text(stringResource(R.string.show_album_canvas_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = albumCanvasEnabled,
+                            onCheckedChange = onAlbumCanvasEnabledChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (albumCanvasEnabled) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onAlbumCanvasEnabledChange(!albumCanvasEnabled) }
+                )
             )
         )
 
@@ -1028,6 +1128,29 @@ fun ContentSettings(
                     onClick = { onEnableMusixmatchChange(!enableMusixmatch) }
                 ),
                 Material3SettingsItem(
+                    icon = painterResource(R.drawable.spotify),
+                    title = { Text("Spotify Lyrics") },
+                    description = { Text("Requires Spotify account login (via sp_dc cookie)") },
+                    enabled = isSpotifySignedIn,
+                    trailingContent = {
+                        Switch(
+                            checked = enableSpotifyLyrics && isSpotifySignedIn,
+                            onCheckedChange = onEnableSpotifyLyricsChange,
+                            enabled = isSpotifySignedIn,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (enableSpotifyLyrics) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onEnableSpotifyLyricsChange(!enableSpotifyLyrics) }
+                ),
+                Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
                     title = { Text("YouLyPlus") },
                     description = { Text("LyricsPlus multi-server provider (YouLy+ extension backend)") },
@@ -1138,13 +1261,6 @@ fun ContentSettings(
                     },
                     onClick = { onLyricsPrioritizeSyncAccuracyChange(!lyricsPrioritizeSyncAccuracy) }
                 ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.lyrics),
-                    title = { Text(stringResource(R.string.lyrics_preload)) },
-                    description = { Text(stringResource(R.string.lyrics_preload_desc)) },
-                    trailingContent = { Text(lyricsPreloadCount.toString()) },
-                    onClick = { showLyricsPreloadDialog = true }
-                ),
 
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.language_korean_latin),
@@ -1208,9 +1324,15 @@ fun ContentSettings(
                     onClick = { onRandomizeHomeOrderChange(!randomizeHomeOrder) }
                 ),
                 Material3SettingsItem(
+                    icon = painterResource(R.drawable.trending_up),
+                    title = { Text(stringResource(R.string.top_length)) },
+                    description = { Text(lengthTop) },
+                    onClick = { showTopLengthDialog = true }
+                ),
+                Material3SettingsItem(
                     icon = painterResource(R.drawable.home_outlined),
                     title = { Text(stringResource(R.string.set_quick_picks)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (quickPicks) {
                                 QuickPicks.QUICK_PICKS -> stringResource(R.string.quick_picks)

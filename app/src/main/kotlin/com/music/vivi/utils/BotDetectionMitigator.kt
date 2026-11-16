@@ -57,6 +57,18 @@ object BotDetectionMitigator {
     )
 
     /**
+     * Call this when a playback error occurs.
+     * Returns true if rotation might help (looks like bot detection).
+     */
+    fun notifyPlaybackFailure(isLoggedIn: Boolean, errorMessage: String? = null): Boolean {
+        if (isLoggedIn) return false
+        if (isGeoError(errorMessage)) return false
+
+        failureCount.incrementAndGet()
+        return true
+    }
+
+    /**
      * Call this when a track starts playing successfully.
      */
     fun notifyPlaybackSuccess() {
@@ -105,6 +117,15 @@ object BotDetectionMitigator {
         if (message == null) return false
         val lower = message.lowercase()
         return GEO_ERROR_SIGNATURES.any { lower.contains(it.lowercase()) }
+    }
+
+    /**
+     * Returns true if message matches known bot-detection signatures.
+     */
+    fun isBotDetectionError(message: String?): Boolean {
+        if (message == null) return false
+        val lower = message.lowercase()
+        return BOT_ERROR_SIGNATURES.any { lower.contains(it.lowercase()) }
     }
 
     fun reset() {

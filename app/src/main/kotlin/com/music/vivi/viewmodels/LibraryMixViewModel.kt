@@ -15,6 +15,7 @@ import com.music.vivi.constants.MixSortType
 import com.music.vivi.constants.MixSortTypeKey
 import com.music.vivi.constants.PlaylistSortType
 import com.music.vivi.constants.SongSortType
+import com.music.vivi.constants.TopSize
 import com.music.vivi.db.MusicDatabase
 import com.music.vivi.db.entities.Album
 import com.music.vivi.db.entities.Artist
@@ -36,7 +37,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.Collator
@@ -86,8 +86,13 @@ constructor(
 
     val searchQuery = MutableStateFlow("")
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    val debouncedSearchQuery = searchQuery.debounce { if (it.isEmpty()) 0L else 250L }
+    val debouncedSearchQuery = searchQuery.debounce(250)
 
+    val topValue =
+        context.dataStore.data
+            .map { it[TopSize] ?: "50" }
+            .distinctUntilChanged()
+            
     val recentLikedThumbnails = database.likedSongs(SongSortType.CREATE_DATE, true)
         .map { songs -> songs.take(3).mapNotNull { it.thumbnailUrl } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -101,14 +106,14 @@ constructor(
             .artistsBookmarked(
                 ArtistSortType.CREATE_DATE,
                 true,
-            ).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+            ).stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     var albums = context.dataStore.data
         .map { it[HideExplicitKey] ?: false }
         .distinctUntilChanged()
         .flatMapLatest { hideExplicit ->
             database.albumsLiked(AlbumSortType.CREATE_DATE, true).map { it.filterExplicitAlbums(hideExplicit) }
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val recentAlbumsThumbnails = context.dataStore.data
         .map { it[HideExplicitKey] ?: false }
@@ -127,7 +132,7 @@ constructor(
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val playlists = database.playlists(PlaylistSortType.CREATE_DATE, true)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
 
 
@@ -159,10 +164,6 @@ constructor(
                 }
             }
         }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    private val _isLibraryLoaded = MutableStateFlow(false)
-    /** Pasa a true cuando la lista de la librería ya emitió por primera vez. */
-    val isLibraryLoaded: StateFlow<Boolean> = _isLibraryLoaded
 
     val filteredUiItems = combine(
         artists, albums, playlists, debouncedSearchQuery, sortSettings
@@ -238,8 +239,7 @@ constructor(
         }
         result
     }.flowOn(Dispatchers.Default)
-     .onEach { _isLibraryLoaded.value = true }
-     .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+     .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
         viewModelScope.launch(Dispatchers.IO) {

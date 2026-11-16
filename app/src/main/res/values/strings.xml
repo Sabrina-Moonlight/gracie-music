@@ -10,8 +10,6 @@
     <!-- Bottom navigation -->
     <string name="home">Home</string>
     <string name="music">Music</string>
-    <string name="gracie_home_title">Gracie\'s Home</string>
-    <string name="gracie_library_title">Gracie\'s Library</string>
     <string name="songs">Songs</string>
     <string name="artists">Artists</string>
     <string name="albums">Albums</string>
@@ -384,6 +382,7 @@
     <string name="preview">Preview</string>
     <string name="enable_discord_rpc">Enable Rich Presence</string>
 
+    <string name="about">About</string>
     <string name="app_version">App version</string>
 
     <string name="new_version_available">New version available</string>
@@ -402,6 +401,8 @@
     <string name="bluetooth_headphones">Bluetooth headphones</string>
     <string name="license">GNU License 3.0</string>
     <string name="standard_lyrics_blur">Standard lyrics blur</string>
+    <string name="listen_together_smart_resync">Smart Network Resync</string>
+    <string name="listen_together_smart_resync_desc">Automatically catch up with the host after a connection drop</string>
 
     <!-- JioSaavn Streaming -->
     <string name="enable_saavn_streaming">Enable JioSaavn Streaming</string>
@@ -459,9 +460,6 @@
     <string name="library_syncing">Syncing library…</string>
     <string name="library_sync_done">Library synced successfully</string>
     <string name="library_sync_error">Sync failed — tap to retry</string>
-    <string name="lyrics_preload">Preload lyrics</string>
-    <string name="lyrics_preload_desc">Search lyrics in the background for the current song and the next ones in the queue</string>
-    <string name="lyrics_cache">Lyrics Cache</string>
-    <string name="clear_lyrics_cache">Clear lyrics cache</string>
-    <string name="clear_lyrics_cache_dialog">All saved lyrics will be deleted. They will be downloaded again when needed.</string>
+    <string name="listening_summary">Listening summary</string>
+    <string name="setting_listening_summary_desc">View your daily listening trends and historical playback analytics.</string>
 </resources>

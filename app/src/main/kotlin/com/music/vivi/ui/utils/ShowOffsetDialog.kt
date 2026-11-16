@@ -39,7 +39,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.music.vivi.constants.DefaultLyricsOffsetMs
 import com.music.vivi.LocalDatabase
 import com.music.vivi.R
 import com.music.vivi.db.entities.SongEntity
@@ -50,13 +49,12 @@ import kotlinx.coroutines.FlowPreview
 fun ShowOffsetDialog(songProvider: () -> SongEntity?) {
     val database = LocalDatabase.current
     val song = songProvider()
-    // Se muestra el offset real (guardado + base de 100 ms).
-    var lyricsOffset by rememberSaveable { mutableIntStateOf((song?.lyricsOffset ?: 0) + DefaultLyricsOffsetMs) }
+    var lyricsOffset by rememberSaveable { mutableIntStateOf(song?.lyricsOffset ?: 0) }
     var textFieldValue by rememberSaveable { mutableStateOf(lyricsOffset.toString()) }
 
     LaunchedEffect(song?.id) {
         song?.let {
-            lyricsOffset = it.lyricsOffset + DefaultLyricsOffsetMs
+            lyricsOffset = it.lyricsOffset
             textFieldValue = lyricsOffset.toString()
         }
     }
@@ -66,7 +64,7 @@ fun ShowOffsetDialog(songProvider: () -> SongEntity?) {
             database.query {
                 upsert(
                     song.copy(
-                        lyricsOffset = lyricsOffset - DefaultLyricsOffsetMs
+                        lyricsOffset = lyricsOffset
                     )
                 )
             }
@@ -171,13 +169,13 @@ fun ShowOffsetDialog(songProvider: () -> SongEntity?) {
                 fontWeight = FontWeight.Medium
             )
 
-            if (lyricsOffset != DefaultLyricsOffsetMs) {
+            if (lyricsOffset != 0) {
                 Spacer(Modifier.width(8.dp))
 
                 IconButton(
                     onClick = {
-                        lyricsOffset = DefaultLyricsOffsetMs
-                        textFieldValue = DefaultLyricsOffsetMs.toString()
+                        lyricsOffset = 0
+                        textFieldValue = "0"
                     }
                 ) {
                     Icon(

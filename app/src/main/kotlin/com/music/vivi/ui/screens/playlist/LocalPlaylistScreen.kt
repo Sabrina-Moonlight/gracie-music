@@ -37,9 +37,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -49,7 +46,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.SnackbarHost
@@ -90,7 +86,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -153,6 +148,7 @@ import com.music.vivi.ui.component.SongListItem
 import com.music.vivi.ui.component.SortHeader
 import com.music.vivi.ui.component.TextFieldDialog
 import com.music.vivi.ui.menu.CustomThumbnailMenu
+import com.music.vivi.ui.component.ExpandableText
 import com.music.vivi.ui.menu.LocalPlaylistMenu
 import com.music.vivi.ui.menu.SelectionSongMenu
 import com.music.vivi.ui.menu.SongMenu
@@ -471,6 +467,12 @@ fun LocalPlaylistScreen(
         }
     }
 
+    val showTopBarTitle by remember {
+        derivedStateOf {
+            lazyListState.firstVisibleItemIndex > 0
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -757,6 +759,8 @@ fun LocalPlaylistScreen(
                             .fillMaxWidth()
                             .focusRequester(focusRequester)
                     )
+                } else if (showTopBarTitle) {
+                    Text(playlist?.playlist?.name.orEmpty())
                 }
             },
             navigationIcon = {
@@ -781,19 +785,7 @@ fun LocalPlaylistScreen(
                             if (!isSearching) {
                                 navController.backToMain()
                             }
-                        },
-                        colors = IconButtonDefaults.outlinedIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
-                        ),
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .border(
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                                ),
-                                shape = CircleShape
-                            )
+                        }
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.arrow_back),
@@ -840,25 +832,7 @@ fun LocalPlaylistScreen(
                 } else if (!isSearching) {
                     // Only search button remains in TopAppBar
                     IconButton(
-                        onClick = { isSearching = true },
-                        // El relleno se dibuja en el mismo tamaño que el aro (48dp);
-                        // el del botón solo medía 40dp y dejaba un hueco.
-                        colors = IconButtonDefaults.outlinedIconButtonColors(
-                            containerColor = Color.Transparent
-                        ),
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                                shape = CircleShape
-                            )
-                            .border(
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                                ),
-                                shape = CircleShape
-                            )
+                        onClick = { isSearching = true }
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.search),
@@ -866,8 +840,7 @@ fun LocalPlaylistScreen(
                         )
                     }
                 }
-            },
-            colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            }
         )
 
         SnackbarHost(
@@ -1399,6 +1372,68 @@ fun LocalPlaylistHeader(
                     )
                 }
             }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        val staticDescription = remember(songCount, playlistLength) {
+            val name = playlist.playlist.name
+            val trackCountText = context.resources.getQuantityString(R.plurals.n_song, songCount, songCount)
+            "$name is a custom playlist featuring $trackCountText.${
+                if (playlistLength > 0) " Combined duration is ${makeTimeString(playlistLength * 1000L)}." else ""
+            }"
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.about_playlist),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            ExpandableText(
+                text = staticDescription,
+                runs = null,
+                collapsedMaxLines = 3
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetadataChip(
+    icon: Int,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
     }
 }

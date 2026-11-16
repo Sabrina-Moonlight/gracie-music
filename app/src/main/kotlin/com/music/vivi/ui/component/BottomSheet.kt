@@ -96,7 +96,7 @@ fun BottomSheet(
                     },
                     onDragCancel = {
                         velocityTracker.resetTracking()
-                        state.settleToAnchor()
+                        state.performFling(0f, onDismiss)
                     },
                     onDragEnd = {
                         val velocity = -velocityTracker.calculateVelocity().y
@@ -152,12 +152,7 @@ class BottomSheetState(
     private val animatable: Animatable<Dp, AnimationVector1D>,
     private val onAnchorChanged: (Int) -> Unit,
     val collapsedBound: Dp,
-    initialAnchor: Int = dismissedAnchor,
 ) : DraggableState by draggableState {
-    // Hacia dónde está (o va) la hoja: abierta, pequeña u oculta. No cambia mientras se arrastra.
-    var targetAnchor by mutableIntStateOf(initialAnchor)
-        private set
-
     val dismissedBound: Dp
         get() = animatable.lowerBound!!
 
@@ -183,7 +178,6 @@ class BottomSheetState(
     }
 
     fun collapse(animationSpec: AnimationSpec<Dp>) {
-        targetAnchor = collapsedAnchor
         onAnchorChanged(collapsedAnchor)
         coroutineScope.launch {
             animatable.animateTo(collapsedBound, animationSpec)
@@ -191,7 +185,6 @@ class BottomSheetState(
     }
 
     fun expand(animationSpec: AnimationSpec<Dp>) {
-        targetAnchor = expandedAnchor
         onAnchorChanged(expandedAnchor)
         coroutineScope.launch {
             animatable.animateTo(animatable.upperBound!!, animationSpec)
@@ -215,20 +208,15 @@ class BottomSheetState(
     }
 
     fun dismiss() {
-        targetAnchor = dismissedAnchor
         onAnchorChanged(dismissedAnchor)
         coroutineScope.launch {
             animatable.animateTo(animatable.lowerBound!!)
         }
     }
     
-    /** Si un arrastre se cancela (por ejemplo con el gesto de ir al inicio), vuelve a donde estaba. */
-    fun settleToAnchor() {
-        when (targetAnchor) {
-            expandedAnchor -> expandSoft()
-            dismissedAnchor -> dismiss()
-            else -> collapseSoft()
-        }
+    suspend fun dismissAndWait() {
+        onAnchorChanged(dismissedAnchor)
+        animatable.animateTo(animatable.lowerBound!!)
     }
 
     fun snapTo(value: Dp) {
@@ -249,8 +237,8 @@ class BottomSheetState(
             }
         } else {
             val l0 = dismissedBound
-            val l1 = (collapsedBound - dismissedBound) / 2
-            val l2 = (expandedBound - collapsedBound) / 2
+            val l1 = (dismissedBound + collapsedBound) / 2
+            val l2 = (collapsedBound + expandedBound) / 2
             val l3 = expandedBound
 
             when (value) {
@@ -365,8 +353,7 @@ fun rememberBottomSheetState(
             onAnchorChanged = { previousAnchor = it },
             coroutineScope = coroutineScope,
             animatable = animatable,
-            collapsedBound = collapsedBound,
-            initialAnchor = previousAnchor,
+            collapsedBound = collapsedBound
         )
     }
 }

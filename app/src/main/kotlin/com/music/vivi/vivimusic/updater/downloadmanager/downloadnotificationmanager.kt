@@ -29,16 +29,16 @@ object DownloadNotificationManager {
     private const val NOTIFICATION_ID = 5678
 
     fun initialize(context: Context) {
-        appContext = context
-        notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        appContext = context.applicationContext
+        notificationManager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                context.getString(R.string.download_progress_channel),
+                appContext.getString(R.string.download_progress_channel),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = context.getString(R.string.download_progress_description)
+                description = appContext.getString(R.string.download_progress_description)
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 enableVibration(false)
@@ -107,6 +107,13 @@ object DownloadNotificationManager {
             .build()
 
         notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * Cancel/dismiss the notification
+     */
+    fun cancelNotification() {
+        notificationManager.cancel(NOTIFICATION_ID)
     }
 
     // ============ Modern Implementation (Android 16+) ============

@@ -39,7 +39,6 @@ import com.music.vivi.constants.PlayerButtonsStyle
 import com.music.vivi.constants.PlayerButtonsStyleKey
 import com.music.vivi.constants.DarkModeKey
 import com.music.vivi.ui.screens.settings.DarkMode
-import androidx.compose.animation.animateColorAsState
 import com.music.vivi.constants.QueueEditLockKey
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
@@ -67,6 +66,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.alpha
+import com.music.vivi.LocalListenTogetherManager
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QueueV2(
@@ -87,7 +87,9 @@ fun QueueV2(
     val queueTitle by playerConnection.queueTitle.collectAsState()
     val radioChips by playerConnection.radioChips.collectAsState()
     
-    val isGuest = false
+    val listenTogetherManager = LocalListenTogetherManager.current
+    val listenTogetherRoleState = listenTogetherManager?.role?.collectAsState(initial = com.music.vivi.listentogether.RoomRole.NONE)
+    val isGuest = listenTogetherRoleState?.value == com.music.vivi.listentogether.RoomRole.GUEST
     
     var locked by rememberPreference(QueueEditLockKey, true)
     
@@ -120,7 +122,7 @@ fun QueueV2(
 
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
-        defaultValue = PlayerBackgroundStyle.GRADIENT
+        defaultValue = PlayerBackgroundStyle.LIVE_MESH
     )
     val playerButtonsStyle by rememberEnumPreference(
         key = PlayerButtonsStyleKey,
@@ -138,7 +140,7 @@ fun QueueV2(
     val lazyListState = rememberLazyListState()
     
     // Scroll direction tracking
-    var previousIndex by remember { mutableIntStateOf(0) }
+    var previousIndex by remember { mutableIntStateOf(currentWindowIndex) }
     var previousScrollOffset by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(lazyListState) {
@@ -388,36 +390,12 @@ fun QueueV2(
 
         // Queue Header Row
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    if (queueTitle != null) {
-                        Text(
-                            text = stringResource(R.string.playing_from),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = adaptiveSecondary
-                        )
-                        Text(
-                            text = queueTitle!!,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = adaptivePrimary,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.queue),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = adaptivePrimary
-                        )
-                    }
-                }
-            }
+            Text(
+                text = stringResource(R.string.queue),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = adaptivePrimary
+            )
             
             if (radioChips.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))

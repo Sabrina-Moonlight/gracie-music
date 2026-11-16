@@ -59,10 +59,13 @@ import androidx.navigation.NavController
 import com.music.vivi.LocalPlayerAwareWindowInsets
 import com.music.vivi.R
 
+import com.music.vivi.constants.CanvasThumbnailAnimationKey
+import com.music.vivi.constants.ChipSortTypeKey
 import com.music.vivi.constants.CropAlbumArtKey
 import com.music.vivi.constants.DefaultOpenTabKey
 import com.music.vivi.constants.DensityScale
 import com.music.vivi.constants.DensityScaleKey
+import com.music.vivi.constants.DynamicThemeKey
 import com.music.vivi.constants.EnableDynamicIconKey
 import com.music.vivi.constants.EnableHighRefreshRateKey
 import com.music.vivi.constants.EnableLyricsThumbnailPlayPauseKey
@@ -71,6 +74,8 @@ import com.music.vivi.constants.GridItemsSizeKey
 import com.music.vivi.constants.HidePlayerThumbnailKey
 import com.music.vivi.constants.ShowPlayerThumbnailShadowKey
 import com.music.vivi.constants.PlayerThumbnailShadowElevationKey
+import com.music.vivi.constants.LibraryFilter
+import com.music.vivi.constants.ListenTogetherInTopBarKey
 import com.music.vivi.constants.LyricsAnimationStyle
 import com.music.vivi.constants.LyricsAnimationStyleKey
 import com.music.vivi.constants.LyricsStandardBlurKey
@@ -85,6 +90,10 @@ import com.music.vivi.constants.RotatingThumbnailKey
 import com.music.vivi.constants.SelectedThemeColorKey
 import com.music.vivi.constants.SelectedFontKey
 import com.music.vivi.constants.AppFont
+import com.music.vivi.constants.ShowCachedPlaylistKey
+import com.music.vivi.constants.ShowDownloadedPlaylistKey
+import com.music.vivi.constants.ShowLikedPlaylistKey
+import com.music.vivi.constants.ShowTopPlaylistKey
 import com.music.vivi.constants.SliderStyle
 import com.music.vivi.constants.SliderStyleKey
 import com.music.vivi.constants.FloatingNavBarKey
@@ -192,12 +201,13 @@ fun AppearanceSettings(
     )
     val (usePlayerV2, onUsePlayerV2Change) = rememberPreference(
         com.music.vivi.constants.UsePlayerV2Key,
-        defaultValue = false
+        defaultValue = true
     )
     
     val currentPlayerDesign = remember(useNewPlayerDesign, usePlayerV2) {
         when {
             usePlayerV2 -> PlayerDesignOption.V2
+            useNewPlayerDesign -> PlayerDesignOption.NEW
             else -> PlayerDesignOption.CLASSIC
         }
     }
@@ -246,7 +256,7 @@ fun AppearanceSettings(
     val (playerBackground, onPlayerBackgroundChange) =
         rememberEnumPreference(
             PlayerBackgroundStyleKey,
-            defaultValue = PlayerBackgroundStyle.GRADIENT,
+            defaultValue = PlayerBackgroundStyle.LIVE_MESH,
         )
     val (miniPlayerBackground, onMiniPlayerBackgroundChange) =
         rememberEnumPreference(
@@ -337,6 +347,11 @@ fun AppearanceSettings(
         showRestartDialog = true
     }
 
+    val (listenTogetherInTopBar, onListenTogetherInTopBarChange) = rememberPreference(
+        ListenTogetherInTopBarKey,
+        defaultValue = true
+    )
+
     val (swipeToSong, onSwipeToSongChange) = rememberPreference(
         SwipeToSongKey,
         defaultValue = false
@@ -347,15 +362,29 @@ fun AppearanceSettings(
         defaultValue = false
     )
 
+    val (showLikedPlaylist, onShowLikedPlaylistChange) = rememberPreference(
+        ShowLikedPlaylistKey,
+        defaultValue = true
+    )
+    val (showDownloadedPlaylist, onShowDownloadedPlaylistChange) = rememberPreference(
+        ShowDownloadedPlaylistKey,
+        defaultValue = true
+    )
+    val (showTopPlaylist, onShowTopPlaylistChange) = rememberPreference(
+        ShowTopPlaylistKey,
+        defaultValue = true
+    )
+    val (showCachedPlaylist, onShowCachedPlaylistChange) = rememberPreference(
+        ShowCachedPlaylistKey,
+        defaultValue = true
+    )
     val (showCommentButton, onShowCommentButtonChange) = rememberPreference(
         ShowCommentButtonKey,
         defaultValue = true
     )
 
     val availableBackgroundStyles = PlayerBackgroundStyle.entries.filter {
-        val blurSupported = it != PlayerBackgroundStyle.BLUR || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        val notAppleOnV2 = !(it == PlayerBackgroundStyle.APPLE_MUSIC && currentPlayerDesign == PlayerDesignOption.V2)
-        blurSupported && notAppleOnV2
+        it != PlayerBackgroundStyle.BLUR || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     }
 
     val availableMiniPlayerBackgroundStyles = availableBackgroundStyles.filter { 
@@ -379,12 +408,13 @@ fun AppearanceSettings(
                         onUsePlayerV2Change(false)
                         onUseNewPlayerDesignChange(false)
                     }
+                    PlayerDesignOption.NEW -> {
+                        onUsePlayerV2Change(false)
+                        onUseNewPlayerDesignChange(true)
+                    }
                     PlayerDesignOption.V2 -> {
                         onUsePlayerV2Change(true)
                         onUseNewPlayerDesignChange(false)
-                        if (playerBackground == PlayerBackgroundStyle.APPLE_MUSIC) {
-                            onPlayerBackgroundChange(PlayerBackgroundStyle.DEFAULT)
-                        }
                     }
                 }
                 showPlayerDesignDialog = false
@@ -395,6 +425,7 @@ fun AppearanceSettings(
             valueText = {
                 when (it) {
                     PlayerDesignOption.CLASSIC -> stringResource(R.string.classic_player)
+                    PlayerDesignOption.NEW -> stringResource(R.string.new_player_design)
                     PlayerDesignOption.V2 -> stringResource(R.string.player_v2)
                 }
             }
@@ -725,7 +756,6 @@ fun AppearanceSettings(
                     NavigationTab.HOME -> stringResource(R.string.home)
                     NavigationTab.SEARCH -> stringResource(R.string.search)
                     NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
-                    NavigationTab.DOWNLOADS -> stringResource(R.string.local_music_title)
                 }
             }
         )
@@ -1100,9 +1130,10 @@ fun AppearanceSettings(
                     Material3SettingsItem(
                         icon = painterResource(R.drawable.alphabet_cyrillic),
                         title = { Text(stringResource(R.string.app_font)) },
-                        trailingContent = {
+                        description = {
                             val fontLabel = when (AppFont.fromValue(selectedFontValue)) {
                                 AppFont.SYSTEM -> stringResource(R.string.font_system)
+                                AppFont.SF_PRO -> stringResource(R.string.font_sf_pro)
                                 AppFont.OUTFIT -> stringResource(R.string.font_outfit)
                                 AppFont.PLUS_JAKARTA_SANS -> stringResource(R.string.font_plus_jakarta_sans)
                                 AppFont.CUSTOM -> stringResource(R.string.font_custom)
@@ -1178,7 +1209,7 @@ fun AppearanceSettings(
                     Material3SettingsItem(
                         icon = painterResource(R.drawable.nav_bar),
                         title = { Text(stringResource(R.string.mini_player)) },
-                        trailingContent = {
+                        description = {
                             Text(
                                 text = when (currentMiniPlayerDesign) {
                                     MiniPlayerDesignOption.CLASSIC -> stringResource(R.string.classic_mini_player)
@@ -1216,7 +1247,7 @@ fun AppearanceSettings(
                     Material3SettingsItem(
                         icon = painterResource(R.drawable.palette),
                         title = { Text(stringResource(R.string.miniplayer_background_style)) },
-                        trailingContent = {
+                        description = {
                             Text(
                                 when (miniPlayerBackground) {
                                     PlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
@@ -1250,10 +1281,11 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.palette),
                     title = { Text(stringResource(R.string.player_design)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (currentPlayerDesign) {
                                 PlayerDesignOption.CLASSIC -> stringResource(R.string.classic_player)
+                                PlayerDesignOption.NEW -> stringResource(R.string.new_player_design)
                                 PlayerDesignOption.V2 -> stringResource(R.string.player_v2)
                             }
                         )
@@ -1263,7 +1295,7 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.gradient),
                     title = { Text(stringResource(R.string.player_background_style)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (playerBackground) {
                                 PlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
@@ -1403,7 +1435,7 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.palette),
                     title = { Text(stringResource(R.string.player_buttons_style)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (playerButtonsStyle) {
                                 PlayerButtonsStyle.DEFAULT -> stringResource(R.string.default_style)
@@ -1417,7 +1449,7 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.sliders),
                     title = { Text(stringResource(R.string.player_slider_style)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (sliderStyle) {
                                 SliderStyle.DEFAULT -> stringResource(R.string.default_)
@@ -1498,7 +1530,7 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.tune),
                     title = { Text(stringResource(R.string.swipe_sensitivity)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             stringResource(
                                 R.string.sensitivity_percentage,
@@ -1643,7 +1675,7 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
                     title = { Text(stringResource(R.string.lyrics_text_position)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (lyricsPosition) {
                                 LyricsPosition.LEFT -> stringResource(R.string.left)
@@ -1745,13 +1777,13 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
                     title = { Text(stringResource(R.string.lyrics_text_size)) },
-                    trailingContent = { Text("${lyricsTextSize.roundToInt()} sp") },
+                    description = { Text("${lyricsTextSize.roundToInt()} sp") },
                     onClick = { showLyricsTextSizeDialog = true }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
                     title = { Text(stringResource(R.string.lyrics_line_spacing)) },
-                    trailingContent = { Text("${String.format("%.1f", lyricsLineSpacing)}x") },
+                    description = { Text("${String.format("%.1f", lyricsLineSpacing)}x") },
                     onClick = { showLyricsLineSpacingDialog = true }
                 ),
                 Material3SettingsItem(
@@ -1847,13 +1879,12 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.nav_bar),
                     title = { Text(stringResource(R.string.default_open_tab)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (defaultOpenTab) {
                                 NavigationTab.HOME -> stringResource(R.string.home)
                                 NavigationTab.SEARCH -> stringResource(R.string.search)
                                 NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
-                    NavigationTab.DOWNLOADS -> stringResource(R.string.local_music_title)
                             }
                         )
                     },
@@ -1942,9 +1973,30 @@ fun AppearanceSettings(
                     onClick = { onFloatingNavBarChange(!floatingNavBar) }
                 ),
                 Material3SettingsItem(
+                    icon = painterResource(R.drawable.group_outlined),
+                    title = { Text(stringResource(R.string.listen_together_in_top_bar)) },
+                    description = { Text(stringResource(R.string.listen_together_in_top_bar_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = listenTogetherInTopBar,
+                            onCheckedChange = onListenTogetherInTopBarChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (listenTogetherInTopBar) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onListenTogetherInTopBarChange(!listenTogetherInTopBar) }
+                ),
+                Material3SettingsItem(
                     icon = painterResource(R.drawable.grid_view),
                     title = { Text(stringResource(R.string.grid_cell_size)) },
-                    trailingContent = {
+                    description = {
                         Text(
                             when (gridItemSize) {
                                 GridItemSize.BIG -> stringResource(R.string.big)
@@ -1957,7 +2009,7 @@ fun AppearanceSettings(
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.grid_view),
                     title = { Text(stringResource(R.string.display_density)) },
-                    trailingContent = {
+                    description = {
                         Text(DensityScale.fromValue(densityScale).label)
                     },
                     onClick = { showDensityScaleDialog = true }
@@ -1965,6 +2017,93 @@ fun AppearanceSettings(
             )
         )
 
+        Spacer(modifier = Modifier.height(27.dp))
+
+        ExpressiveSettingGroup(
+            title = stringResource(R.string.auto_playlists),
+            items = listOf(
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.favorite),
+                    title = { Text(stringResource(R.string.show_liked_playlist)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showLikedPlaylist,
+                            onCheckedChange = onShowLikedPlaylistChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showLikedPlaylist) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowLikedPlaylistChange(!showLikedPlaylist) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.offline),
+                    title = { Text(stringResource(R.string.show_downloaded_playlist)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showDownloadedPlaylist,
+                            onCheckedChange = onShowDownloadedPlaylistChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showDownloadedPlaylist) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowDownloadedPlaylistChange(!showDownloadedPlaylist) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.trending_up),
+                    title = { Text(stringResource(R.string.show_top_playlist)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showTopPlaylist,
+                            onCheckedChange = onShowTopPlaylistChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showTopPlaylist) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowTopPlaylistChange(!showTopPlaylist) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.cached),
+                    title = { Text(stringResource(R.string.show_cached_playlist)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showCachedPlaylist,
+                            onCheckedChange = onShowCachedPlaylistChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showCachedPlaylist) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowCachedPlaylistChange(!showCachedPlaylist) }
+                )
+            )
+        )
         Spacer(modifier = Modifier.height(16.dp))
     }
 
@@ -1994,7 +2133,6 @@ enum class NavigationTab {
     HOME,
     SEARCH,
     LIBRARY,
-    DOWNLOADS,
 }
 
 enum class LyricsPosition {
@@ -2003,9 +2141,15 @@ enum class LyricsPosition {
     RIGHT,
 }
 
+enum class PlayerTextAlignment {
+    SIDED,
+    CENTER,
+}
+
 
 enum class PlayerDesignOption {
     CLASSIC
+    ,NEW
     ,V2
 }
 

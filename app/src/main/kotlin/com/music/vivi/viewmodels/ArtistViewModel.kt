@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.music.vivi.extensions.filterVideoSongs as filterVideoSongsLocal
+import com.music.vivi.artistvideo.AppleMusicArtistBackgroundProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -50,7 +51,11 @@ class ArtistViewModel @Inject constructor(
     val artistId = savedStateHandle.get<String>("artistId")!!
     var artistPage by mutableStateOf<ArtistPage?>(null)
     
+    private val _artistVideoUrl = MutableStateFlow<String?>(null)
+    val artistVideoUrl: StateFlow<String?> = _artistVideoUrl
 
+    private val _artistVideoSong = MutableStateFlow<com.music.innertube.models.SongItem?>(null)
+    val artistVideoSong: StateFlow<com.music.innertube.models.SongItem?> = _artistVideoSong
     
     val libraryArtist = database.artist(artistId)
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
@@ -101,6 +106,12 @@ class ArtistViewModel @Inject constructor(
                         .filter { section -> section.items.isNotEmpty() }
                     artistPage = page.copy(sections = filteredSections)
                     
+                    val artistVideo = AppleMusicArtistBackgroundProvider.getByArtistName(page.artist?.title ?: "")
+                    if (artistVideo != null) {
+                        _artistVideoUrl.value = artistVideo
+                        _artistVideoSong.value = page.sections.firstOrNull()?.items?.filterIsInstance<com.music.innertube.models.SongItem>()?.firstOrNull()
+                    }
+
                 }.onFailure {
                     reportException(it)
                 }

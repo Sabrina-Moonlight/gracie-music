@@ -176,14 +176,13 @@ object LrcRedLyricsProvider : LyricsProvider {
      * Parses Apple Music TTML into LRC format. 
      * Expects <p begin="MM:SS.mmm"> or <p begin="SS.mmm"> pattern.
      */
-    internal fun parseTtmlToLrc(rawTtml: String): String {
+    private fun parseTtmlToLrc(rawTtml: String): String {
         // Strip BOM and clean formatting
         val ttml = rawTtml.replace("\uFEFF", "")
         
         val pRegex = Regex("""<p([^>]*)>(.*?)</p>""", RegexOption.DOT_MATCHES_ALL)
         val tokenRegex = Regex("""(<[^>]+>)|([^<]+)""")
         val beginRegex = Regex("""begin="([^"]+)"""")
-        val endRegex = Regex("""\bend="([^"]+)"""")
         val roleRegex = Regex("""(?:ttm:role|role)="([^"]+)"""")
         val agentRegex = Regex("""(?:ttm:agent|agent)="([^"]+)"""")
         
@@ -195,7 +194,6 @@ object LrcRedLyricsProvider : LyricsProvider {
                 val pBeginStr = beginRegex.find(pAttrs)?.groupValues?.get(1) ?: continue
                 val lineStartMs = timeToMs(pBeginStr) ?: continue
                 val agent = agentRegex.find(pAttrs)?.groupValues?.get(1)
-                val pEndMs = endRegex.find(pAttrs)?.groupValues?.get(1)?.let { timeToMs(it) }
                 
                 val fgPieces = mutableListOf<Pair<Long, String>>()
                 val bgPieces = mutableListOf<Pair<Long, String>>()
@@ -205,9 +203,6 @@ object LrcRedLyricsProvider : LyricsProvider {
                 val bgStack = mutableListOf<Boolean>()
                 val skipStack = mutableListOf<Boolean>()
                 val timeStack = mutableListOf<Long>()
-                val endStack = mutableListOf<Long?>()
-                var fgEndMs = 0L
-                var bgEndMs = 0L
                 
                 for (tokenMatch in tokenRegex.findAll(innerHtml)) {
                     val tag = tokenMatch.groupValues[1]
@@ -217,7 +212,6 @@ object LrcRedLyricsProvider : LyricsProvider {
                         if (tag.startsWith("</")) {
                             if (bgStack.isNotEmpty()) bgStack.removeLast()
                             if (skipStack.isNotEmpty()) skipStack.removeLast()
-                            if (endStack.isNotEmpty()) endStack.removeLast()
                             if (timeStack.isNotEmpty()) {
                                 timeStack.removeLast()
                                 currentSpanMs = timeStack.lastOrNull() ?: lineStartMs
@@ -230,10 +224,6 @@ object LrcRedLyricsProvider : LyricsProvider {
                             bgStack.add(isBg || (bgStack.lastOrNull() ?: false))
                             skipStack.add(isSkip || (skipStack.lastOrNull() ?: false))
                             
-                            endStack.add(
-                                endRegex.find(tag)?.groupValues?.get(1)?.let { timeToMs(it) }
-                                    ?: endStack.lastOrNull()
-                            )
                             val tBegin = beginRegex.find(tag)?.groupValues?.get(1)
                             if (tBegin != null) {
                                 val tMs = timeToMs(tBegin)
@@ -250,39 +240,18 @@ object LrcRedLyricsProvider : LyricsProvider {
                         val isBackground = bgStack.lastOrNull() == true
                         val cleanText = text.replace(Regex("""\s+"""), " ")
                         if (cleanText.isNotEmpty()) {
-                            val pieceEnd = endStack.lastOrNull() ?: 0L
-                            if (isBackground) {
-                                bgPieces.add(currentSpanMs to cleanText)
-                                if (cleanText.isNotBlank()) bgEndMs = maxOf(bgEndMs, pieceEnd)
-                            } else {
-                                fgPieces.add(currentSpanMs to cleanText)
-                                if (cleanText.isNotBlank()) fgEndMs = maxOf(fgEndMs, pieceEnd)
-                            }
+                            if (isBackground) bgPieces.add(currentSpanMs to cleanText)
+                            else fgPieces.add(currentSpanMs to cleanText)
                         }
                     }
                 }
                 
-                fun buildLine(pieces: List<Pair<Long, String>>, isBg: Boolean, endMs: Long) {
+                fun buildLine(pieces: List<Pair<Long, String>>, isBg: Boolean) {
                     if (pieces.isEmpty()) return
                     val sb = java.lang.StringBuilder()
                     
                     if (isBg) sb.append("{bg}")
                     if (agent != null) sb.append("{agent:$agent}")
-                    
-                    // Si la línea no trae tiempos por palabra (una sola marca para varias
-                    // palabras), se escribe como línea normal. Si no, la app creería que es
-                    // letra por letra y rellenaría toda la línea de golpe.
-                    val timed = pieces.filter { it.second.isNotBlank() }
-                    if (timed.isEmpty()) return
-                    val hasWordTimes = timed.map { it.first }.distinct().size > 1 ||
-                        timed.joinToString("") { it.second }.trim().none { it.isWhitespace() }
-                    if (!hasWordTimes) {
-                        val plain = pieces.joinToString("") { it.second }.trim()
-                        if (plain.isNotEmpty()) {
-                            getOrPut(lineStartMs) { mutableListOf() }.add(sb.toString() + plain)
-                        }
-                        return
-                    }
                     
                     var lastMs = -1L
                     for ((ms, text) in pieces) {
@@ -296,21 +265,14 @@ object LrcRedLyricsProvider : LyricsProvider {
                         }
                         sb.append(text)
                     }
-                    // Marca de fin de línea (como YouLyPlus): sin ella la app cree que la
-                    // última palabra dura hasta la siguiente línea y no muestra el círculo de espera.
-                    val lastStart = timed.last().first
-                    val lineEnd = if (endMs > lastStart) endMs else (pEndMs ?: 0L)
-                    var richText = sb.toString().trim()
-                    if (richText.isNotEmpty() && lineEnd > lastStart) {
-                        richText += "<${formatTime(lineEnd)}>"
-                    }
+                    val richText = sb.toString().trim()
                     if (richText.isNotEmpty()) {
                         getOrPut(lineStartMs) { mutableListOf() }.add(richText)
                     }
                 }
                 
-                buildLine(fgPieces, false, fgEndMs)
-                buildLine(bgPieces, true, bgEndMs)
+                buildLine(fgPieces, false)
+                buildLine(bgPieces, true)
             }
         }.entries.sortedBy { it.key }
         
@@ -324,7 +286,7 @@ object LrcRedLyricsProvider : LyricsProvider {
     private fun formatTime(ms: Long): String {
         val minutes = (ms / 60000).toString().padStart(2, '0')
         val seconds = ((ms % 60000) / 1000).toString().padStart(2, '0')
-        val millis = (ms % 1000).toString().padStart(3, '0')
+        val millis = ((ms % 1000) / 10).toString().padStart(2, '0')
         return "$minutes:$seconds.$millis"
     }
 
