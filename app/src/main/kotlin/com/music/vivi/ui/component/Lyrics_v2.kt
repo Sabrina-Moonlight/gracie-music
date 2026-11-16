@@ -30,8 +30,7 @@ import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.music.vivi.LocalDatabase
 import com.music.vivi.LocalPlayerConnection
-import com.music.vivi.LocalListenTogetherManager
-import com.music.vivi.lyrics.LyricsTranslationHelper
+import com.music.vivi.lyrics.LastLyricsCache
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.constants.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,6 +81,7 @@ import com.music.vivi.ui.component.LyricsImageCard
 import com.music.vivi.ui.component.LyricsBackgroundStyle
 
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -106,7 +106,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlin.math.roundToInt
 
-private const val LYRICS_ANCHOR_RATIO = 0.42f
+private const val LYRICS_ANCHOR_RATIO = 0.40f
+private const val LYRICS_ANCHOR_RATIO_CONTROLS_VISIBLE = 0.28f
 private val LYRICS_ITEM_FALLBACK_HEIGHT_DP = 68.dp
 private val LYRICS_ITEM_GAP_DP = 16.dp
 private val LYRICS_FADE_TOP_DP = 130.dp
@@ -140,8 +141,9 @@ fun LyricsV2(
     sliderPositionProvider: () -> Long? = { null },
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    initialLyrics: LyricsEntity? = null,
-    onControlsVisibilityChange: (Boolean) -> Unit = {}
+    playerCoordinates: androidx.compose.ui.layout.LayoutCoordinates? = null,
+    onControlsVisibilityChange: (Boolean) -> Unit = {},
+    controlsVisible: Boolean = false
 ) {
     if (!showLyrics) return
 
@@ -191,10 +193,12 @@ fun LyricsV2(
             exitSelection()
         }
     }
-    val currentLyrics by playerConnection.currentLyrics.collectAsState(initial = initialLyrics)
-    
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
+    val appContext = LocalContext.current
+    val currentLyrics by playerConnection.currentLyrics.collectAsState(
+        initial = LastLyricsCache.lyricsFor(appContext, mediaMetadata?.id)
+    )
+    // Solo en pantalla (no en la base de datos): la búsqueda de respaldo terminó sin letra
+    var searchGaveNothing by remember(mediaMetadata?.id) { mutableStateOf(false) }
 
     val scrollLyrics by rememberPreference(LyricsScrollKey, true)
     
@@ -213,18 +217,6 @@ fun LyricsV2(
     val romanizeHindiLyrics by rememberPreference(LyricsRomanizeHindiKey, true)
     val romanizePunjabiLyrics by rememberPreference(LyricsRomanizePunjabiKey, true)
 
-    val openRouterApiKey by rememberPreference(OpenRouterApiKey, "")
-    val deeplApiKey by rememberPreference(DeeplApiKey, "")
-    val aiProvider by rememberPreference(AiProviderKey, "OpenRouter")
-    val openRouterBaseUrl by rememberPreference(OpenRouterBaseUrlKey, "https://openrouter.ai/api/v1/chat/completions")
-    val openRouterModel by rememberPreference(OpenRouterModelKey, "google/gemini-2.5-flash-lite")
-    val translateLanguage by rememberPreference(TranslateLanguageKey, "en")
-    val translateMode by rememberPreference(TranslateModeKey, "Literal")
-    val deeplFormality by rememberPreference(DeeplFormalityKey, "default")
-
-    val translationStatus by LyricsTranslationHelper.status.collectAsState()
-    val hasActiveTranslations by LyricsTranslationHelper.hasActiveTranslations.collectAsState()
-
     val playerBackground by com.music.vivi.utils.rememberEnumPreference(
         key = com.music.vivi.constants.PlayerBackgroundStyleKey,
         defaultValue = com.music.vivi.constants.PlayerBackgroundStyle.LIVE_MESH
@@ -237,16 +229,8 @@ fun LyricsV2(
     val database = LocalDatabase.current
     val coroutineScope = rememberCoroutineScope()
     val currentSong by playerConnection.currentSong.collectAsState(initial = null)
-    val lyricsOffset = (currentSong?.song?.lyricsOffset ?: 0).toLong()
+    val lyricsOffset = currentSong.effectiveLyricsOffsetMs().toLong()
     val showRomanized = currentSong?.song?.romanizeLyrics ?: true
-
-    DisposableEffect(Unit) {
-        LyricsTranslationHelper.setCompositionActive(true)
-        onDispose {
-            LyricsTranslationHelper.setCompositionActive(false)
-            LyricsTranslationHelper.cancelTranslation()
-        }
-    }
 
     // Keep screen on while lyrics are visible
     DisposableEffect(showLyrics) {
@@ -270,18 +254,34 @@ fun LyricsV2(
                     )
                     val lyricsHelper = entryPoint.lyricsHelper()
                     val fetchedLyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
-                    database.query {
-                        upsert(
-                            LyricsEntity(
-                                mediaMetadata.id,
-                                fetchedLyricsWithProvider.lyrics,
-                                fetchedLyricsWithProvider.provider
+                    val fetched = fetchedLyricsWithProvider.lyrics
+                    if (fetched.isBlank() || fetched == LYRICS_NOT_FOUND) {
+                        // Puede ser un fallo de red o lentitud: no se graba en la base de datos
+                        searchGaveNothing = true
+                    } else {
+                        database.query {
+                            upsert(
+                                LyricsEntity(
+                                    mediaMetadata.id,
+                                    fetched,
+                                    fetchedLyricsWithProvider.provider
+                                )
                             )
-                        )
+                        }
                     }
                 } catch (e: Exception) {
                     // Handle error silently
                 }
+            }
+        }
+    }
+
+    LaunchedEffect(currentLyrics, mediaMetadata?.id) {
+        val entry = currentLyrics
+        val meta = mediaMetadata
+        if (entry != null && meta != null && entry.id == meta.id) {
+            withContext(Dispatchers.IO) {
+                LastLyricsCache.save(appContext, meta.id, entry.lyrics, entry.provider, meta.thumbnailUrl)
             }
         }
     }
@@ -291,11 +291,11 @@ fun LyricsV2(
         contentAlignment = Alignment.Center
     ) {
         when {
-            lyrics == null -> {
+            lyrics == null && !searchGaveNothing -> {
                 ContainedLoadingIndicator()
             }
 
-            lyrics == LYRICS_NOT_FOUND -> {
+            lyrics == null || lyrics == LYRICS_NOT_FOUND -> {
                 Text(
                     text = "Lyrics not found",
                     style = MaterialTheme.typography.bodyLarge,
@@ -380,49 +380,6 @@ fun LyricsV2(
                     }
                 }
                 
-                LaunchedEffect(lines, currentLyrics, translateLanguage, translateMode) {
-                    if (lines.isNotEmpty() && currentLyrics != null) {
-                        LyricsTranslationHelper.loadTranslationsFromDatabase(
-                            lyrics = lines,
-                            lyricsEntity = currentLyrics,
-                            targetLanguage = translateLanguage,
-                            mode = translateMode
-                        )
-                    }
-                }
-                
-                LaunchedEffect(showLyrics, lines.size) {
-                    LyricsTranslationHelper.manualTrigger.collect {
-                        val effectiveApiKey = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
-                        if (showLyrics && lines.isNotEmpty() && effectiveApiKey.isNotBlank()) {
-                            LyricsTranslationHelper.translateLyrics(
-                                lyrics = lines,
-                                targetLanguage = translateLanguage,
-                                apiKey = openRouterApiKey,
-                                baseUrl = openRouterBaseUrl,
-                                model = openRouterModel,
-                                mode = translateMode,
-                                scope = coroutineScope,
-                                context = context,
-                                provider = aiProvider,
-                                deeplApiKey = deeplApiKey,
-                                deeplFormality = deeplFormality,
-                                useStreaming = true,
-                                songId = mediaMetadata?.id ?: "",
-                                database = database
-                            )
-                        } else if (effectiveApiKey.isBlank()) {
-                            Toast.makeText(context, context.getString(R.string.ai_api_key_required), Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-
-                LaunchedEffect(Unit) {
-                    LyricsTranslationHelper.clearTranslationsTrigger.collect {
-                        lines.forEach { it.translatedTextFlow.value = null }
-                    }
-                }
-
                 val isLyricsProviderShown = currentLyrics?.provider != null && currentLyrics?.provider != "Unknown"
 
                 // If plain text (not synced), render selectable list
@@ -812,12 +769,34 @@ fun LyricsV2(
 
                 val density = LocalDensity.current
 
+                var zoneTopInPlayerPx by remember { mutableStateOf(0f) }
+                var playerHeightPx by remember { mutableStateOf(0f) }
+                val isAtLyricsStart = mergedLyricsList.firstOrNull() is LyricsListItemV2.Indicator && activeListIndex <= 0
+
                 BoxWithConstraints(
                     contentAlignment = Alignment.TopCenter,
-                    modifier = Modifier.fillMaxSize().padding(bottom = 12.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 12.dp)
+                        .onGloballyPositioned { zone ->
+                            val player = playerCoordinates
+                            if (player != null && player.isAttached && zone.isAttached) {
+                                zoneTopInPlayerPx = player.localPositionOf(zone, androidx.compose.ui.geometry.Offset.Zero).y
+                                playerHeightPx = player.size.height.toFloat()
+                            }
+                        }
                 ) {
                     val maxHeightPx = constraints.maxHeight.toFloat()
-                    val anchorY = maxHeightPx * LYRICS_ANCHOR_RATIO
+                    val anchorRatio = if (controlsVisible || isAtLyricsStart) {
+                        LYRICS_ANCHOR_RATIO_CONTROLS_VISIBLE
+                    } else {
+                        LYRICS_ANCHOR_RATIO
+                    }
+                    val anchorY = if (playerHeightPx > 0f) {
+                        (playerHeightPx * anchorRatio - zoneTopInPlayerPx).coerceIn(0f, maxHeightPx)
+                    } else {
+                        maxHeightPx * anchorRatio
+                    }
                     val lineHeightPx = with(density) { LYRICS_ITEM_FALLBACK_HEIGHT_DP.toPx() }
                     val constraintLineHeightPx = with(density) { 120.dp.toPx() }
 
@@ -1128,7 +1107,7 @@ fun LyricsV2(
                                                     lyricsTextPosition = LyricsPosition.LEFT,
                                                     textColor = adaptivePrimary,
                                                     showRomanized = showRomanized,
-                                                    showTranslated = hasActiveTranslations,
+                                                    showTranslated = false, // se quita en F4 parte 3 (MetroLyrics)
                                                     isAutoScrollActive = isAutoScrollEnabled,
                                                     isSelectionModeActive = isSelectionModeActive,
                                                     isSelected = isSelected,
@@ -1137,7 +1116,7 @@ fun LyricsV2(
                                                     onClick = {
                                                         if (isSelectionModeActive) {
                                                             toggleSelection(index)
-                                                        } else if (!isGuest) {
+                                                        } else {
                                                             playerConnection.seekTo((line.time - lyricsOffset).coerceAtLeast(0))
                                                             scrollTargetIndex = index
                                                             isAutoScrollEnabled = true
@@ -1173,111 +1152,6 @@ fun LyricsV2(
                         }
                     }
                 }
-
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .zIndex(1f)
-                            .padding(top = 56.dp)
-                    ) {
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(),
-                            exit = fadeOut()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                when (val status = translationStatus) {
-                                    is LyricsTranslationHelper.TranslationStatus.Translating -> {
-                                        Card(
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                                            ),
-                                            shape = RoundedCornerShape(16.dp),
-                                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                androidx.compose.material3.CircularProgressIndicator(
-                                                    modifier = Modifier.size(16.dp),
-                                                    strokeWidth = 2.dp,
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                                )
-                                                Text(
-                                                    text = stringResource(R.string.ai_translating_lyrics),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                                )
-                                            }
-                                        }
-                                    }
-                                    is LyricsTranslationHelper.TranslationStatus.Error -> {
-                                        Card(
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.errorContainer
-                                            ),
-                                            shape = RoundedCornerShape(16.dp),
-                                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.error),
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                                Text(
-                                                    text = status.message,
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                                )
-                                            }
-                                        }
-                                    }
-                                    is LyricsTranslationHelper.TranslationStatus.Success -> {
-                                        Card(
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                                            ),
-                                            shape = RoundedCornerShape(16.dp),
-                                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.check),
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                                Text(
-                                                    text = stringResource(R.string.ai_lyrics_translated),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                                )
-                                            }
-                                        }
-                                    }
-                                    is LyricsTranslationHelper.TranslationStatus.Idle -> {
-                                        // No status display
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     Box(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)

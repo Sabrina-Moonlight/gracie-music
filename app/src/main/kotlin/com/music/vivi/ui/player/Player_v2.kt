@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -192,6 +193,7 @@ fun PlayerV2(
     // ── 2. Controles que se ocultan (solo LYRICS) ──
     val lyricsKeepControls by rememberPreference(LyricsKeepControlsKey, defaultValue = false)
     var controlsVisible by remember { mutableStateOf(true) }
+    var playerCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     var lastInteractionTime by remember { mutableLongStateOf(0L) }
     var hideDelayMs by remember { mutableLongStateOf(1500L) }
     LaunchedEffect(playerState) { hideDelayMs = 1500L }
@@ -525,6 +527,7 @@ fun PlayerV2(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .onGloballyPositioned { playerCoordinates = it }
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -734,7 +737,9 @@ fun PlayerV2(
                                                 positionProvider = { sliderPosition ?: position },
                                                 sliderPositionProvider = { sliderPosition },
                                                 modifier = Modifier.fillMaxSize(),
-                                                onControlsVisibilityChange = { controlsVisible = it }
+                                                playerCoordinates = playerCoordinates,
+                                                onControlsVisibilityChange = { controlsVisible = it },
+                                                controlsVisible = controlsVisible
                                             )
                                         } else {
                                             QueueV2(
