@@ -5,6 +5,13 @@
 
 package com.music.vivi.ui.player
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.graphics.TransformOrigin
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -708,6 +715,21 @@ fun BottomSheetPlayer(
             else MaterialTheme.colorScheme.surfaceContainer
     }
 
+    // Fondo del V2 con letras: se reinicia la deriva del blur al cerrar las letras
+    val lyricsOpen = usePlayerV2 && PlayerV2Backdrop.lyricsOpen
+    val lyricsProgress by animateFloatAsState(
+        targetValue = if (lyricsOpen) 1f else 0f,
+        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        label = "lyricsBackdropProgress"
+    )
+    var wanderEpoch by remember { mutableIntStateOf(0) }
+    LaunchedEffect(lyricsOpen) {
+        if (!lyricsOpen) {
+            snapshotFlow { lyricsProgress }.first { it <= 0f }
+            wanderEpoch++
+        }
+    }
+
     val backgroundAlpha = state.progress.coerceIn(0f, 1f)
 
     BottomSheet(
@@ -719,35 +741,7 @@ fun BottomSheetPlayer(
                     .fillMaxSize()
                     .background(bottomSheetBackgroundColor)
             ) {
-                if (spotifyCanvasUrl != null && !usePlayerV2) {
-                    val overlayAlpha by animateFloatAsState(
-                        targetValue = if (showInlineLyrics) 0.85f else 0.4f,
-                        label = "canvasDimmer"
-                    )
-                    androidx.compose.animation.AnimatedContent(
-                        targetState = spotifyCanvasUrl,
-                        transitionSpec = { fadeIn(tween(800)) togetherWith fadeOut(tween(800)) },
-                        label = "spotifyCanvasBackground"
-                    ) { url ->
-                        if (url != null) {
-                            Box(modifier = Modifier.fillMaxSize().alpha(backgroundAlpha)) {
-                                if (backgroundAlpha > 0.01f) {
-                                    BackgroundVideoView(
-                                        videoUrl = url,
-                                        isPlaying = isPlaying,
-                                        resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = overlayAlpha))
-                                )
-                            }
-                        }
-                    }
-                } else when (playerBackground) {
+                when (playerBackground) {
                     PlayerBackgroundStyle.BLUR -> {
                         AnimatedContent(
                             targetState = mediaMetadata?.thumbnailUrl,
@@ -757,30 +751,88 @@ fun BottomSheetPlayer(
                             label = "blurBackground"
                         ) { thumbnailUrl ->
                             if (thumbnailUrl != null) {
-                                Box(
+                                BoxWithConstraints(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .alpha(backgroundAlpha)
                                 ) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(thumbnailUrl)
-                                            .size(100, 100) // Lower resolution for better performance
-                                            .crossfade(600)
-                                            .allowHardware(false)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.FillBounds,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .blur(120.dp) // hardware-efficient native Compose blur on small image
-                                    )
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(Color.Black.copy(alpha = 0.30f))
-                                    )
+                                    if (usePlayerV2) {
+                                        // Fondo del reproductor V2 (estilo Natune)
+                                        val maxDrift = movingBlurWanderMaxDriftDp(maxWidth, maxHeight) * 0.6f
+                                        val drift = rememberBlurWanderDrift(
+                                            active = false,
+                                            maxDriftDp = maxDrift,
+                                            resetKey = wanderEpoch
+                                        )
+                                        val footprint = blurBackdropFootprint(
+                                            width = maxWidth,
+                                            height = maxHeight,
+                                            restScale = 1.2f,
+                                            driftScale = 1.8f,
+                                            maxDriftDp = maxDrift
+                                        )
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context)
+                                                    .data(thumbnailUrl)
+                                                    .size(200, 200)
+                                                    .crossfade(600)
+                                                    .allowHardware(false)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .requiredSize(footprint)
+                                                    .graphicsLayer {
+                                                        scaleX = 1.2f
+                                                        scaleY = 1.2f
+                                                        translationX = drift.offsetXDp * density
+                                                        translationY = drift.offsetYDp * density
+                                                        compositingStrategy = CompositingStrategy.Offscreen
+                                                    }
+                                                    .blur(64.dp)
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        0.0f to Color.Black.copy(alpha = 0.15f),
+                                                        0.5f to Color.Black.copy(alpha = 0.28f),
+                                                        1.0f to Color.Black.copy(alpha = 0.50f)
+                                                    )
+                                                )
+                                        )
+                                    } else {
+                                        // Fondo blur clásico (reproductor no V2)
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(thumbnailUrl)
+                                                .size(128, 128)
+                                                .crossfade(600)
+                                                .allowHardware(false)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.FillBounds,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .blur(150.dp)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        0.0f to Color.Black.copy(alpha = 0.05f),
+                                                        1.0f to Color.Black.copy(alpha = 0.40f)
+                                                    )
+                                                )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1055,14 +1107,6 @@ fun BottomSheetPlayer(
                                             modifier = Modifier.fillMaxSize()
                                         )
 
-                                        if (enableCanvas && canvasArtwork != null && backgroundAlpha > 0.01f) {
-                                            BackgroundVideoView(
-                                                videoUrl = canvasArtwork?.animatedTall ?: canvasArtwork?.animated ?: canvasArtwork?.videoUrl ?: "",
-                                                isPlaying = isPlaying,
-                                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        }
                                     }
                                     
 
@@ -1071,9 +1115,103 @@ fun BottomSheetPlayer(
                         }
                     }
                     PlayerBackgroundStyle.LIVE_MESH -> {
-                        if (backgroundAlpha > 0.01f) {
-                            val thumbnailUrl = mediaMetadata?.thumbnailUrl
-                            AndroidView<BlendView>(factory = { ctx -> BlendView(ctx) }, update = { blendView -> if (isPlaying) blendView.startRotationAnimation() else blendView.stopRotationAnimation(); blendView.setImageUrl(thumbnailUrl) }, modifier = Modifier.fillMaxSize())
+                        AnimatedContent(
+                            targetState = mediaMetadata?.thumbnailUrl,
+                            transitionSpec = {
+                                fadeIn(tween(1500)).togetherWith(fadeOut(tween(1500)))
+                            },
+                            label = "liveMeshBackground"
+                        ) { thumbnailUrl ->
+                            if (thumbnailUrl != null) {
+                                val meshTransition = rememberInfiniteTransition(label = "liveMesh")
+                                val anchorRotation by meshTransition.animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = -360f,
+                                    animationSpec = infiniteRepeatable(tween(80000, easing = LinearEasing)),
+                                    label = "anchorRotation"
+                                )
+                                val fastRotation by meshTransition.animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = 360f,
+                                    animationSpec = infiniteRepeatable(tween(40000, easing = LinearEasing)),
+                                    label = "fastRotation"
+                                )
+                                val slowRotation by meshTransition.animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = 360f,
+                                    animationSpec = infiniteRepeatable(tween(60000, easing = LinearEasing)),
+                                    label = "slowRotation"
+                                )
+                                val saturated = remember {
+                                    ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.8f) })
+                                }
+                                val meshRequest = ImageRequest.Builder(context)
+                                    .data(thumbnailUrl)
+                                    .size(128, 128)
+                                    .allowHardware(false)
+                                    .build()
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .alpha(backgroundAlpha)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                                            .blur(100.dp)
+                                    ) {
+                                        AsyncImage(
+                                            model = meshRequest,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            colorFilter = saturated,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .graphicsLayer {
+                                                    rotationZ = anchorRotation
+                                                    scaleX = 1.7f
+                                                    scaleY = 1.7f
+                                                }
+                                        )
+                                        AsyncImage(
+                                            model = meshRequest,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            colorFilter = saturated,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .graphicsLayer {
+                                                    transformOrigin = TransformOrigin(0.3f, 0.3f)
+                                                    rotationZ = fastRotation
+                                                    scaleX = 1.7f
+                                                    scaleY = 1.7f
+                                                    alpha = 0.5f
+                                                }
+                                        )
+                                        AsyncImage(
+                                            model = meshRequest,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            colorFilter = saturated,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .graphicsLayer {
+                                                    transformOrigin = TransformOrigin(0.7f, 0.7f)
+                                                    rotationZ = slowRotation
+                                                    scaleX = 1.7f
+                                                    scaleY = 1.7f
+                                                    alpha = 0.5f
+                                                }
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.3f))
+                                    )
+                                }
+                            }
                         }
                     }
                     PlayerBackgroundStyle.DEFAULT -> {
