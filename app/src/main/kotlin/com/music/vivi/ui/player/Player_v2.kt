@@ -751,8 +751,326 @@ fun PlayerV2(
                     }
                 }
 
-                // ── PARTE 3 (pendiente): barra de controles (sliders, botones, volumen, Letras/Cast/Cola) ──
+                // ── 4. Barra de controles (parte inferior) ──
+                AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 3 },
+                    exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 3 }
+                ) {
+                    val sliderColors = PlayerSliderColors.getSliderColors(
+                        activeColor = adaptivePrimary.copy(alpha = 0.8f),
+                        playerBackground = playerBackground,
+                        useDarkTheme = useDarkTheme
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Slider de tiempo
+                        val currentPos = sliderPosition ?: position
+                        val timeInteraction = remember { MutableInteractionSource() }
+                        val isTimeDragged by timeInteraction.collectIsDraggedAsState()
+                        val isTimePressed by timeInteraction.collectIsPressedAsState()
+                        val timeTrackHeight by animateDpAsState(
+                            targetValue = if (isTimeDragged || isTimePressed) 14.dp else 8.dp,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            ),
+                            label = "timeTrackHeight"
+                        )
+                        Slider(
+                            value = currentPos.toFloat(),
+                            valueRange = 0f..(if (duration <= 0L) 0f else duration.toFloat()),
+                            onValueChange = { sliderPosition = it.toLong() },
+                            onValueChangeFinished = {
+                                sliderPosition?.let { pos ->
+                                    if (duration > 0L) {
+                                        if (isCasting) {
+                                            castHandler?.seekTo(pos)
+                                            lastManualSeekTime = System.currentTimeMillis()
+                                        } else {
+                                            playerConnection.player.seekTo(pos)
+                                        }
+                                        position = pos
+                                    }
+                                }
+                                sliderPosition = null
+                            },
+                            interactionSource = timeInteraction,
+                            thumb = { Spacer(modifier = Modifier.size(0.dp)) },
+                            track = { sliderState ->
+                                PlayerSliderTrack(
+                                    sliderState = sliderState,
+                                    trackHeight = timeTrackHeight,
+                                    colors = sliderColors
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(28.dp)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = makeTimeString(currentPos),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = adaptiveSecondary
+                            )
+                            Text(
+                                text = "-" + makeTimeString((duration - currentPos).coerceAtLeast(0L)),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = adaptiveSecondary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Anterior · Play/Pausa · Siguiente
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    if (isCasting) castHandler?.skipToPrevious()
+                                    else playerConnection.seekToPrevious()
+                                },
+                                enabled = canSkipPrevious,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .alpha(if (canSkipPrevious) 1f else 0.4f)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.apple_skip_previous),
+                                    contentDescription = "Previous",
+                                    tint = adaptivePrimary,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (isCasting) {
+                                        if (castIsPlaying) castHandler?.pause() else castHandler?.play()
+                                    } else {
+                                        playerConnection.player.togglePlayPause()
+                                    }
+                                },
+                                modifier = Modifier.size(88.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(
+                                        if (effectiveIsPlaying) R.drawable.pause_applemusic else R.drawable.play_applemusic
+                                    ),
+                                    contentDescription = if (effectiveIsPlaying) "Pause" else "Play",
+                                    tint = adaptivePrimary,
+                                    modifier = Modifier.size(80.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (isCasting) castHandler?.skipToNext()
+                                    else playerConnection.seekToNext()
+                                },
+                                enabled = canSkipNext,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .alpha(if (canSkipNext) 1f else 0.4f)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.apple_skip_next),
+                                    contentDescription = "Next",
+                                    tint = adaptivePrimary,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Volumen
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_speaker_24dp),
+                                contentDescription = "Volume Down",
+                                tint = adaptiveSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            val volumeInteraction = remember { MutableInteractionSource() }
+                            val isVolDragged by volumeInteraction.collectIsDraggedAsState()
+                            val isVolPressed by volumeInteraction.collectIsPressedAsState()
+                            val isVolActive = isVolDragged || isVolPressed
+                            val volumeTrackHeight by animateDpAsState(
+                                targetValue = if (isVolActive) 12.dp else 6.dp,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                ),
+                                label = "volumeTrackHeight"
+                            )
+                            Slider(
+                                value = if (isCasting) castVolume
+                                else if (isVolActive) systemVolume
+                                else animatedVolume,
+                                onValueChange = { newValue ->
+                                    if (isCasting) {
+                                        castHandler?.setVolume(newValue)
+                                    } else {
+                                        systemVolume = newValue
+                                        audioManager.setStreamVolume(
+                                            AudioManager.STREAM_MUSIC,
+                                            (newValue * maxSystemVolume).toInt(),
+                                            0
+                                        )
+                                    }
+                                },
+                                interactionSource = volumeInteraction,
+                                thumb = { Spacer(modifier = Modifier.size(0.dp)) },
+                                track = { sliderState ->
+                                    PlayerSliderTrack(
+                                        sliderState = sliderState,
+                                        trackHeight = volumeTrackHeight,
+                                        colors = sliderColors
+                                    )
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.ic_speaker_wave_3_24dp),
+                                contentDescription = "Volume Up",
+                                tint = adaptiveSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Utilidades: Letras · Dispositivo/Cast · Cola
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 24.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val isLyricsActive = playerState == PlayerInternalState.LYRICS
+                            IconButton(
+                                onClick = {
+                                    playerState = if (isLyricsActive) PlayerInternalState.COVER
+                                    else PlayerInternalState.LYRICS
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isLyricsActive) adaptivePrimary.copy(alpha = 0.2f) else Color.Transparent
+                                    )
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.lyrics_apple),
+                                    contentDescription = "Lyrics",
+                                    tint = if (isLyricsActive) adaptivePrimary else adaptiveSecondary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+
+                            // Centro: Bluetooth / Cast / Dispositivo de audio
+                            Box(
+                                modifier = Modifier.size(48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (bluetoothDeviceName != null) {
+                                    IconButton(
+                                        onClick = { showAudioDeviceBottomSheet = true },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.headphones_apple),
+                                            contentDescription = "Audio Device",
+                                            tint = adaptivePrimary,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = bluetoothDeviceName.orEmpty(),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = adaptiveSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .wrapContentWidth(unbounded = true)
+                                            .widthIn(max = 84.dp)
+                                            .offset(y = 30.dp)
+                                    )
+                                } else if (BuildConfig.CAST_AVAILABLE && enableGoogleCast) {
+                                    CastButton(
+                                        modifier = Modifier.size(48.dp),
+                                        tintColor = adaptiveSecondary,
+                                        activeTintColor = adaptivePrimary,
+                                        showBackground = false,
+                                        customIconRes = R.drawable.airplay_audio
+                                    )
+                                } else {
+                                    IconButton(
+                                        onClick = { showAudioDeviceBottomSheet = true },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.airplay_audio),
+                                            contentDescription = "Audio Routing",
+                                            tint = adaptiveSecondary,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            val isQueueActive = playerState == PlayerInternalState.QUEUE
+                            IconButton(
+                                onClick = {
+                                    playerState = if (isQueueActive) PlayerInternalState.COVER
+                                    else PlayerInternalState.QUEUE
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isQueueActive) adaptivePrimary.copy(alpha = 0.2f) else Color.Transparent
+                                    )
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.apple_queue),
+                                    contentDescription = "Queue",
+                                    tint = if (isQueueActive) adaptivePrimary else adaptiveSecondary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showAudioDeviceBottomSheet) {
+        AudioDeviceBottomSheet(onDismiss = { showAudioDeviceBottomSheet = false })
     }
 }
