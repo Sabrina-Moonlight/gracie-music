@@ -13,11 +13,8 @@ import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.room.Room
 import com.music.vivi.constants.MaxSongCacheSizeKey
-import com.music.vivi.constants.MaxSpotifyCanvasCacheSizeKey
 import com.music.vivi.db.InternalDatabase
 import com.music.vivi.db.MusicDatabase
-import com.music.vivi.listentogether.ListenTogetherClient
-import com.music.vivi.listentogether.ListenTogetherManager
 import com.music.vivi.utils.dataStore
 import com.music.vivi.utils.get
 import dagger.Module
@@ -98,35 +95,4 @@ object AppModule {
             databaseProvider
         )
     }
-
-    @Singleton
-    @Provides
-    @SpotifyCanvasCache
-    fun provideSpotifyCanvasCache(
-        @ApplicationContext context: Context,
-        databaseProvider: DatabaseProvider,
-    ): SimpleCache {
-        val cacheSize = context.dataStore[MaxSpotifyCanvasCacheSizeKey] ?: 1024
-        return SimpleCache(
-            context.filesDir.resolve("spotifycanvas"),
-            when (cacheSize) {
-                -1 -> NoOpCacheEvictor()
-                else -> LeastRecentlyUsedCacheEvictor(cacheSize * 1024 * 1024L)
-            },
-            databaseProvider,
-        )
-    }
-
-    @Singleton
-    @Provides
-    fun provideListenTogetherClient(
-        @ApplicationContext context: Context,
-    ): ListenTogetherClient = ListenTogetherClient(context)
-
-    @Singleton
-    @Provides
-    fun provideListenTogetherManager(
-        @ApplicationContext context: Context,
-        client: ListenTogetherClient,
-    ): ListenTogetherManager = ListenTogetherManager(client, context)
 }

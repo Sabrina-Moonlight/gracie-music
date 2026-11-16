@@ -32,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -136,7 +137,32 @@ class PlayerConnection(
         isPlaying.value
     )
     
-    val mediaMetadata = MutableStateFlow<MediaMetadata?>(try { player.currentMetadata } catch (_: Exception) { null })
+    private val appContext: Context = context.applicationContext
+
+    /** true mientras se muestran los datos guardados de la última canción (el servicio aún no restauró la cola). */
+    private val _isShowingCachedMetadata = MutableStateFlow(false)
+    val isShowingCachedMetadata: StateFlow<Boolean> = _isShowingCachedMetadata
+
+    val mediaMetadata = MutableStateFlow<MediaMetadata?>(
+        (try { player.currentMetadata } catch (_: Exception) { null })
+            ?: LastMetadataCache.load(appContext)?.also { _isShowingCachedMetadata.value = true }
+    )
+
+    /**
+     * ÚNICO sitio donde se asigna mediaMetadata.
+     * - Si el player aún no tiene canción (null) y se muestran datos en caché, se conservan.
+     * - Cuando llega un dato real, se apaga la bandera y se guarda para el próximo arranque.
+     */
+    private fun setMetadata(meta: MediaMetadata?) {
+        if (meta == null) {
+            if (_isShowingCachedMetadata.value) return
+            mediaMetadata.value = null
+            return
+        }
+        _isShowingCachedMetadata.value = false
+        mediaMetadata.value = meta
+        LastMetadataCache.save(appContext, meta)
+    }
     fun getNextMediaMetadata(playerInstance: Player = player): MediaMetadata? {
         return try {
             val nextIndex = playerInstance.nextMediaItemIndex
@@ -181,12 +207,6 @@ class PlayerConnection(
 
     val waitingForNetworkConnection = service.waitingForNetworkConnection
     
-    // Callback to check if playback changes should be blocked (e.g., Listen Together guest)
-    var shouldBlockPlaybackChanges: (() -> Boolean)? = null
-    
-    // Flag to allow internal sync operations to bypass blocking (set by ListenTogetherManager)
-    @Volatile
-    var allowInternalSync: Boolean = false
 
     var onSkipPrevious: (() -> Unit)? = null
     var onSkipNext: (() -> Unit)? = null
@@ -208,7 +228,7 @@ class PlayerConnection(
             scope.launch {
                 service.currentMediaMetadata.collect { meta ->
                     if (meta != null && meta.id != mediaMetadata.value?.id) {
-                        mediaMetadata.value = meta
+                        setMetadata(meta)
                         val p = attachedPlayer ?: player
                         currentMediaItemIndex.value = p.currentMediaItemIndex
                         currentWindowIndex.value = p.getCurrentQueueIndex()
@@ -246,7 +266,7 @@ class PlayerConnection(
         playbackState.value = newPlayer.playbackState
         playWhenReady.value = newPlayer.playWhenReady
         val meta = newPlayer.currentMetadata
-        mediaMetadata.value = meta
+        setMetadata(meta)
         queueTitle.value = service.queueTitle
         queueWindows.value = newPlayer.getQueueWindows()
         currentWindowIndex.value = newPlayer.getCurrentQueueIndex()
@@ -261,11 +281,6 @@ class PlayerConnection(
     }
 
     fun playQueue(queue: Queue) {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("playQueue blocked - Listen Together guest")
-            return
-        }
         if (!playerReadinessFlow.value) {
             Timber.tag(TAG).w("playQueue called before player ready; delegating to service")
         }
@@ -282,11 +297,6 @@ class PlayerConnection(
     }
 
     fun startRadioSeamlessly() {
-        // Block if Listen Together guest
-        if (shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag("PlayerConnection").d("startRadioSeamlessly blocked - Listen Together guest")
-            return
-        }
         if (!playerReadinessFlow.value) {
             Timber.tag(TAG).w("startRadioSeamlessly called before player ready; delegating to service")
         }
@@ -301,11 +311,6 @@ class PlayerConnection(
     fun playNext(item: MediaItem) = playNext(listOf(item))
 
     fun playNext(items: List<MediaItem>) {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag("PlayerConnection").d("playNext blocked - Listen Together guest")
-            return
-        }
         try {
             service.playNext(items)
         } catch (e: Exception) {
@@ -317,11 +322,6 @@ class PlayerConnection(
     fun addToQueue(item: MediaItem) = addToQueue(listOf(item))
 
     fun addToQueue(items: List<MediaItem>) {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag("PlayerConnection").d("addToQueue blocked - Listen Together guest")
-            return
-        }
         try {
             service.addToQueue(items)
         } catch (e: Exception) {
@@ -358,11 +358,6 @@ class PlayerConnection(
      * Toggle play/pause - handles Cast when active
      */
     fun togglePlayPause() {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("togglePlayPause blocked - Listen Together guest")
-            return
-        }
         try {
             val castHandler = service.castConnectionHandler
             if (castHandler?.isCasting?.value == true) {
@@ -383,11 +378,6 @@ class PlayerConnection(
      * Start playback - handles Cast when active
      */
     fun play() {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("play blocked - Listen Together guest")
-            return
-        }
         try {
             val castHandler = service.castConnectionHandler
             if (castHandler?.isCasting?.value == true) {
@@ -407,11 +397,6 @@ class PlayerConnection(
      * Pause playback - handles Cast when active
      */
     fun pause() {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("pause blocked - Listen Together guest")
-            return
-        }
         try {
             val castHandler = service.castConnectionHandler
             if (castHandler?.isCasting?.value == true) {
@@ -428,11 +413,6 @@ class PlayerConnection(
      * Seek to position - handles Cast when active
      */
     fun seekTo(position: Long) {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("seekTo blocked - Listen Together guest")
-            return
-        }
         try {
             val castHandler = service.castConnectionHandler
             if (castHandler?.isCasting?.value == true) {
@@ -446,11 +426,6 @@ class PlayerConnection(
     }
 
     fun seekToNext() {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("seekToNext blocked - Listen Together guest")
-            return
-        }
         try {
             // When casting, use Cast skip instead of local player
             val castHandler = service.castConnectionHandler
@@ -480,11 +455,6 @@ class PlayerConnection(
     var onRestartSong: (() -> Unit)? = null
 
     fun seekToPrevious() {
-        // Block if Listen Together guest (unless internal sync)
-        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
-            Timber.tag(TAG).d("seekToPrevious blocked - Listen Together guest")
-            return
-        }
         try {
             // When casting, use Cast skip instead of local player
             val castHandler = service.castConnectionHandler
@@ -553,7 +523,7 @@ class PlayerConnection(
         mediaItem: MediaItem?,
         reason: Int,
     ) {
-        mediaMetadata.value = mediaItem?.metadata
+        setMetadata(mediaItem?.metadata)
         val p = attachedPlayer ?: player
         currentMediaItemIndex.value = p.currentMediaItemIndex
         currentWindowIndex.value = p.getCurrentQueueIndex()
@@ -569,7 +539,7 @@ class PlayerConnection(
         reason: Int,
     ) {
         val p = attachedPlayer ?: player
-        mediaMetadata.value = p.currentMetadata
+        setMetadata(p.currentMetadata)
         queueWindows.value = p.getQueueWindows()
         queueTitle.value = service.queueTitle
         currentMediaItemIndex.value = p.currentMediaItemIndex

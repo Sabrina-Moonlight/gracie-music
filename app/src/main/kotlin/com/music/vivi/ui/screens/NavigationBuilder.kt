@@ -31,6 +31,7 @@ import com.music.vivi.ui.screens.artist.ArtistScreen
 import com.music.vivi.ui.screens.artist.ArtistSongsScreen
 import com.music.vivi.ui.screens.equalizer.EqScreen
 import com.music.vivi.ui.screens.library.LibraryScreen
+import com.music.vivi.ui.screens.library.LocalMusicScreen
 import com.music.vivi.ui.screens.playlist.AutoPlaylistScreen
 import com.music.vivi.ui.screens.playlist.CachePlaylistScreen
 import com.music.vivi.ui.screens.playlist.LocalPlaylistScreen
@@ -119,18 +120,8 @@ fun NavGraphBuilder.navigationBuilder(
 
 
 
-    composable(Screens.ListenTogether.route) {
-        ListenTogetherScreen(navController, showTopBar = false)
-    }
-
-    composable(
-        route = "listen_together_from_topbar",
-    ) {
-        ListenTogetherScreen(navController, showTopBar = true)
-    }
-
-    composable("listen_together/chat") {
-        CommentTogetherScreen(navController)
+    composable(Screens.Local.route) {
+        LocalMusicScreen(navController)
     }
 
     composable("history") {

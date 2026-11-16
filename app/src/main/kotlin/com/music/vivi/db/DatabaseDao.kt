@@ -1611,6 +1611,9 @@ interface DatabaseDao {
         insertLyricsIgnore(lyrics)
     }
 
+    @Query("DELETE FROM lyrics")
+    fun clearAllLyrics()
+
     @Upsert
     fun upsert(format: FormatEntity)
 

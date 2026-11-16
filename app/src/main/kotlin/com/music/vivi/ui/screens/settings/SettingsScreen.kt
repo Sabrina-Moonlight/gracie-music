@@ -159,14 +159,6 @@ fun SettingsScreen(
                 )
                 add(
                     Material3SettingsItem(
-                        icon = painterResource(R.drawable.group),
-                        title = { Text(stringResource(R.string.listen_together)) },
-                        description = { Text(stringResource(R.string.setting_listen_together_desc)) },
-                        onClick = { navController.navigate(Screens.ListenTogether.route) }
-                    )
-                )
-                add(
-                    Material3SettingsItem(
                         icon = painterResource(R.drawable.language),
                         title = { Text(stringResource(R.string.content)) },
                         description = { Text(stringResource(R.string.setting_content_desc)) },

@@ -462,4 +462,14 @@
     <string name="library_sync_error">Sync failed — tap to retry</string>
     <string name="listening_summary">Listening summary</string>
     <string name="setting_listening_summary_desc">View your daily listening trends and historical playback analytics.</string>
+    <string name="local_music">Local</string>
+    <string name="local_music_permission">Allow access to your audio files to play the music stored on this device.</string>
+    <string name="local_music_grant">Allow access</string>
+    <string name="local_music_search">Search on device</string>
+    <string name="local_music_refresh">Refresh</string>
+    <string name="local_music_empty">No music found on this device</string>
+    <string name="local_music_no_results">No results</string>
+    <string name="lyrics_cache">Lyrics</string>
+    <string name="clear_lyrics_cache">Clear lyrics</string>
+    <string name="clear_lyrics_cache_dialog">All saved lyrics will be deleted. They will be downloaded again when needed.</string>
 </resources>

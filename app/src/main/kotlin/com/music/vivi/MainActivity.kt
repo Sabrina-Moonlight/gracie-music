@@ -150,7 +150,6 @@ import com.music.vivi.constants.DisableScreenshotKey
 import com.music.vivi.constants.DynamicThemeKey
 import com.music.vivi.constants.EnableHighRefreshRateKey
 import com.music.vivi.constants.EnableSettingsPopupKey
-import com.music.vivi.constants.ListenTogetherInTopBarKey
 import com.music.vivi.constants.ListenTogetherUsernameKey
 import com.music.vivi.constants.MiniPlayerBottomSpacing
 import com.music.vivi.constants.MiniPlayerHeight
@@ -706,14 +705,7 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val (previousTab, setPreviousTab) = rememberSaveable { mutableStateOf("home") }
 
-                val (listenTogetherInTopBar) = rememberPreference(ListenTogetherInTopBarKey, defaultValue = true)
-                val navigationItems = remember(listenTogetherInTopBar) { 
-                    if (listenTogetherInTopBar) {
-                        Screens.MainScreens.filter { it != Screens.ListenTogether }
-                    } else {
-                        Screens.MainScreens
-                    }
-                }
+                val navigationItems = remember { Screens.MainScreens }
                 val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
                 val (floatingNav) = rememberPreference(FloatingNavBarKey, defaultValue = false)
                 val (useNewMiniPlayerDesign) = rememberPreference(UseNewMiniPlayerDesignKey, defaultValue = true)
@@ -733,7 +725,7 @@ class MainActivity : ComponentActivity() {
                     listOf(
                         Screens.Home.route,
                         Screens.Library.route,
-                        Screens.ListenTogether.route,
+                        Screens.Local.route,
                         "settings",
                     )
                 }
@@ -918,13 +910,9 @@ class MainActivity : ComponentActivity() {
 
                 var shouldShowTopBar by rememberSaveable { mutableStateOf(false) }
 
-                LaunchedEffect(navBackStackEntry, listenTogetherInTopBar) {
+                LaunchedEffect(navBackStackEntry) {
                     val currentRoute = navBackStackEntry?.destination?.route
-                    val isListenTogetherScreen = currentRoute == Screens.ListenTogether.route || 
-                        currentRoute == "listen_together_from_topbar"
-                    shouldShowTopBar = currentRoute in topLevelScreens &&
-                        currentRoute != "settings" &&
-                        !(isListenTogetherScreen && listenTogetherInTopBar)
+                    shouldShowTopBar = currentRoute in topLevelScreens && currentRoute != "settings"
                 }
 
                 val sharedPrefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
@@ -973,7 +961,7 @@ class MainActivity : ComponentActivity() {
                         Screens.Home.route -> R.string.music
                         Screens.Search.route -> R.string.search
                         Screens.Library.route -> R.string.filter_library
-                        Screens.ListenTogether.route -> R.string.together
+                        Screens.Local.route -> R.string.local_music
                         else -> null
                     }
                 }
@@ -1046,14 +1034,6 @@ class MainActivity : ComponentActivity() {
                                                     painter = painterResource(R.drawable.stats),
                                                     contentDescription = stringResource(R.string.stats)
                                                 )
-                                            }
-                                            if (listenTogetherInTopBar) {
-                                                IconButton(onClick = { navController.navigate("listen_together_from_topbar") }) {
-                                                    Icon(
-                                                        painter = painterResource(R.drawable.group_outlined),
-                                                        contentDescription = stringResource(R.string.together)
-                                                    )
-                                                }
                                             }
                                             Box {
                                                 var showSettingsDropdown by remember { mutableStateOf(false) }

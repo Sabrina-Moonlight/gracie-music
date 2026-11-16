@@ -1373,36 +1373,6 @@ fun LocalPlaylistHeader(
                 }
             }
         }
-
-        Spacer(Modifier.height(24.dp))
-
-        val staticDescription = remember(songCount, playlistLength) {
-            val name = playlist.playlist.name
-            val trackCountText = context.resources.getQuantityString(R.plurals.n_song, songCount, songCount)
-            "$name is a custom playlist featuring $trackCountText.${
-                if (playlistLength > 0) " Combined duration is ${makeTimeString(playlistLength * 1000L)}." else ""
-            }"
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.about_playlist),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            ExpandableText(
-                text = staticDescription,
-                runs = null,
-                collapsedMaxLines = 3
-            )
-        }
     }
 }
 

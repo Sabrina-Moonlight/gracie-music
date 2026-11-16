@@ -243,8 +243,10 @@ fun LyricsV2(
         }
     }
 
-    LaunchedEffect(mediaMetadata?.id, currentLyrics) {
-        if (mediaMetadata != null && currentLyrics == null) {
+    // No buscar letra mientras se muestran los datos guardados de la última canción.
+    val isShowingCached by (LocalPlayerConnection.current?.isShowingCachedMetadata ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState()
+    LaunchedEffect(mediaMetadata?.id, currentLyrics, isShowingCached) {
+        if (mediaMetadata != null && currentLyrics == null && !isShowingCached) {
             delay(500)
             coroutineScope.launch(Dispatchers.IO) {
                 try {

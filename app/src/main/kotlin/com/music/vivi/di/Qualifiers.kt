@@ -11,9 +11,6 @@ import javax.inject.Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class PlayerCache
 
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class SpotifyCanvasCache
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)

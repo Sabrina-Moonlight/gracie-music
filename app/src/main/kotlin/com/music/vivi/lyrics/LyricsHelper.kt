@@ -12,6 +12,7 @@ import com.music.vivi.constants.LyricsPrioritizeSyncAccuracyKey
 import com.music.vivi.constants.LyricsProviderOrderKey
 import com.music.vivi.constants.PreferredLyricsProvider
 import com.music.vivi.constants.PreferredLyricsProviderKey
+import com.music.vivi.constants.isLocalMediaId
 import com.music.vivi.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.music.vivi.extensions.toEnum
 import com.music.vivi.models.MediaMetadata
@@ -65,6 +66,10 @@ constructor(
 
 
 
+    /** Canciones locales: se buscan por título/artista; se saltan los proveedores que piden el videoId. */
+    private fun List<LyricsProvider>.forLocal(mediaId: String): List<LyricsProvider> =
+        if (isLocalMediaId(mediaId)) filter { it.name !in VIDEO_ID_PROVIDERS } else this
+
     private val cache = LruCache<String, List<LyricsResult>>(MAX_CACHE_SIZE)
     private var currentLyricsJob: Job? = null
 
@@ -101,7 +106,7 @@ constructor(
                     val preferences = context.dataStore.data.first()
                     val prioritizeSync = preferences[LyricsPrioritizeSyncAccuracyKey] ?: true
                     
-                    val providers = resolveLyricsProviders()
+                    val providers = resolveLyricsProviders().forLocal(mediaMetadata.id)
                     
                     val channel = kotlinx.coroutines.channels.Channel<Triple<Int, String, String>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
                     
@@ -271,7 +276,7 @@ constructor(
         }
 
         val allResult = mutableListOf<LyricsResult>()
-        val providers = resolveLyricsProviders()
+        val providers = resolveLyricsProviders().forLocal(mediaId)
         currentLyricsJob = CoroutineScope(SupervisorJob()).launch {
             providers.forEach { provider ->
                 if (provider.isEnabled(context)) {
@@ -300,6 +305,7 @@ constructor(
 
     companion object {
         private const val MAX_CACHE_SIZE = 50
+        private val VIDEO_ID_PROVIDERS = setOf("YouTube Music", "YouTube Subtitle", "YouLyPlus")
     }
 }
 

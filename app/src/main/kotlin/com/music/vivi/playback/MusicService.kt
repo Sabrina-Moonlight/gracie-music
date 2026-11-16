@@ -74,6 +74,12 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.media3.extractor.mp4.Mp4Extractor
+import androidx.media3.extractor.amr.AmrExtractor
+import androidx.media3.extractor.flac.FlacExtractor
+import androidx.media3.extractor.mp3.Mp3Extractor
+import androidx.media3.extractor.ogg.OggExtractor
+import androidx.media3.extractor.ts.AdtsExtractor
+import androidx.media3.extractor.wav.WavExtractor
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaController
@@ -142,6 +148,7 @@ import com.music.vivi.constants.DefaultLyricsPreloadCount
 import com.music.vivi.constants.LyricsPreloadCountKey
 import com.music.vivi.constants.MaxLyricsPreloadCount
 import com.music.vivi.constants.ShowLyricsKey
+import com.music.vivi.constants.LocalMediaIdPrefix
 import com.music.vivi.constants.isLocalMediaId
 import com.music.vivi.constants.ShuffleModeKey
 import com.music.vivi.constants.ShufflePlaylistFirstKey
@@ -174,7 +181,6 @@ import com.music.vivi.db.entities.RelatedSongMap
 import com.music.vivi.db.entities.Song
 import com.music.vivi.di.DownloadCache
 import com.music.vivi.di.PlayerCache
-import com.music.vivi.di.SpotifyCanvasCache
 import com.music.vivi.eq.EqualizerService
 import com.music.vivi.eq.audio.CustomEqualizerAudioProcessor
 import com.music.vivi.eq.data.EQProfileRepository
@@ -414,10 +420,6 @@ class MusicService :
     @Inject
     @DownloadCache
     lateinit var downloadCache: SimpleCache
-
-    @Inject
-    @SpotifyCanvasCache
-    lateinit var spotifyCanvasCache: SimpleCache
 
     lateinit var player: ExoPlayer
         private set
@@ -1635,6 +1637,7 @@ class MusicService :
         mediaId: String,
         playbackData: InnerTubeXPlayer.PlaybackData? = null
     ) {
+        if (isLocalMediaId(mediaId)) return
         val song = database.song(mediaId).first()
         val mediaMetadata = withContext(Dispatchers.Main) {
             player.findNextMediaItemById(mediaId)?.metadata
@@ -3671,8 +3674,31 @@ class MusicService :
     }
 
     private fun createDataSourceFactory(): DataSource.Factory {
-        return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
+        // content:// (música local) se lee sin pasar por las cachés; lo demás, como siempre.
+        val switching = DataSource.Factory {
+            LocalSwitchingDataSource(
+                DefaultDataSource.Factory(this).createDataSource(),
+                createCacheDataSource().createDataSource(),
+            )
+        }
+        return ResolvingDataSource.Factory(switching) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
+
+            // Música local: se lee directo del dispositivo, sin red ni base de datos.
+            if (isLocalMediaId(mediaId)) {
+                val localId = mediaId.removePrefix(LocalMediaIdPrefix).toLongOrNull()
+                    ?: throw PlaybackException(
+                        getString(R.string.error_unknown),
+                        null,
+                        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
+                    )
+                return@Factory dataSpec.withUri(
+                    android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                        localId
+                    )
+                )
+            }
 
             // Check if we need to bypass cache for quality change
             val shouldBypassCache = bypassCacheForQualityChange.contains(mediaId)
@@ -3799,6 +3825,12 @@ class MusicService :
                     MatroskaExtractor(),        // .webm / Opus
                     FragmentedMp4Extractor(),   // fragmented .mp4 / AAC (YouTube)
                     Mp4Extractor(),             // regular .mp4 / AAC (JioSaavn)
+                    Mp3Extractor(),             // música local
+                    FlacExtractor(),
+                    OggExtractor(),
+                    WavExtractor(),
+                    AdtsExtractor(),
+                    AmrExtractor(),
                 )
             },
         )
@@ -3880,6 +3912,7 @@ class MusicService :
         playbackStats: PlaybackStats,
     ) {
         val mediaItem = eventTime.timeline.getWindow(eventTime.windowIndex, Timeline.Window()).mediaItem
+        if (isLocalMediaId(mediaItem.mediaId)) return
         val historyDurationMs = dataStore[HistoryDuration]?.times(1000f) ?: 30000f
 
         if (playbackStats.totalPlayTimeMs >= historyDurationMs &&
@@ -4822,3 +4855,38 @@ private data class SponsorBlockConfig(
     val skipPreviewFiller: Boolean,
     val showToast: Boolean,
 )
+
+/** Elige la fuente según la dirección: content:// va directo al dispositivo, el resto por las cachés. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private class LocalSwitchingDataSource(
+    private val local: DataSource,
+    private val remote: DataSource,
+) : DataSource {
+    private var active: DataSource? = null
+
+    override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
+        local.addTransferListener(transferListener)
+        remote.addTransferListener(transferListener)
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        val source = if (dataSpec.uri.scheme == "content") local else remote
+        active = source
+        return source.open(dataSpec)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        active?.read(buffer, offset, length) ?: androidx.media3.common.C.RESULT_END_OF_INPUT
+
+    override fun getUri(): android.net.Uri? = active?.uri
+
+    override fun getResponseHeaders(): Map<String, List<String>> = active?.responseHeaders ?: emptyMap()
+
+    override fun close() {
+        try {
+            active?.close()
+        } finally {
+            active = null
+        }
+    }
+}
