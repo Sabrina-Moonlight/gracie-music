@@ -138,7 +138,11 @@ import com.music.vivi.constants.ResumeOnBluetoothConnectKey
 import com.music.vivi.constants.ScrobbleDelayPercentKey
 import com.music.vivi.constants.ScrobbleDelaySecondsKey
 import com.music.vivi.constants.ScrobbleMinSongDurationKey
+import com.music.vivi.constants.DefaultLyricsPreloadCount
+import com.music.vivi.constants.LyricsPreloadCountKey
+import com.music.vivi.constants.MaxLyricsPreloadCount
 import com.music.vivi.constants.ShowLyricsKey
+import com.music.vivi.constants.isLocalMediaId
 import com.music.vivi.constants.ShuffleModeKey
 import com.music.vivi.constants.ShufflePlaylistFirstKey
 import com.music.vivi.constants.PreventDuplicateTracksInQueueKey
@@ -363,6 +367,19 @@ class MusicService :
 
     lateinit var playerVolume: MutableStateFlow<Float>
     val isMuted = MutableStateFlow(false)
+
+    /** Busca y guarda la letra de una canción de la cola sin pisar letras que ya existen. */
+    private suspend fun preloadLyricsFor(metadata: MediaMetadata) {
+        if (isLocalMediaId(metadata.id)) return
+        if (metadata.title.isBlank() || metadata.artists.isEmpty()) return
+        val existing = database.lyrics(metadata.id).first()
+        if (existing != null && existing.lyrics != LyricsEntity.LYRICS_NOT_FOUND) return
+        val result = lyricsHelper.getLyrics(metadata)
+        if (result.lyrics.isBlank() || result.lyrics == LyricsEntity.LYRICS_NOT_FOUND) return
+        database.query {
+            insertLyricsIfAbsent(LyricsEntity(metadata.id, result.lyrics, result.provider))
+        }
+    }
 
     fun toggleMute() {
         val newMutedState = !isMuted.value
@@ -868,7 +885,7 @@ class MusicService :
                 // No guardar "no encontrada": se reintenta la próxima vez.
                 if (lyricsWithProvider.lyrics != LyricsEntity.LYRICS_NOT_FOUND) {
                     database.query {
-                        upsert(
+                        insertLyricsIfAbsent(
                             LyricsEntity(
                                 id = mediaMetadata.id,
                                 lyrics = lyricsWithProvider.lyrics,
@@ -878,6 +895,35 @@ class MusicService :
                     }
                 }
             }
+        }
+
+        // Precarga de letras de las próximas canciones de la cola.
+        combine(
+            currentMediaMetadata.distinctUntilChangedBy { it?.id },
+            dataStore.data.map { it[LyricsPreloadCountKey] ?: DefaultLyricsPreloadCount }.distinctUntilChanged(),
+        ) { mediaMetadata, count ->
+            mediaMetadata to count
+        }.collectLatest(scope) { (mediaMetadata, count) ->
+            if (mediaMetadata == null) return@collectLatest
+            // Esperar a que termine un posible crossfade y leer el player DESPUÉS:
+            // durante el crossfade el player activo cambia.
+            delay(4000)
+            val activePlayer = player
+            if (activePlayer.currentMediaItem == null) return@collectLatest
+            val timeline = activePlayer.currentTimeline
+            var index = activePlayer.currentMediaItemIndex
+            val seen = mutableSetOf(index)
+            val upcoming = mutableListOf<MediaMetadata>()
+            repeat(count.coerceIn(1, MaxLyricsPreloadCount)) {
+                index = timeline.getNextWindowIndex(
+                    index,
+                    activePlayer.repeatMode,
+                    activePlayer.shuffleModeEnabled,
+                )
+                if (index == C.INDEX_UNSET || !seen.add(index)) return@repeat
+                activePlayer.getMediaItemAt(index).metadata?.let { upcoming.add(it) }
+            }
+            upcoming.forEach { preloadLyricsFor(it) }
         }
 
         dataStore.data

@@ -1598,6 +1598,19 @@ interface DatabaseDao {
     @Upsert
     fun upsert(lyrics: LyricsEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertLyricsIgnore(lyrics: LyricsEntity): Long
+
+    @Query("DELETE FROM lyrics WHERE id = :id AND lyrics = 'LYRICS_NOT_FOUND'")
+    fun deleteNotFoundLyrics(id: String)
+
+    /** Guarda la letra solo si no hay una buena ya guardada (no pisa letras existentes). */
+    @Transaction
+    fun insertLyricsIfAbsent(lyrics: LyricsEntity) {
+        deleteNotFoundLyrics(lyrics.id)
+        insertLyricsIgnore(lyrics)
+    }
+
     @Upsert
     fun upsert(format: FormatEntity)
 

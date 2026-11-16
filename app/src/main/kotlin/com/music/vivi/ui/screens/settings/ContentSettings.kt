@@ -85,6 +85,9 @@ import com.music.vivi.constants.HideVideoSongsKey
 import com.music.vivi.constants.HideYoutubeShortsKey
 import com.music.vivi.constants.AlbumCanvasEnabledKey
 import com.music.vivi.constants.LanguageCodeToName
+import com.music.vivi.constants.DefaultLyricsPreloadCount
+import com.music.vivi.constants.LyricsPreloadCountKey
+import com.music.vivi.constants.MaxLyricsPreloadCount
 import com.music.vivi.constants.LyricsProviderOrderKey
 import com.music.vivi.constants.ProxyEnabledKey
 import com.music.vivi.constants.ProxyPasswordKey
@@ -208,6 +211,7 @@ fun ContentSettings(
         key = LyricsProviderOrderKey,
         defaultValue = "",
     )
+    val (lyricsPreloadCount, onLyricsPreloadCountChange) = rememberPreference(key = LyricsPreloadCountKey, defaultValue = DefaultLyricsPreloadCount)
     val (lyricsPrioritizeSyncAccuracy, onLyricsPrioritizeSyncAccuracyChange) = rememberPreference(key = LyricsPrioritizeSyncAccuracyKey, defaultValue = true)
     val (lengthTop, onLengthTopChange) = rememberPreference(key = TopSize, defaultValue = "50")
     val (quickPicks, onQuickPicksChange) = rememberEnumPreference(key = QuickPicksKey, defaultValue = QuickPicks.QUICK_PICKS)
@@ -576,6 +580,42 @@ fun ContentSettings(
                 when (it) {
                     QuickPicks.QUICK_PICKS -> stringResource(R.string.quick_picks)
                     QuickPicks.LAST_LISTEN -> stringResource(R.string.last_song_listened)
+                }
+            }
+        )
+    }
+
+    var showLyricsPreloadDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showLyricsPreloadDialog) {
+        var tempCount by rememberSaveable { mutableFloatStateOf(lyricsPreloadCount.toFloat()) }
+
+        AlertDialog(
+            onDismissRequest = { showLyricsPreloadDialog = false },
+            title = { Text(stringResource(R.string.lyrics_preload_count)) },
+            text = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(tempCount.toInt().toString())
+                    Slider(
+                        value = tempCount,
+                        onValueChange = { tempCount = it },
+                        valueRange = 1f..MaxLyricsPreloadCount.toFloat(),
+                        steps = MaxLyricsPreloadCount - 2
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onLyricsPreloadCountChange(tempCount.toInt())
+                        showLyricsPreloadDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.save))
                 }
             }
         )
@@ -1239,6 +1279,12 @@ fun ContentSettings(
                     title = { Text(stringResource(R.string.lyrics_provider_priority)) },
                     description = { Text(stringResource(R.string.lyrics_provider_priority_desc)) },
                     onClick = { showProviderPriorityDialog = true }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
+                    title = { Text(stringResource(R.string.lyrics_preload_count)) },
+                    description = { Text("${stringResource(R.string.lyrics_preload_count_desc)}: $lyricsPreloadCount") },
+                    onClick = { showLyricsPreloadDialog = true }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),

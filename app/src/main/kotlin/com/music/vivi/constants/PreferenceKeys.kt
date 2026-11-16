@@ -84,6 +84,7 @@ val KeepScreenOn = booleanPreferencesKey("keepScreenOn")
 val LastPlayerExpandedKey = booleanPreferencesKey("lastPlayerExpanded")
 val LastPlayerInternalStateKey = stringPreferencesKey("lastPlayerInternalState")
 val LyricsKeepControlsKey = booleanPreferencesKey("lyricsKeepControls")
+val LyricsPreloadCountKey = intPreferencesKey("lyricsPreloadCount")
 val DeveloperModeKey = booleanPreferencesKey("developerMode")
 val EnableSettingsPopupKey = booleanPreferencesKey("enableSettingsPopup")
 val HasStarredRepoKey = booleanPreferencesKey("hasStarredRepo")
@@ -354,6 +355,7 @@ val ShowCachedPlaylistKey = booleanPreferencesKey("show_cached_playlist")
 val ShowAudioQualityBadgeKey = booleanPreferencesKey("show_audio_quality_badge")
 val ShowCommentButtonKey = booleanPreferencesKey("show_comment_button")
 val LibraryMixIsGridViewKey = booleanPreferencesKey("library_mix_is_grid_view")
+val LibraryMixFilterKey = stringPreferencesKey("library_mix_filter")
 enum class SongFilter {
     LIBRARY,
     LIKED,

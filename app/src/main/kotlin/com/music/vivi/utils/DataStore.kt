@@ -108,6 +108,45 @@ fun <T> rememberPreference(
     }
 }
 
+/**
+ * Igual que [rememberPreference], pero el primer valor se lee ya guardado (sin pasar por el valor
+ * por defecto), para que la pantalla no parpadee al abrirse con ajustes distintos del defecto.
+ */
+@Composable
+fun <T> rememberPreferenceSync(
+    key: Preferences.Key<T>,
+    defaultValue: T,
+): MutableState<T> {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    val initial = remember(key) { context.dataStore.get(key, defaultValue) }
+    val state =
+        remember {
+            context.dataStore.data
+                .map { it[key] ?: defaultValue }
+                .distinctUntilChanged()
+        }.collectAsStateWithLifecycle(initial)
+
+    return remember {
+        object : MutableState<T> {
+            override var value: T
+                get() = state.value
+                set(value) {
+                    coroutineScope.launch {
+                        context.dataStore.edit {
+                            it[key] = value
+                        }
+                    }
+                }
+
+            override fun component1() = value
+
+            override fun component2(): (T) -> Unit = { value = it }
+        }
+    }
+}
+
 @Composable
 inline fun <reified T : Enum<T>> rememberEnumPreference(
     key: Preferences.Key<String>,

@@ -103,6 +103,7 @@ import com.music.vivi.ui.component.LocalMenuState
 import com.music.vivi.ui.component.PlaylistGridItem
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
+import com.music.vivi.utils.rememberPreferenceSync
 import com.music.vivi.viewmodels.LibraryMixViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -184,15 +185,18 @@ fun LibraryMixScreen(
             songThumbnails = emptyList(),
         )
 
-    val (showLiked) = rememberPreference(ShowLikedPlaylistKey, true)
-    val (showDownloaded) = rememberPreference(ShowDownloadedPlaylistKey, true)
-    val (showTop) = rememberPreference(ShowTopPlaylistKey, true)
-    val (showCached) = rememberPreference(ShowCachedPlaylistKey, true)
+    val (showLiked) = rememberPreferenceSync(ShowLikedPlaylistKey, true)
+    val (showDownloaded) = rememberPreferenceSync(ShowDownloadedPlaylistKey, true)
+    val (showTop) = rememberPreferenceSync(ShowTopPlaylistKey, true)
+    val (showCached) = rememberPreferenceSync(ShowCachedPlaylistKey, true)
 
 
     val filteredItems by viewModel.filteredUiItems.collectAsState()
 
-    var activeFilter by rememberSaveable { mutableStateOf(LibraryFilterType.ALL) }
+    val activeFilterName by viewModel.activeFilter.collectAsState()
+    val activeFilter = remember(activeFilterName) {
+        LibraryFilterType.entries.firstOrNull { it.name == activeFilterName } ?: LibraryFilterType.ALL
+    }
     
     val finalFilteredItems = remember(filteredItems, activeFilter) {
         when (activeFilter) {
@@ -203,7 +207,7 @@ fun LibraryMixScreen(
         }
     }
 
-    val isGridView = rememberPreference(LibraryMixIsGridViewKey, true)
+    val isGridView = rememberPreferenceSync(LibraryMixIsGridViewKey, true)
     
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -353,7 +357,7 @@ fun LibraryMixScreen(
                                 items(LibraryFilterType.entries.toTypedArray()) { filterType ->
                                     androidx.compose.material3.FilterChip(
                                         selected = activeFilter == filterType,
-                                        onClick = { activeFilter = filterType },
+                                        onClick = { viewModel.setActiveFilter(filterType.name) },
                                         label = {
                                             androidx.compose.material3.Text(
                                                 text = when (filterType) {
