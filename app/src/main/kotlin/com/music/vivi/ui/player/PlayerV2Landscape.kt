@@ -793,7 +793,7 @@ fun PlayerV2Landscape(
                                     ) {
                                         Icon(
                                             painter = painterResource(
-                                                if (isLiked) R.drawable.ic_nowplaying_favorited else R.drawable.ic_nowplaying_favorite
+                                                if (isLiked) R.drawable.star_filled_liked else R.drawable.star_like
                                             ),
                                             contentDescription = "Like",
                                             tint = adaptivePrimary,
@@ -824,7 +824,7 @@ fun PlayerV2Landscape(
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
-                                            painter = painterResource(R.drawable.ic_nowplaying_more),
+                                            painter = painterResource(R.drawable.more_horiz),
                                             contentDescription = "More",
                                             tint = adaptivePrimary,
                                             modifier = Modifier.size(28.dp)
@@ -844,7 +844,7 @@ fun PlayerV2Landscape(
                                 val isTrackActive = isTrackDragged || isTrackPressed
 
                                 val trackHeight by animateDpAsState(
-                                    targetValue = if (isTrackActive) 10.dp else 7.25.dp,
+                                    targetValue = if (isTrackActive) 14.dp else 8.dp,
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioNoBouncy,
                                         stiffness = Spring.StiffnessMedium
@@ -1010,7 +1010,7 @@ fun PlayerV2Landscape(
                             val isVolActive = isVolDragged || isVolPressed
 
                             val volHeight by animateDpAsState(
-                                targetValue = if (isVolActive) 10.dp else 7.25.dp,
+                                targetValue = if (isVolActive) 12.dp else 6.dp,
                                 animationSpec = spring(
                                     dampingRatio = Spring.DampingRatioMediumBouncy,
                                     stiffness = Spring.StiffnessLow
@@ -1040,7 +1040,7 @@ fun PlayerV2Landscape(
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(20.dp)
+                                    .height(24.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Icon(
@@ -1058,25 +1058,13 @@ fun PlayerV2Landscape(
                     PlayerInternalState.LYRICS -> {
                         // In landscape, when lyrics pressed: pure LyricsV2 with floating circular action buttons (Star on left, Options on right)
                         Box(modifier = Modifier.fillMaxSize()) {
-                            AnimatedContent(
-                                targetState = currentLyrics?.id to currentLyrics?.lyrics,
-                                transitionSpec = {
-                                    (fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing)) togetherWith
-                                     fadeOut(animationSpec = tween(200, easing = FastOutSlowInEasing)))
-                                        .apply { targetContentZIndex = 1f }
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                                label = "LandscapeLyricsContentTransition"
-                            ) { _ ->
-                                LyricsV2(
-                                    mediaMetadata = mediaMetadata,
-                                    showLyrics = true,
-                                    sliderPositionProvider = { sliderPosition },
-                                    positionProvider = { sliderPosition ?: position },
-                                    initialLyrics = currentLyrics,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
+                            LyricsV2(
+                                mediaMetadata = mediaMetadata,
+                                showLyrics = true,
+                                sliderPositionProvider = { sliderPosition },
+                                positionProvider = { sliderPosition ?: position },
+                                modifier = Modifier.fillMaxSize()
+                            )
 
                             // Small compact circular star/like button at bottom left of lyrics
                             val isLiked = currentSong?.song?.liked == true
@@ -1085,11 +1073,11 @@ fun PlayerV2Landscape(
                                 modifier = Modifier
                                     .align(Alignment.BottomStart)
                                     .padding(start = 16.dp, bottom = 16.dp)
-                                    .size(36.dp)
+                                    .size(32.dp)
                             ) {
                                 Icon(
                                     painter = painterResource(
-                                        if (isLiked) R.drawable.ic_nowplaying_favorited else R.drawable.ic_nowplaying_favorite
+                                        if (isLiked) R.drawable.star_filled_liked else R.drawable.star_like
                                     ),
                                     contentDescription = "Like",
                                     tint = adaptivePrimary,
@@ -1121,10 +1109,10 @@ fun PlayerV2Landscape(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .padding(end = 16.dp, bottom = 16.dp)
-                                    .size(36.dp)
+                                    .size(32.dp)
                             ) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_nowplaying_more),
+                                    painter = painterResource(R.drawable.more_vert),
                                     contentDescription = "Lyrics Options",
                                     tint = adaptivePrimary,
                                     modifier = Modifier.size(28.dp)
