@@ -106,7 +106,6 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
 import com.music.vivi.LocalDatabase
-import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.constants.CropAlbumArtKey
@@ -121,7 +120,6 @@ import com.music.vivi.constants.ThumbnailCornerRadius
 import com.music.vivi.constants.UseAppleMiniPlayerKey
 import com.music.vivi.constants.UseNewMiniPlayerDesignKey
 import com.music.vivi.db.entities.ArtistEntity
-import com.music.vivi.listentogether.ListenTogetherManager
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.playback.CastConnectionHandler
 import com.music.vivi.playback.PlayerConnection
@@ -219,7 +217,6 @@ private fun NewMiniPlayer(
     
     // Player states - only collect what's needed at this level
     val playbackState by playerConnection.playbackState.collectAsState()
-    val isPlaying by playerConnection.isPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val canSkipNext by playerConnection.canSkipNext.collectAsState()
     val canSkipPrevious by playerConnection.canSkipPrevious.collectAsState()
@@ -243,9 +240,7 @@ private fun NewMiniPlayer(
     val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
     val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
     
-    // Disable swipe for Listen Together guests
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
+    val isListenTogetherGuest = false
     val swipeThumbnail = swipeThumbnailPref && !isListenTogetherGuest
     
     val layoutDirection = LocalLayoutDirection.current
@@ -370,7 +365,6 @@ private fun NewMiniPlayer(
                 style = miniPlayerBackground,
                 mediaMetadata = mediaMetadata,
                 gradientColors = gradientColors,
-                isPlaying = isPlaying
             )
 
             Row(
@@ -387,7 +381,6 @@ private fun NewMiniPlayer(
                     mediaMetadata = mediaMetadata,
                     primaryColor = primaryColor,
                     outlineColor = outlineColor,
-                    listenTogetherManager = listenTogetherManager
                 )
 
                 Spacer(modifier = Modifier.width(16.dp))
@@ -464,12 +457,11 @@ private fun NewMiniPlayerPlayButton(
     mediaMetadata: MediaMetadata?,
     primaryColor: Color,
     outlineColor: Color,
-    listenTogetherManager: ListenTogetherManager?
 ) {
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val castIsPlaying by castHandler?.castIsPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
     val effectiveIsPlaying = if (isCasting) castIsPlaying else isPlaying
-    val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
+    val isListenTogetherGuest = false
     val isMuted by playerConnection.isMuted.collectAsState()
 
     
@@ -601,15 +593,13 @@ private fun NewMiniPlayerSongInfo(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val artistColor = onSurfaceColor.copy(alpha = 0.7f)
                 if (metadata.explicit) {
-                    MIcon.Explicit(tint = artistColor)
-                    Spacer(modifier = Modifier.width(4.dp))
+                    MIcon.Explicit()
                 }
                 if (metadata.artists.any { it.name.isNotBlank() }) {
                     Text(
                         text = metadata.artists.joinToString { it.name },
-                        color = artistColor,
+                        color = onSurfaceColor.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -660,9 +650,7 @@ private fun LegacyMiniPlayer(
     val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
     val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
     
-    // Disable swipe for Listen Together guests
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
+    val isListenTogetherGuest = false
     val swipeThumbnail = swipeThumbnailPref && !isListenTogetherGuest
 
     val layoutDirection = LocalLayoutDirection.current
@@ -793,7 +781,6 @@ private fun LegacyMiniPlayer(
                 isCasting = isCasting,
                 castHandler = castHandler,
                 playerConnection = playerConnection,
-                listenTogetherManager = listenTogetherManager
             )
 
             IconButton(
@@ -832,12 +819,11 @@ private fun LegacyPlayPauseButton(
     isCasting: Boolean,
     castHandler: CastConnectionHandler?,
     playerConnection: PlayerConnection,
-    listenTogetherManager: ListenTogetherManager?
 ) {
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val castIsPlaying by castHandler?.castIsPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
     val effectiveIsPlaying = if (isCasting) castIsPlaying else isPlaying
-    val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
+    val isListenTogetherGuest = false
     val isMuted by playerConnection.isMuted.collectAsState()
 
 
@@ -1070,7 +1056,6 @@ internal fun MiniPlayerBackgroundLayer(
     style: PlayerBackgroundStyle,
     mediaMetadata: MediaMetadata?,
     gradientColors: List<Color>,
-    isPlaying: Boolean = true
 ) {
     val context = LocalContext.current
     
@@ -1169,8 +1154,38 @@ internal fun MiniPlayerBackgroundLayer(
             }
         }
         PlayerBackgroundStyle.LIVE_MESH -> {
-            val thumbnailUrl = mediaMetadata?.thumbnailUrl
-            AndroidView<BlendView>(factory = { ctx -> BlendView(ctx, isMiniPlayer = true).apply { setBlurRadius(BlendView.SHALLOW_BLUR_RADIUS) } }, update = { blendView -> if (isPlaying) blendView.startRotationAnimation() else blendView.stopRotationAnimation(); blendView.setImageUrl(thumbnailUrl) }, modifier = Modifier.fillMaxSize())
+            val meshRotation by rememberInfiniteTransition(label = "MiniMeshRotation").animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(60000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "MiniMeshRotationZ"
+            )
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(mediaMetadata?.thumbnailUrl)
+                    .size(128, 128)
+                    .allowHardware(false)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.6f) }),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(40.dp)
+                    .graphicsLayer {
+                        rotationZ = meshRotation
+                        scaleX = 1.5f
+                        scaleY = 1.5f
+                    }
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+            )
         }
         else -> {}
     }

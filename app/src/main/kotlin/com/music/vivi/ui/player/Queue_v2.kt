@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
@@ -66,7 +67,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.alpha
-import com.music.vivi.LocalListenTogetherManager
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QueueV2(
@@ -87,9 +87,7 @@ fun QueueV2(
     val queueTitle by playerConnection.queueTitle.collectAsState()
     val radioChips by playerConnection.radioChips.collectAsState()
     
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRoleState = listenTogetherManager?.role?.collectAsState(initial = com.music.vivi.listentogether.RoomRole.NONE)
-    val isGuest = listenTogetherRoleState?.value == com.music.vivi.listentogether.RoomRole.GUEST
+    val isGuest = false
     
     var locked by rememberPreference(QueueEditLockKey, true)
     
@@ -122,7 +120,7 @@ fun QueueV2(
 
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
-        defaultValue = PlayerBackgroundStyle.LIVE_MESH
+        defaultValue = PlayerBackgroundStyle.GRADIENT
     )
     val playerButtonsStyle by rememberEnumPreference(
         key = PlayerButtonsStyleKey,
@@ -140,7 +138,7 @@ fun QueueV2(
     val lazyListState = rememberLazyListState()
     
     // Scroll direction tracking
-    var previousIndex by remember { mutableIntStateOf(currentWindowIndex) }
+    var previousIndex by remember { mutableIntStateOf(0) }
     var previousScrollOffset by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(lazyListState) {
@@ -390,12 +388,28 @@ fun QueueV2(
 
         // Queue Header Row
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(
-                text = stringResource(R.string.queue),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = adaptivePrimary
-            )
+            if (queueTitle != null) {
+                Text(
+                    text = stringResource(R.string.playing_from),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = adaptiveSecondary
+                )
+                Text(
+                    text = queueTitle.orEmpty(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = adaptivePrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.queue),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = adaptivePrimary
+                )
+            }
             
             if (radioChips.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
