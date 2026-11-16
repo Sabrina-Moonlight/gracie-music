@@ -150,7 +150,6 @@ import com.music.vivi.constants.DisableScreenshotKey
 import com.music.vivi.constants.DynamicThemeKey
 import com.music.vivi.constants.EnableHighRefreshRateKey
 import com.music.vivi.constants.EnableSettingsPopupKey
-import com.music.vivi.constants.ListenTogetherUsernameKey
 import com.music.vivi.constants.MiniPlayerBottomSpacing
 import com.music.vivi.constants.MiniPlayerHeight
 import com.music.vivi.constants.NavigationBarAnimationSpec
@@ -253,9 +252,6 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var syncUtils: SyncUtils
 
-    @Inject
-    lateinit var listenTogetherManager: com.music.vivi.listentogether.ListenTogetherManager
-
     private val gitHubViewModel: GitHubViewModel by viewModels()
 
     private lateinit var navController: NavHostController
@@ -270,8 +266,6 @@ class MainActivity : ComponentActivity() {
                     playerConnection?.dispose()
                     playerConnection = PlayerConnection(applicationContext, service, database, lifecycleScope)
                     Timber.tag("MainActivity").d("PlayerConnection created successfully")
-                    // Connect Listen Together manager to player
-                    listenTogetherManager.setPlayerConnection(playerConnection)
                 } catch (e: Exception) {
                     Timber.tag("MainActivity").e(e, "Failed to create PlayerConnection")
                     // Retry after a delay of 500ms
@@ -280,7 +274,6 @@ class MainActivity : ComponentActivity() {
                         try {
                             playerConnection?.dispose()
                             playerConnection = PlayerConnection(applicationContext, service, database, lifecycleScope)
-                            listenTogetherManager.setPlayerConnection(playerConnection)
                         } catch (e2: Exception) {
                             Timber.tag("MainActivity").e(e2, "Failed to create PlayerConnection on retry")
                         }
@@ -290,8 +283,6 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            // Disconnect Listen Together manager
-            listenTogetherManager.setPlayerConnection(null)
             playerConnection?.dispose()
             playerConnection = null
         }
@@ -329,7 +320,6 @@ class MainActivity : ComponentActivity() {
         ) {
             stopService(Intent(this, MusicService::class.java))
         }
-        listenTogetherManager.setPlayerConnection(null)
         playerConnection?.dispose()
         playerConnection = null
     }
@@ -359,8 +349,6 @@ class MainActivity : ComponentActivity() {
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Initialize Listen Together manager
-        listenTogetherManager.initialize()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             val locale = dataStore[AppLanguageKey]
@@ -984,7 +972,6 @@ class MainActivity : ComponentActivity() {
                     LocalDownloadUtil provides downloadUtil,
                     LocalShimmerTheme provides ShimmerTheme,
                     LocalSyncUtils provides syncUtils,
-                    LocalListenTogetherManager provides listenTogetherManager,
                     LocalSnackbarHostState provides snackbarHostState,
                 ) {
                     Scaffold(
@@ -1126,17 +1113,13 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val onSearchLongClick: () -> Unit = remember(navController) {
-                                {
-                                    navController.navigate("recognition") {
-                                        launchSingleTop = true
-                                    }
-                                }
+                                { }
                             }
 
                             // Pre-calculate values for graphicsLayer to avoid reading state during composition
                             val navBarTotalHeight = bottomInset + NavigationBarHeight
 
-                            if (!showRail && currentRoute != "wrapped" && currentRoute != "update" && currentRoute != "listen_together/chat") {
+                            if (!showRail && currentRoute != "wrapped" && currentRoute != "update") {
                                 Box {
                                     BottomSheetPlayer(
                                         state = playerBottomSheetState,
@@ -1215,7 +1198,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             } else {
-                                if (currentRoute != "wrapped" && currentRoute != "update" && currentRoute != "listen_together/chat") {
+                                if (currentRoute != "wrapped" && currentRoute != "update") {
                                     BottomSheetPlayer(
                                         state = playerBottomSheetState,
                                         navController = navController,
@@ -1266,11 +1249,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val onRailSearchLongClick: () -> Unit = remember(navController) {
-                                {
-                                    navController.navigate("recognition") {
-                                        launchSingleTop = true
-                                    }
-                                }
+                                { }
                             }
 
                             if (showRail && currentRoute != "wrapped" && currentRoute != "update") {
@@ -1289,6 +1268,7 @@ class MainActivity : ComponentActivity() {
                                     startDestination = when (tabOpenedFromShortcut ?: defaultOpenTab) {
                                         NavigationTab.HOME -> Screens.Home
                                         NavigationTab.LIBRARY -> Screens.Library
+                                        NavigationTab.LOCAL -> Screens.Local
                                         else -> Screens.Home
                                     }.route,
                                     // Enter Transition - smoother with smaller offset and longer duration
@@ -1409,18 +1389,6 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_TEXT)
         val coroutineScope = lifecycle.coroutineScope
 
-        val listenCode = uri.getQueryParameter("code")
-            ?: uri.getQueryParameter("room")
-            ?: uri.pathSegments.getOrNull(1)
-        val isListenLink = uri.pathSegments.firstOrNull() == "listen" || uri.host?.equals("listen", ignoreCase = true) == true
-        if (!listenCode.isNullOrBlank() && isListenLink) {
-            val username = dataStore.get(ListenTogetherUsernameKey, "").ifBlank { "Guest" }
-            listenTogetherManager.joinRoom(listenCode, username)
-            return
-        }
-
-
-
         when (val path = uri.pathSegments.firstOrNull()) {
             "playlist" -> uri.getQueryParameter("list")?.let { playlistId ->
                 if (playlistId.startsWith("OLAK5uy_")) {
@@ -1517,5 +1485,4 @@ val LocalPlayerConnection = staticCompositionLocalOf<PlayerConnection?> { error(
 val LocalPlayerAwareWindowInsets = compositionLocalOf<WindowInsets> { error("No WindowInsets provided") }
 val LocalDownloadUtil = staticCompositionLocalOf<DownloadUtil> { error("No DownloadUtil provided") }
 val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils provided") }
-val LocalListenTogetherManager = staticCompositionLocalOf<com.music.vivi.listentogether.ListenTogetherManager?> { null }
 val LocalIsPlayerExpanded = compositionLocalOf { false }

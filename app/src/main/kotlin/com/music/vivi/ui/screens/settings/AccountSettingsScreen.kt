@@ -331,16 +331,6 @@ fun AccountSettingsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                ExpressiveSettingGroup(
-                    items = listOf(
-                        Material3SettingsItem(
-                            icon = painterResource(R.drawable.integration),
-                            title = { Text(stringResource(R.string.integrations)) },
-                            onClick = { navController.navigate("settings/integrations") }
-                        )
-                    )
-                )
-
 //                Spacer(modifier = Modifier.height(16.dp))
 //
 //                val formattedLastSync = remember(lastFullSync, syncState) {
@@ -446,11 +436,6 @@ fun AccountSettingsScreen(
                             icon = painterResource(R.drawable.token),
                             title = { Text(stringResource(R.string.advanced_login)) },
                             onClick = { showTokenEditor = true }
-                        ),
-                        Material3SettingsItem(
-                            icon = painterResource(R.drawable.integration),
-                            title = { Text(stringResource(R.string.integrations)) },
-                            onClick = { navController.navigate("settings/integrations") }
                         )
                     )
                 )

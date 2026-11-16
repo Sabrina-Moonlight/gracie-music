@@ -39,19 +39,13 @@ import com.music.vivi.ui.screens.playlist.OnlinePlaylistScreen
 import com.music.vivi.ui.screens.playlist.TopPlaylistScreen
 import com.music.vivi.ui.screens.search.OnlineSearchResult
 import com.music.vivi.ui.screens.search.SearchScreen
-import com.music.vivi.ui.screens.settings.AboutScreen
 import com.music.vivi.ui.screens.settings.AppearanceSettings
-import com.music.vivi.ui.screens.settings.MotionartworkSelection
 import com.music.vivi.ui.screens.settings.FontSelectionScreen
 import com.music.vivi.ui.screens.settings.BackupAndRestore
 import com.music.vivi.ui.screens.settings.AutoBackupSettings
-import com.music.vivi.ui.screens.settings.SpotifyLoginScreen
-import com.music.vivi.ui.screens.settings.SpotifyPlaylistScreen
-import com.music.vivi.viewmodels.SpotifyViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.music.vivi.ui.screens.settings.ContentSettings
 import com.music.vivi.ui.screens.settings.DarkMode
-import com.music.vivi.ui.screens.settings.DiscordLoginScreen
 import com.music.vivi.ui.screens.settings.PlayerSettings
 import com.music.vivi.ui.screens.settings.JioSettings
 import com.music.vivi.ui.screens.settings.SponsorBlockSettings
@@ -59,27 +53,13 @@ import com.music.vivi.ui.screens.settings.PrivacySettings
 import com.music.vivi.ui.screens.settings.RomanizationSettings
 import com.music.vivi.ui.screens.settings.SettingsScreen
 import com.music.vivi.ui.screens.settings.AccountSettingsScreen
-import com.music.vivi.ui.screens.ListeningSummaryScreen
-import com.music.vivi.ui.screens.DetailedListeningHistoryScreen
 import com.music.vivi.ui.screens.settings.StorageSettings
 import com.music.vivi.ui.screens.settings.ThemeSettings
-import com.music.vivi.ui.screens.settings.AiSettings
-import com.music.vivi.ui.screens.settings.integrations.DiscordSettings
-import com.music.vivi.ui.screens.settings.integrations.IntegrationScreen
-import com.music.vivi.ui.screens.settings.integrations.LastFMSettings
-import com.music.vivi.ui.screens.settings.integrations.ListenTogetherSettings
-import com.music.vivi.ui.screens.recognition.RecognitionScreen
-import com.music.vivi.ui.screens.recognition.RecognitionHistoryScreen
-import com.music.vivi.ui.screens.settings.UpdateSettings
-import com.music.vivi.ui.screens.settings.NotificationPermission
 import com.music.vivi.ui.screens.wrapped.WrappedScreen
 import com.music.vivi.vivimusic.updater.UpdateScreen
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
-import com.music.vivi.vivimusic.changelog.ChangelogScreen
-import com.music.vivi.vivimusic.commitscreen.CommitScreen
 import com.music.vivi.ui.screens.equalizer.axion.AxionEqScreen
-import com.music.vivi.ui.screens.settings.SpotifyScreen
 import com.music.vivi.viewmodels.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -332,30 +312,10 @@ fun NavGraphBuilder.navigationBuilder(
         SettingsScreen(navController, scrollBehavior)
     }
 
-    composable("settings/update") {
-       UpdateSettings(navController, scrollBehavior)
-    }
 
-    composable("settings/update/notification_permission") {
-        NotificationPermission(navController, scrollBehavior)
-    }
 
     composable("settings/account") {
         AccountSettingsScreen(navController, scrollBehavior, homeViewModel)
-    }
-    composable("settings/listening_summary") {
-        ListeningSummaryScreen(navController)
-    }
-
-    composable(
-        route = "detailed_listening_history/{startTimestamp}",
-        arguments = listOf(
-            navArgument("startTimestamp") {
-                type = NavType.StringType
-            },
-        ),
-    ) {
-        DetailedListeningHistoryScreen(navController)
     }
 
     composable("settings/appearance") {
@@ -366,9 +326,6 @@ fun NavGraphBuilder.navigationBuilder(
         ThemeSettings(navController)
     }
 
-    composable("settings/player/motionartwork") {
-        MotionartworkSelection(navController, scrollBehavior)
-    }
 
     composable("settings/appearance/font") {
         FontSelectionScreen(navController, scrollBehavior)
@@ -382,9 +339,6 @@ fun NavGraphBuilder.navigationBuilder(
         RomanizationSettings(navController, scrollBehavior)
     }
 
-    composable("settings/ai") {
-        AiSettings(navController, scrollBehavior)
-    }
     
     composable("settings/player") {
         PlayerSettings(navController, scrollBehavior)
@@ -418,58 +372,15 @@ fun NavGraphBuilder.navigationBuilder(
         AutoBackupSettings(navController, scrollBehavior)
     }
 
-    composable("settings/spotify") {
-        val rootEntry = remember(it) { navController.getBackStackEntry(navController.graph.id) }
-        val viewModel: SpotifyViewModel = hiltViewModel(rootEntry)
-        SpotifyScreen(navController, scrollBehavior, viewModel)
-    }
 
-    composable("settings/integrations") {
-        IntegrationScreen(navController, scrollBehavior)
-    }
 
-    composable("settings/integrations/discord") {
-        DiscordSettings(navController, scrollBehavior, snackbarHostState)
-    }
 
-    composable("settings/integrations/lastfm") {
-        LastFMSettings(navController, scrollBehavior)
-    }
 
-    composable("settings/integrations/spotify") {
-        val rootEntry = remember(it) { navController.getBackStackEntry(navController.graph.id) }
-        val viewModel: SpotifyViewModel = hiltViewModel(rootEntry)
-        SpotifyScreen(navController, scrollBehavior, viewModel)
-    }
 
-    composable("settings/integrations/spotify/login") {
-        val rootEntry = remember(it) { navController.getBackStackEntry(navController.graph.id) }
-        val viewModel: SpotifyViewModel = hiltViewModel(rootEntry)
-        SpotifyLoginScreen(
-            navController = navController,
-            onCookiesCaptured = { spDc, spKey ->
-                viewModel.connectWithCookies(spDc, spKey)
-            }
-        )
-    }
 
-    composable("settings/integrations/spotify/playlists") {
-        val rootEntry = remember(it) { navController.getBackStackEntry(navController.graph.id) }
-        val viewModel: SpotifyViewModel = hiltViewModel(rootEntry)
-        SpotifyPlaylistScreen(navController, viewModel)
-    }
 
-    composable(route = "settings/integrations/listen_together") {
-        ListenTogetherSettings(navController, scrollBehavior)
-    }
 
-    composable("settings/discord/login") {
-        DiscordLoginScreen(navController)
-    }
 
-    composable("settings/about") {
-        AboutScreen(navController, scrollBehavior)
-    }
 
     composable("update") {
         UpdateScreen(navController)
@@ -487,17 +398,5 @@ fun NavGraphBuilder.navigationBuilder(
         EqScreen(navController = navController)
     }
 
-    composable("recognition") {
-        RecognitionScreen(navController)
-    }
 
-    composable("recognition_history") {
-        RecognitionHistoryScreen(navController)
-    }
-    composable("settings/changelog") {
-        ChangelogScreen(navController,scrollBehavior)
-    }
-    composable("settings/commits") {
-        CommitScreen(navController, scrollBehavior)
-    }
 }

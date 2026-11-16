@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import com.music.innertube.models.ArtistItem
 import com.music.vivi.LocalDatabase
-import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.db.entities.SpeedDialItem
@@ -59,8 +58,6 @@ fun YouTubeArtistMenu(
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val libraryArtist by database.artist(artist.id).collectAsState(initial = null)
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
     val isPinned by database.speedDialDao.isPinned(artist.id).collectAsState(initial = false)
     val coroutineScope = rememberCoroutineScope()
 
@@ -88,26 +85,24 @@ fun YouTubeArtistMenu(
         item {
             NewActionGrid(
                 actions = buildList {
-                    if (!isGuest) {
-                        artist.radioEndpoint?.let { watchEndpoint ->
-                            add(
-                                NewAction(
-                                    icon = {
-                                        Icon(
-                                            painter = painterResource(R.drawable.radio),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(28.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    },
-                                    text = stringResource(R.string.start_an_radio),
-                                    onClick = {
-                                        playerConnection.playQueue(YouTubeQueue(watchEndpoint))
-                                        onDismiss()
-                                    }
-                                )
+                    artist.radioEndpoint?.let { watchEndpoint ->
+                        add(
+                            NewAction(
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.radio),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(28.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                text = stringResource(R.string.start_an_radio),
+                                onClick = {
+                                    playerConnection.playQueue(YouTubeQueue(watchEndpoint))
+                                    onDismiss()
+                                }
                             )
-                        }
+                        )
                     }
 
                     add(
@@ -158,7 +153,7 @@ fun YouTubeArtistMenu(
                     )
                 },
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp),
-                columns = if (isGuest) 1 else 3
+                columns = 3
             )
         }
 

@@ -55,12 +55,10 @@ import androidx.navigation.NavController
 import com.music.innertube.YouTube
 import com.music.vivi.LocalDatabase
 import com.music.vivi.LocalDownloadUtil
-import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import com.music.vivi.constants.ListItemHeight
 import com.music.vivi.extensions.toggleRepeatMode
-import com.music.vivi.listentogether.RoomRole
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.playback.ExoDownloadService
 import com.music.vivi.ui.component.BottomSheetState
@@ -105,9 +103,6 @@ fun OldPlayerMenu(
 
     val download by LocalDownloadUtil.current.getDownload(mediaMetadata.id).collectAsState(initial = null)
 
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRoleState = listenTogetherManager?.role?.collectAsState(initial = RoomRole.NONE)
-    val isListenTogetherGuest = listenTogetherRoleState?.value == RoomRole.GUEST
 
     val currentSong by playerConnection.currentSong.collectAsState(initial = null)
     val librarySong by database.song(mediaMetadata.id).collectAsState(initial = null)
@@ -238,24 +233,22 @@ fun OldPlayerMenu(
             val startingRadioText = stringResource(R.string.starting_radio)
             NewActionGrid(
                 actions = listOfNotNull(
-                    if (!isListenTogetherGuest) {
-                        NewAction(
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.radio),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            text = stringResource(R.string.start_an_radio),
-                            onClick = {
-                                Toast.makeText(context, startingRadioText, Toast.LENGTH_SHORT).show()
-                                playerConnection.startRadioSeamlessly()
-                                onDismiss()
-                            }
-                        )
-                    } else null,
+                    NewAction(
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.radio),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        text = stringResource(R.string.start_an_radio),
+                        onClick = {
+                            Toast.makeText(context, startingRadioText, Toast.LENGTH_SHORT).show()
+                            playerConnection.startRadioSeamlessly()
+                            onDismiss()
+                        }
+                    )
                     NewAction(
                         icon = {
                             Icon(
@@ -292,7 +285,7 @@ fun OldPlayerMenu(
                         }
                     )
                 ),
-                columns = if (isListenTogetherGuest) 2 else 3,
+                columns = 3,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
             )
         }
@@ -305,25 +298,23 @@ fun OldPlayerMenu(
                 expressive = true,
                 items = buildList {
                     // Shuffle
-                    if (!isListenTogetherGuest) {
-                        add(
-                            Material3MenuItemData(
-                                title = { Text(stringResource(R.string.shuffle)) },
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.shuffle),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = if (shuffleModeEnabled) MaterialTheme.colorScheme.primary else androidx.compose.material3.LocalContentColor.current
-                                    )
-                                },
-                                onClick = {
-                                    playerConnection.player.shuffleModeEnabled = !shuffleModeEnabled
-                                    onDismiss()
-                                }
-                            )
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(stringResource(R.string.shuffle)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.shuffle),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (shuffleModeEnabled) MaterialTheme.colorScheme.primary else androidx.compose.material3.LocalContentColor.current
+                                )
+                            },
+                            onClick = {
+                                playerConnection.player.shuffleModeEnabled = !shuffleModeEnabled
+                                onDismiss()
+                            }
                         )
-                    }
+                    )
 
                     // Download
                     when (download?.state) {
@@ -422,30 +413,28 @@ fun OldPlayerMenu(
                     )
 
                     // Repeat
-                    if (!isListenTogetherGuest) {
-                        add(
-                            Material3MenuItemData(
-                                title = { Text(stringResource(R.string.repeat)) },
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(
-                                            when (repeatMode) {
-                                                Player.REPEAT_MODE_OFF, Player.REPEAT_MODE_ALL -> R.drawable.repeat
-                                                Player.REPEAT_MODE_ONE -> R.drawable.repeat_one
-                                                else -> R.drawable.repeat
-                                            }
-                                        ),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else androidx.compose.material3.LocalContentColor.current
-                                    )
-                                },
-                                onClick = {
-                                    playerConnection.player.toggleRepeatMode()
-                                }
-                            )
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(stringResource(R.string.repeat)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(
+                                        when (repeatMode) {
+                                            Player.REPEAT_MODE_OFF, Player.REPEAT_MODE_ALL -> R.drawable.repeat
+                                            Player.REPEAT_MODE_ONE -> R.drawable.repeat_one
+                                            else -> R.drawable.repeat
+                                        }
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else androidx.compose.material3.LocalContentColor.current
+                                )
+                            },
+                            onClick = {
+                                playerConnection.player.toggleRepeatMode()
+                            }
                         )
-                    }
+                    )
                 }
             )
         }

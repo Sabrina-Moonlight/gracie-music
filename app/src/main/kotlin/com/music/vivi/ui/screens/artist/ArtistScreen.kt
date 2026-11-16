@@ -93,7 +93,6 @@ import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import com.music.vivi.LocalDatabase
-import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerAwareWindowInsets
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
@@ -159,8 +158,6 @@ fun ArtistScreen(
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current ?: return
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val artistPage = viewModel.artistPage
@@ -569,7 +566,7 @@ fun ArtistScreen(
                                     }
 
                                     // Radio Button
-                                    if (!showLocal && !isGuest) {
+                                    if (!showLocal) {
                                         artistPage?.artist?.radioEndpoint?.let { radioEndpoint ->
                                             ToggleButton(
                                                 checked = false,
@@ -597,7 +594,7 @@ fun ArtistScreen(
                                     }
 
                                     // Shuffle Button
-                                    if (!showLocal && !isGuest) {
+                                    if (!showLocal) {
                                         artistPage?.artist?.shuffleEndpoint?.let { shuffleEndpoint ->
                                             ToggleButton(
                                                 checked = false,
@@ -626,7 +623,7 @@ fun ArtistScreen(
                                                 )
                                             }
                                         }
-                                    } else if (librarySongs.isNotEmpty() && !isGuest) {
+                                    } else if (librarySongs.isNotEmpty()) {
                                         ToggleButton(
                                             checked = false,
                                             onCheckedChange = {
@@ -964,7 +961,7 @@ fun ArtistScreen(
         )
         
         // Play All FAB (Stacked above Library/Local FAB if visible)
-        val canPlayAll = !isGuest && (
+        val canPlayAll = (
             (showLocal && librarySongs.isNotEmpty()) || 
             (!showLocal && artistPage?.sections?.any { 
                 (it.items.firstOrNull() as? SongItem)?.album != null 

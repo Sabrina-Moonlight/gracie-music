@@ -78,8 +78,6 @@ import com.music.vivi.constants.EnableYouLyPlusKey
 import com.music.vivi.constants.EnablePaxsenixKey
 import com.music.vivi.constants.EnableUnisonKey
 import com.music.vivi.constants.EnableBiniLyricsKey
-import com.music.vivi.constants.EnableSpotifyLyricsKey
-import com.music.vivi.constants.SpotifySessionKey
 import com.music.vivi.constants.HideExplicitKey
 import com.music.vivi.constants.HideVideoSongsKey
 import com.music.vivi.constants.HideYoutubeShortsKey
@@ -204,9 +202,6 @@ fun ContentSettings(
     val (enablePaxsenix, onEnablePaxsenixChange) = rememberPreference(key = EnablePaxsenixKey, defaultValue = true)
     val (enableUnison, onEnableUnisonChange) = rememberPreference(key = EnableUnisonKey, defaultValue = true)
     val (enableBiniLyrics, onEnableBiniLyricsChange) = rememberPreference(key = EnableBiniLyricsKey, defaultValue = true)
-    val (enableSpotifyLyrics, onEnableSpotifyLyricsChange) = rememberPreference(key = EnableSpotifyLyricsKey, defaultValue = false)
-    val (spotifySessionJson, _) = rememberPreference(key = SpotifySessionKey, defaultValue = "")
-    val isSpotifySignedIn = spotifySessionJson.isNotBlank()
     val (lyricsProviderOrder, onLyricsProviderOrderChange) = rememberPreference(
         key = LyricsProviderOrderKey,
         defaultValue = "",
@@ -420,7 +415,7 @@ fun ContentSettings(
     if (showProviderPriorityDialog) {
         val defaultOrder = LyricsProviderRegistry.getDefaultProviderOrder()
         // User-toggleable provider names (excludes always-on YouTube providers)
-        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "Musixmatch", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics", "Spotify")
+        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "Musixmatch", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics")
         val enabledProviders = setOfNotNull(
             "LrcLib".takeIf { enableLrclib },
             "LrcRed".takeIf { enableLrcRed },
@@ -431,7 +426,6 @@ fun ContentSettings(
             "Paxsenix".takeIf { enablePaxsenix },
             "Unison".takeIf { enableUnison },
             "BiniLyrics".takeIf { enableBiniLyrics },
-            "Spotify".takeIf { enableSpotifyLyrics },
         )
 
         // Build a normalized order: saved order first (only known providers), then any missing ones
@@ -1166,29 +1160,6 @@ fun ContentSettings(
                         )
                     },
                     onClick = { onEnableMusixmatchChange(!enableMusixmatch) }
-                ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.spotify),
-                    title = { Text("Spotify Lyrics") },
-                    description = { Text("Requires Spotify account login (via sp_dc cookie)") },
-                    enabled = isSpotifySignedIn,
-                    trailingContent = {
-                        Switch(
-                            checked = enableSpotifyLyrics && isSpotifySignedIn,
-                            onCheckedChange = onEnableSpotifyLyricsChange,
-                            enabled = isSpotifySignedIn,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (enableSpotifyLyrics) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onEnableSpotifyLyricsChange(!enableSpotifyLyrics) }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),

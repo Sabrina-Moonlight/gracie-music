@@ -75,7 +75,6 @@ import com.music.vivi.constants.HidePlayerThumbnailKey
 import com.music.vivi.constants.ShowPlayerThumbnailShadowKey
 import com.music.vivi.constants.PlayerThumbnailShadowElevationKey
 import com.music.vivi.constants.LibraryFilter
-import com.music.vivi.constants.ListenTogetherInTopBarKey
 import com.music.vivi.constants.LyricsAnimationStyle
 import com.music.vivi.constants.LyricsAnimationStyleKey
 import com.music.vivi.constants.LyricsStandardBlurKey
@@ -346,11 +345,6 @@ fun AppearanceSettings(
         }
         showRestartDialog = true
     }
-
-    val (listenTogetherInTopBar, onListenTogetherInTopBarChange) = rememberPreference(
-        ListenTogetherInTopBarKey,
-        defaultValue = true
-    )
 
     val (swipeToSong, onSwipeToSongChange) = rememberPreference(
         SwipeToSongKey,
@@ -756,6 +750,7 @@ fun AppearanceSettings(
                     NavigationTab.HOME -> stringResource(R.string.home)
                     NavigationTab.SEARCH -> stringResource(R.string.search)
                     NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
+                    NavigationTab.LOCAL -> stringResource(R.string.local_music)
                 }
             }
         )
@@ -1885,6 +1880,7 @@ fun AppearanceSettings(
                                 NavigationTab.HOME -> stringResource(R.string.home)
                                 NavigationTab.SEARCH -> stringResource(R.string.search)
                                 NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
+                                NavigationTab.LOCAL -> stringResource(R.string.local_music)
                             }
                         )
                     },
@@ -1971,27 +1967,6 @@ fun AppearanceSettings(
                         )
                     },
                     onClick = { onFloatingNavBarChange(!floatingNavBar) }
-                ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.group_outlined),
-                    title = { Text(stringResource(R.string.listen_together_in_top_bar)) },
-                    description = { Text(stringResource(R.string.listen_together_in_top_bar_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = listenTogetherInTopBar,
-                            onCheckedChange = onListenTogetherInTopBarChange,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (listenTogetherInTopBar) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onListenTogetherInTopBarChange(!listenTogetherInTopBar) }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.grid_view),
@@ -2133,6 +2108,7 @@ enum class NavigationTab {
     HOME,
     SEARCH,
     LIBRARY,
+    LOCAL,
 }
 
 enum class LyricsPosition {

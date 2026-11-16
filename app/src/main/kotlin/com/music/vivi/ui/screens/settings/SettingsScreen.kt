@@ -111,23 +111,6 @@ fun SettingsScreen(
             items = buildList {
                 add(
                     Material3SettingsItem(
-                        icon = painterResource(if (isUpdateAvailable) R.drawable.update_alert else R.drawable.system_update_uptodate),
-                        title = { Text(stringResource(R.string.system_update)) },
-                        description = {
-                            if (isUpdateAvailable) {
-                                Text(
-                                    text = stringResource(R.string.update_available),
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            } else {
-                                Text(stringResource(R.string.app_update_uptodate))
-                            }
-                        },
-                        onClick = { navController.navigate("settings/update") }
-                    )
-                )
-                add(
-                    Material3SettingsItem(
                         icon = painterResource(R.drawable.google),
                         title = { Text(stringResource(R.string.account)) },
                         description = { Text(stringResource(R.string.setting_account_desc)) },
@@ -174,26 +157,10 @@ fun SettingsScreen(
             items = buildList {
                 add(
                     Material3SettingsItem(
-                        icon = painterResource(R.drawable.translate),
-                        title = { Text(stringResource(R.string.ai_lyrics_translation)) },
-                        description = { Text(stringResource(R.string.setting_ai_lyrics_translation_desc)) },
-                        onClick = { navController.navigate("settings/ai") }
-                    )
-                )
-                add(
-                    Material3SettingsItem(
                         icon = painterResource(R.drawable.security),
                         title = { Text(stringResource(R.string.privacy)) },
                         description = { Text(stringResource(R.string.setting_privacy_desc)) },
                         onClick = { navController.navigate("settings/privacy") }
-                    )
-                )
-                add(
-                    Material3SettingsItem(
-                        icon = painterResource(R.drawable.history),
-                        title = { Text(stringResource(R.string.listening_summary)) },
-                        description = { Text(stringResource(R.string.setting_listening_summary_desc)) },
-                        onClick = { navController.navigate("settings/listening_summary") }
                     )
                 )
                 add(
@@ -217,14 +184,6 @@ fun SettingsScreen(
                         title = { Text(stringResource(R.string.backup_restore)) },
                         description = { Text(stringResource(R.string.setting_backup_restore_desc)) },
                         onClick = { navController.navigate("settings/backup_restore") }
-                    )
-                )
-                add(
-                    Material3SettingsItem(
-                        icon = painterResource(R.drawable.info),
-                        title = { Text(stringResource(R.string.about)) },
-                        description = { Text(stringResource(R.string.setting_about_desc)) },
-                        onClick = { navController.navigate("settings/about") }
                     )
                 )
             }

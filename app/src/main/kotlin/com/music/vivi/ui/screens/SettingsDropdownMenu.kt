@@ -134,38 +134,6 @@ fun SettingsDropdownMenu(
             IconButton(
                 onClick = { 
                     onDismissRequest()
-                    onNavigate("settings/update")
-                }, 
-                modifier = iconButtonModifier,
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = if (isUpdateAvailable) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                shapes = IconButtonDefaults.shapes()
-            ) {
-                Icon(
-                    painter = painterResource(if (isUpdateAvailable) R.drawable.update_alert else R.drawable.system_update_uptodate),
-                    contentDescription = "Update",
-                    tint = if (isUpdateAvailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(
-                onClick = { 
-                    onDismissRequest()
-                    onNavigate("settings/changelog")
-                }, 
-                modifier = iconButtonModifier,
-                colors = iconButtonColors,
-                shapes = IconButtonDefaults.shapes()
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.changelog_paper),
-                    contentDescription = "History",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(
-                onClick = { 
-                    onDismissRequest()
                     val targetApkName = if (BuildConfig.FLAVOR.contains("foss", ignoreCase = true)) "izzydroid-universal-foss-release.apk" else "vivi.apk"
                     val shareUrl = "https://github.com/vivizzz007/vivi-music/releases/latest/download/$targetApkName"
                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -189,7 +157,7 @@ fun SettingsDropdownMenu(
         Spacer(modifier = Modifier.height(4.dp))
 
         // --- Section 1: Account, Sync & Integrations ---
-        val section1Count = if (isLoggedIn) 3 else 2
+        val section1Count = if (isLoggedIn) 2 else 1
         Surface(
             shape = listItemShape(0, section1Count, 16.dp),
             color = itemContainerColor,
@@ -252,16 +220,6 @@ fun SettingsDropdownMenu(
             )
         }
         
-        DropdownMenuIconItem(
-            title = stringResource(R.string.integrations),
-            icon = R.drawable.extension,
-            shape = listItemShape(section1Count - 1, section1Count, 16.dp),
-            containerColor = itemContainerColor,
-            onClick = {
-                onDismissRequest()
-                onNavigate("settings/integrations")
-            }
-        )
 
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -270,44 +228,13 @@ fun SettingsDropdownMenu(
         DropdownMenuIconItem(
             title = stringResource(R.string.settings),
             icon = R.drawable.settings,
-            shape = listItemShape(0, 2, 16.dp),
+            shape = listItemShape(0, 1, 16.dp),
             containerColor = itemContainerColor,
             onClick = {
                 onDismissRequest()
                 onNavigate("settings")
             }
         )
-        Surface(
-            shape = listItemShape(1, 2, 16.dp),
-            color = itemContainerColor,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 1.dp)
-        ) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = stringResource(R.string.about),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                },
-                leadingIcon = {
-                    Image(
-                        painter = painterResource(id = R.drawable.icon),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                },
-                onClick = {
-                    onDismissRequest()
-                    onNavigate("settings/about")
-                },
-                modifier = Modifier.height(48.dp)
-            )
-        }
     }
 }
 
