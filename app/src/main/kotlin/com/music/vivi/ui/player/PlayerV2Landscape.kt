@@ -21,7 +21,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,11 +41,11 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.navigation.NavController
+import androidx.compose.ui.graphics.luminance
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import com.music.vivi.BuildConfig
-import com.music.vivi.LocalListenTogetherManager
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
 import androidx.compose.ui.graphics.Brush
@@ -68,17 +67,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.sp
 import com.music.vivi.ui.component.Icon as MIcon
-import com.music.vivi.constants.PlayerButtonsStyle
-import com.music.vivi.constants.PlayerButtonsStyleKey
-import com.music.vivi.constants.UseNewPlayerDesignKey
-import com.music.vivi.constants.DarkModeKey
-import com.music.vivi.ui.screens.settings.DarkMode
 import com.music.vivi.constants.PlayerThumbnailShadowElevationKey
 import com.music.vivi.constants.ShowPlayerThumbnailShadowKey
 import com.music.vivi.db.entities.Song
 import com.music.vivi.extensions.SwipeGesture
 import com.music.vivi.extensions.togglePlayPause
-import com.music.vivi.listentogether.RoomRole
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.playback.CastConnectionHandler
 import com.music.vivi.ui.component.BottomSheetState
@@ -101,7 +94,6 @@ import com.music.vivi.vivimusic.getConnectedBluetoothDeviceName
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import com.music.vivi.ui.screens.settings.integrations.ListenTogetherAvatarList
 
 @Composable
 fun PlayerV2Landscape(
@@ -120,13 +112,6 @@ fun PlayerV2Landscape(
     val bottomSheetPageState = LocalBottomSheetPageState.current
     var playerState by remember { mutableStateOf(PlayerInternalState.COVER) }
 
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRoleState = listenTogetherManager?.role?.collectAsState(initial = RoomRole.NONE)
-    val isListenTogetherGuest = listenTogetherRoleState?.value == RoomRole.GUEST
-    val listenTogetherRoomState by listenTogetherManager?.roomState?.collectAsState(initial = null) ?: remember { mutableStateOf(null) }
-    val listenTogetherUsersCount = listenTogetherRoomState?.users?.size ?: if (listenTogetherManager?.isInRoom == true) 1 else 0
-    val isInListenTogetherRoom = listenTogetherManager?.isInRoom == true || listenTogetherUsersCount > 0
-    val isMuted by playerConnection.isMuted.collectAsState()
     val canSkipPrevious by playerConnection.canSkipPrevious.collectAsState()
     val canSkipNext by playerConnection.canSkipNext.collectAsState()
 
@@ -187,7 +172,7 @@ fun PlayerV2Landscape(
 
     val storedPlayerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
-        defaultValue = PlayerBackgroundStyle.LIVE_MESH
+        defaultValue = PlayerBackgroundStyle.GRADIENT
     )
     val playerBackground = if (storedPlayerBackground == PlayerBackgroundStyle.APPLE_MUSIC) {
         PlayerBackgroundStyle.BLUR
@@ -200,56 +185,7 @@ fun PlayerV2Landscape(
     val enableGoogleCast by rememberPreference(EnableGoogleCastKey, defaultValue = true)
     val hidePlayerThumbnail by rememberPreference(HidePlayerThumbnailKey, false)
     val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
-    val playerButtonsStyle by rememberEnumPreference(
-        key = PlayerButtonsStyleKey,
-        defaultValue = PlayerButtonsStyle.DEFAULT
-    )
-    val (useNewPlayerDesign) = rememberPreference(
-        UseNewPlayerDesignKey,
-        defaultValue = false
-    )
-    val isSystemInDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-    val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
-    val useDarkTheme = remember(darkTheme, isSystemInDarkTheme) {
-        if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
-    }
-
-    val (textButtonColor, _) = when {
-        playerBackground == PlayerBackgroundStyle.BLUR || 
-        playerBackground == PlayerBackgroundStyle.GRADIENT ||
-        playerBackground == PlayerBackgroundStyle.GLOW_ANIMATED ||
-        playerBackground == PlayerBackgroundStyle.APPLE_MUSIC ||
-        playerBackground == PlayerBackgroundStyle.LIVE_MESH -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT -> Pair(Color.White, Color.Black)
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.onPrimary
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiary,
-                    MaterialTheme.colorScheme.onTertiary
-                )
-            }
-        }
-        else -> {
-            when (playerButtonsStyle) {
-                PlayerButtonsStyle.DEFAULT ->
-                    if (useDarkTheme) Pair(Color.White, Color.Black)
-                    else Pair(Color.Black, Color.White)
-                PlayerButtonsStyle.PRIMARY -> Pair(
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.onPrimary
-                )
-                PlayerButtonsStyle.TERTIARY -> Pair(
-                    MaterialTheme.colorScheme.tertiary,
-                    MaterialTheme.colorScheme.onTertiary
-                )
-            }
-        }
-    }
-
-    val sliderActiveColor = if (useNewPlayerDesign) textButtonColor else textButtonColor.copy(alpha = 0.7f)
+    val useDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     var showAudioDeviceBottomSheet by remember { mutableStateOf(false) }
 
@@ -549,71 +485,69 @@ fun PlayerV2Landscape(
         // LEFT SIDE: Centered dynamic thumbnail + Bottom Row of Lyrics, Queue, Cast/Headphones
         Column(
             modifier = Modifier
-                .weight(1f)
+                .weight(0.48f)
                 .fillMaxHeight(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Dynamic Thumbnail container (scales to available space)
-            BoxWithConstraints(
+            // Carátula fija de 215 dp (sin degradado)
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                val maxDimension = minOf(maxWidth * 0.92f, maxHeight - 8.dp)
-                val thumbnailSize = maxDimension.coerceAtLeast(140.dp)
-
-                // Thumbnail Box
                 Box(
                     modifier = Modifier
-                        .size(thumbnailSize)
-                    .aspectRatio(1f)
-                    .customSoftShadow(
-                        elevation = playerThumbnailShadowElevation.dp / 2f,
-                        cornerRadius = 14.dp,
-                        enabled = showPlayerThumbnailShadow
-                    )
-                    .background(adaptiveSurface, RoundedCornerShape(14.dp))
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable {
-                        if (playerState != PlayerInternalState.COVER) {
-                            playerState = PlayerInternalState.COVER
+                        .size(215.dp)
+                        .customSoftShadow(
+                            elevation = playerThumbnailShadowElevation.dp / 2f,
+                            cornerRadius = 14.dp,
+                            enabled = showPlayerThumbnailShadow
+                        )
+                        .background(adaptiveSurface, RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable {
+                            if (playerState != PlayerInternalState.COVER) {
+                                playerState = PlayerInternalState.COVER
+                            }
                         }
-                    }
-                    .SwipeGesture(
-                        enabled = (playerState == PlayerInternalState.COVER && !isListenTogetherGuest),
-                        onSwipeLeft = { if (canSkipNext) playerConnection.player.seekToNext() },
-                        onSwipeRight = { if (canSkipPrevious) playerConnection.player.seekToPrevious() }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (hidePlayerThumbnail) {
-                    Icon(
-                        painter = painterResource(R.drawable.vivi_music_small_icon),
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = adaptivePrimary.copy(alpha = 0.5f)
-                    )
-                } else {
-                    Blendingimage(
-                        fromCoverUrl = fromCoverUrl,
-                        toCoverUrl = toCoverUrl,
-                        nextCoverUrl = nextMediaMetadata?.thumbnailUrl,
-                        progress = coverProgress,
-                        crossfadeDuration = crossfadeDuration,
-                        crossfadeEnabled = crossfadeEnabled,
-                        cropAlbumArt = cropAlbumArt,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    if (toCoverUrl == null) {
-                        PlayerV2Motionartowek(
-                            mediaMetadata = displayedMetadata,
-                            isPlaying = isPlaying,
-                            modifier = Modifier.fillMaxSize()
+                        .SwipeGesture(
+                            enabled = playerState == PlayerInternalState.COVER,
+                            onSwipeLeft = { if (canSkipNext) playerConnection.player.seekToNext() },
+                            onSwipeRight = { if (canSkipPrevious) playerConnection.player.seekToPrevious() }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (hidePlayerThumbnail) {
+                        Icon(
+                            painter = painterResource(R.drawable.vivi_music_small_icon),
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = adaptivePrimary.copy(alpha = 0.5f)
+                        )
+                    } else {
+                        val coverUrl = displayedMetadata?.thumbnailUrl
+                        val isYtThumbnail = coverUrl?.let {
+                            it.contains("ytimg") || it.contains("/vi/") || it.contains("youtube.com")
+                        } == true
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(coverUrl?.resize(1200, 1200))
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = if (cropAlbumArt) ContentScale.Crop else ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    if (cropAlbumArt && isYtThumbnail) {
+                                        scaleX = 4f / 3f
+                                        scaleY = 4f / 3f
+                                    }
+                                }
                         )
                     }
                 }
-            }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -621,9 +555,9 @@ fun PlayerV2Landscape(
             // Bottom Row of Lyrics, Cast/Headphones, Queue
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                horizontalArrangement = Arrangement.spacedBy(36.dp, Alignment.CenterHorizontally),
+                    .width(215.dp)
+                    .height(40.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 1. Lyrics Button (Left)
@@ -633,7 +567,7 @@ fun PlayerV2Landscape(
                         playerState = if (isLyricsActive) PlayerInternalState.COVER else PlayerInternalState.LYRICS
                     },
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(
                             if (isLyricsActive) adaptivePrimary.copy(alpha = 0.2f) else Color.Transparent
@@ -648,129 +582,43 @@ fun PlayerV2Landscape(
                 }
 
                 // 2. Cast / Headphone / Audio Device Button (Center)
-                if (isInListenTogetherRoom) {
-                    Box(
-                        modifier = Modifier.height(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = adaptiveSecondary.copy(alpha = 0.16f),
-                            modifier = Modifier.height(42.dp)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (bluetoothDeviceName != null) {
+                        IconButton(
+                            onClick = { showAudioDeviceBottomSheet = true },
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Left Half: Audio Device / AirPlay / Cast
-                                val onLeftClick: (() -> Unit)? = if (bluetoothDeviceName != null || !(BuildConfig.CAST_AVAILABLE && enableGoogleCast)) {
-                                    { showAudioDeviceBottomSheet = true }
-                                } else null
-
-                                Box(
-                                    modifier = Modifier
-                                        .then(if (onLeftClick != null) Modifier.clickable(onClick = onLeftClick) else Modifier)
-                                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (bluetoothDeviceName != null) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.headphones_apple),
-                                            contentDescription = "Audio Device",
-                                            tint = adaptivePrimary,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    } else if (BuildConfig.CAST_AVAILABLE && enableGoogleCast) {
-                                        CastButton(
-                                            modifier = Modifier.size(24.dp),
-                                            tintColor = adaptiveSecondary,
-                                            activeTintColor = adaptivePrimary,
-                                            showBackground = false,
-                                            customIconRes = R.drawable.airplay_audio
-                                        )
-                                    } else {
-                                        Icon(
-                                            painter = painterResource(R.drawable.airplay_audio),
-                                            contentDescription = "Audio Routing",
-                                            tint = adaptiveSecondary,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                }
-
-                                // Center dividing line
-                                Box(
-                                    modifier = Modifier
-                                        .width(1.dp)
-                                        .height(22.dp)
-                                        .background(adaptiveSecondary.copy(alpha = 0.25f))
-                                )
-
-                                // Right Half: Listen Together (Read-Only User Count)
-                                Row(
-                                    modifier = Modifier
-                                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.group_filled),
-                                        contentDescription = "Listen Together",
-                                        tint = adaptivePrimary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    if (listenTogetherUsersCount > 0) {
-                                        Text(
-                                            text = "$listenTogetherUsersCount",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            ),
-                                            color = adaptivePrimary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (bluetoothDeviceName != null) {
-                            IconButton(
-                                onClick = { showAudioDeviceBottomSheet = true },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.headphones_apple),
-                                    contentDescription = "Audio Device",
-                                    tint = adaptiveSecondary,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        } else if (BuildConfig.CAST_AVAILABLE && enableGoogleCast) {
-                            CastButton(
-                                modifier = Modifier.size(48.dp),
-                                tintColor = adaptiveSecondary,
-                                activeTintColor = adaptivePrimary,
-                                showBackground = false,
-                                customIconRes = R.drawable.airplay_audio
+                            Icon(
+                                painter = painterResource(R.drawable.headphones_apple),
+                                contentDescription = "Audio Device",
+                                tint = adaptiveSecondary,
+                                modifier = Modifier.size(28.dp)
                             )
-                        } else {
-                            IconButton(
-                                onClick = { showAudioDeviceBottomSheet = true },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.airplay_audio),
-                                    contentDescription = "Audio Routing",
-                                    tint = adaptiveSecondary,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
+                        }
+                    } else if (BuildConfig.CAST_AVAILABLE && enableGoogleCast) {
+                        CastButton(
+                            modifier = Modifier.size(40.dp),
+                            tintColor = adaptiveSecondary,
+                            activeTintColor = adaptivePrimary,
+                            showBackground = false,
+                            customIconRes = R.drawable.airplay_audio
+                        )
+                    } else {
+                        IconButton(
+                            onClick = { showAudioDeviceBottomSheet = true },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.airplay_audio),
+                                contentDescription = "Audio Routing",
+                                tint = adaptiveSecondary,
+                                modifier = Modifier.size(28.dp)
+                            )
                         }
                     }
                 }
@@ -782,7 +630,7 @@ fun PlayerV2Landscape(
                         playerState = if (isQueueActive) PlayerInternalState.COVER else PlayerInternalState.QUEUE
                     },
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(
                             if (isQueueActive) adaptivePrimary.copy(alpha = 0.2f) else Color.Transparent
@@ -804,7 +652,7 @@ fun PlayerV2Landscape(
         // No extra box or card behind anything, completely transparent on player background.
         Box(
             modifier = Modifier
-                .weight(1f)
+                .weight(0.52f)
                 .fillMaxHeight(),
             contentAlignment = Alignment.Center
         ) {
@@ -1008,17 +856,13 @@ fun PlayerV2Landscape(
                                     value = currentPos.toFloat(),
                                     valueRange = 0f..(if (duration == C.TIME_UNSET) 0f else duration.toFloat()),
                                     onValueChange = { value ->
-                                        if (!isListenTogetherGuest) {
-                                            sliderPosition = value.toLong()
-                                        }
+                                        sliderPosition = value.toLong()
                                     },
                                     onValueChangeFinished = {
-                                        if (!isListenTogetherGuest) {
-                                            sliderPosition?.let { pos ->
-                                                onSeek(pos)
-                                            }
-                                            sliderPosition = null
+                                        sliderPosition?.let { pos ->
+                                            onSeek(pos)
                                         }
+                                        sliderPosition = null
                                     },
                                     interactionSource = trackInteractionSource,
                                     thumb = { Spacer(modifier = Modifier.size(0.dp)) },
@@ -1027,7 +871,7 @@ fun PlayerV2Landscape(
                                             sliderState = sliderState,
                                             trackHeight = trackHeight,
                                             colors = PlayerSliderColors.getSliderColors(
-                                                activeColor = sliderActiveColor,
+                                                activeColor = adaptivePrimary,
                                                 playerBackground = playerBackground,
                                                 useDarkTheme = useDarkTheme
                                             )
@@ -1086,15 +930,13 @@ fun PlayerV2Landscape(
                                 // Previous
                                 IconButton(
                                     onClick = {
-                                        if (!isListenTogetherGuest) {
-                                            if (isCasting) castHandler?.skipToPrevious()
-                                            else if (canSkipPrevious) playerConnection.player.seekToPrevious()
-                                        }
+                                        if (isCasting) castHandler?.skipToPrevious()
+                                        else if (canSkipPrevious) playerConnection.player.seekToPrevious()
                                     },
-                                    enabled = !isListenTogetherGuest && canSkipPrevious,
+                                    enabled = canSkipPrevious,
                                     modifier = Modifier
                                         .size(56.dp)
-                                        .alpha(if (isListenTogetherGuest || !canSkipPrevious) 0.4f else 1f)
+                                        .alpha(if (!canSkipPrevious) 0.4f else 1f)
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.apple_skip_previous),
@@ -1107,9 +949,7 @@ fun PlayerV2Landscape(
                                 // Play / Pause
                                 IconButton(
                                     onClick = {
-                                        if (isListenTogetherGuest) {
-                                            playerConnection.toggleMute()
-                                        } else if (isCasting) {
+                                        if (isCasting) {
                                             if (castIsPlaying) castHandler?.pause() else castHandler?.play()
                                         } else {
                                             playerConnection.player.togglePlayPause()
@@ -1117,37 +957,26 @@ fun PlayerV2Landscape(
                                     },
                                     modifier = Modifier.size(76.dp)
                                 ) {
-                                    if (isListenTogetherGuest) {
-                                        Icon(
-                                            painter = painterResource(if (isMuted) R.drawable.volume_off else R.drawable.volume_up),
-                                            contentDescription = if (isMuted) "Unmute" else "Mute",
-                                            modifier = Modifier.size(56.dp),
-                                            tint = adaptivePrimary
-                                        )
-                                    } else {
-                                        Icon(
-                                            painter = painterResource(
-                                                if (effectiveIsPlaying) R.drawable.pause_applemusic else R.drawable.play_applemusic
-                                            ),
-                                            contentDescription = if (effectiveIsPlaying) "Pause" else "Play",
-                                            modifier = Modifier.size(68.dp),
-                                            tint = adaptivePrimary
-                                        )
-                                    }
+                                    Icon(
+                                        painter = painterResource(
+                                            if (effectiveIsPlaying) R.drawable.pause_applemusic else R.drawable.play_applemusic
+                                        ),
+                                        contentDescription = if (effectiveIsPlaying) "Pause" else "Play",
+                                        modifier = Modifier.size(68.dp),
+                                        tint = adaptivePrimary
+                                    )
                                 }
 
                                 // Next
                                 IconButton(
                                     onClick = {
-                                        if (!isListenTogetherGuest) {
-                                            if (isCasting) castHandler?.skipToNext()
-                                            else if (canSkipNext) playerConnection.player.seekToNext()
-                                        }
+                                        if (isCasting) castHandler?.skipToNext()
+                                        else if (canSkipNext) playerConnection.player.seekToNext()
                                     },
-                                    enabled = !isListenTogetherGuest && canSkipNext,
+                                    enabled = canSkipNext,
                                     modifier = Modifier
                                         .size(56.dp)
-                                        .alpha(if (isListenTogetherGuest || !canSkipNext) 0.4f else 1f)
+                                        .alpha(if (!canSkipNext) 0.4f else 1f)
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.apple_skip_next),
@@ -1203,7 +1032,7 @@ fun PlayerV2Landscape(
                                         sliderState = sliderState,
                                         trackHeight = volHeight,
                                         colors = PlayerSliderColors.getSliderColors(
-                                            activeColor = sliderActiveColor,
+                                            activeColor = adaptivePrimary,
                                             playerBackground = playerBackground,
                                             useDarkTheme = useDarkTheme
                                         )
