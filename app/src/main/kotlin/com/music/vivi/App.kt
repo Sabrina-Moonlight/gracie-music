@@ -65,7 +65,7 @@ class App : Application(), SingletonImageLoader.Factory {
     lateinit var applicationScope: CoroutineScope
 
     @Inject
-    lateinit var localMusicRepository: com.music.vivi.local.LocalMusicRepository
+    lateinit var localMusicRepository: com.music.vivi.localmedia.LocalMusicRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -89,7 +89,9 @@ class App : Application(), SingletonImageLoader.Factory {
         }
 
         // Música local: carga la lista guardada para que la pestaña salga llena al instante
-        localMusicRepository.warmUp()
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching { localMusicRepository.warmUp() }
+        }
 
         // Prewarm InnerTubeX extraction engine and public player in the background for instant playback
         applicationScope.launch(Dispatchers.IO) {

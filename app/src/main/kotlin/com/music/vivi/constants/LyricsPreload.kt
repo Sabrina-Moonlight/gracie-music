@@ -4,7 +4,9 @@ package com.music.vivi.constants
 const val DefaultLyricsPreloadCount = 3
 const val MaxLyricsPreloadCount = 10
 
-/** Las canciones locales llevan este prefijo en su id; no se buscan letras online por id. */
+/** Prefijo antiguo de las canciones locales. Ahora el id es la dirección content:// o file:// del archivo. */
 const val LocalMediaIdPrefix = "local:"
 
-fun isLocalMediaId(id: String?): Boolean = id != null && id.startsWith(LocalMediaIdPrefix)
+fun isLocalMediaId(id: String?): Boolean =
+    id != null &&
+        (id.startsWith(LocalMediaIdPrefix) || id.startsWith("content://", ignoreCase = true) || id.startsWith("file://", ignoreCase = true))

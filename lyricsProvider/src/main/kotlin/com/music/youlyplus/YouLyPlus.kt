@@ -104,11 +104,7 @@ object YouLyPlus {
                 }
                 remaining.removeAll { it.first == winServer }
 
-                val lrc = winLyrics?.let { resp ->
-                    resp.syncedLyrics?.takeIf { it.isNotBlank() }
-                        ?: resp.lyrics?.convertToLrc()?.takeIf { it.isNotBlank() }
-                        ?: resp.plainLyrics?.takeIf { it.isNotBlank() }
-                }
+                val lrc = winLyrics?.toLrc()
                 if (!lrc.isNullOrBlank()) {
                     lastWorkingServer.set(winServer)
                     return@runCatching lrc
@@ -139,11 +135,7 @@ object YouLyPlus {
             scope.async {
                 runCatching {
                     val response = fetchFromServer(server, title, artist, duration, album, id, isrc)
-                    if (response != null) {
-                        response.syncedLyrics?.takeIf { it.isNotBlank() }
-                            ?: response.lyrics?.convertToLrc()?.takeIf { it.isNotBlank() }
-                            ?: response.plainLyrics?.takeIf { it.isNotBlank() }
-                    } else null
+                    response?.toLrc()
                 }.getOrNull()
             }
         }
@@ -161,36 +153,88 @@ object YouLyPlus {
         }
     }
 
+
+    /** Respuesta del servidor -> texto LRC (con tiempos por palabra si los hay). */
+    private fun LyricsResponse.toLrc(): String? {
+        val lrc = syncedLyrics?.takeIf { it.isNotBlank() }
+        if (lrc != null) return lrc
+
+        val kpoe = lyrics
+        if (!kpoe.isNullOrEmpty()) {
+            return kpoe.convertToLrc()?.takeIf { it.isNotBlank() }
+                ?: plainLyrics?.takeIf { it.isNotBlank() }
+        }
+        return plainLyrics?.takeIf { it.isNotBlank() }
+    }
+
     /**
      * Converts a list of LyricsItem (with millisecond 'time') to a standard 
      * [mm:ss.xxx]LRC string. Supports word-by-word rich sync if syllables are present.
      */
     private fun List<com.music.youlyplus.models.LyricsItem>.convertToLrc(): String? {
         if (isEmpty()) return null
-        return joinToString("\n") { item ->
+        return flatMap { item ->
             val lineTime = item.time ?: 0L
-            
-            // Check if any syllable or the item itself is marked as background
-            val isBg = item.syllabus?.any { it.isBackground == true } == true
-            val lineTimestamp = formatTime(lineTime)
-            val bgMarker = if (isBg) "{bg}" else ""
-            
             val syllabus = item.syllabus
-            if (!syllabus.isNullOrEmpty()) {
-                val sb = StringBuilder(lineTimestamp)
-                sb.append(bgMarker)
-                syllabus.forEach { syl ->
-                    val sylTime = syl.time ?: 0L
-                    sb.append(formatTime(sylTime, isSyllable = true))
-                    sb.append(syl.text ?: "")
-                    // Trust the API's own spacing — do not inject extra spaces,
-                    // as that would split intra-word syllables (e.g. "vi"+"dh" → "vi dh")
-                }
-                sb.toString().trimEnd()
-            } else {
-                lineTimestamp + bgMarker + (item.text ?: "")
+            if (syllabus.isNullOrEmpty()) {
+                return@flatMap listOf(formatTime(lineTime) + (item.text ?: ""))
             }
+
+            // Separa la voz principal de la voz de fondo (como hace BetterLyrics):
+            // la principal va en su línea y cada tramo de fondo en una línea {bg} aparte.
+            val main = syllabus.filter { it.isBackground != true }
+            val bgRuns = mutableListOf<MutableList<com.music.youlyplus.models.Syllable>>()
+            var prevWasBg = false
+            syllabus.forEach { syl ->
+                val bg = syl.isBackground == true
+                if (bg) {
+                    if (!prevWasBg) bgRuns.add(mutableListOf())
+                    bgRuns.last().add(syl)
+                }
+                prevWasBg = bg
+            }
+
+            val out = mutableListOf<String>()
+            if (main.isNotEmpty()) {
+                val start = if (syllabus.first().isBackground != true) lineTime else (main.first().time ?: lineTime)
+                buildSyllableLine(start, main, isBg = false, fallbackEnd = lineTime + (item.duration ?: 0L))
+                    ?.let { out.add(it) }
+            }
+            bgRuns.forEach { run ->
+                buildSyllableLine(run.first().time ?: lineTime, run, isBg = true, fallbackEnd = 0L)
+                    ?.let { out.add(it) }
+            }
+            out
+        }.joinToString("\n").takeIf { it.isNotBlank() }
+    }
+
+    /** Construye una línea con sílabas; en voces de fondo quita los paréntesis del texto. */
+    private fun buildSyllableLine(
+        lineTime: Long,
+        syllables: List<com.music.youlyplus.models.Syllable>,
+        isBg: Boolean,
+        fallbackEnd: Long,
+    ): String? {
+        val texts = syllables.map {
+            val t = it.text ?: ""
+            if (isBg) t.replace("(", "").replace(")", "") else t
         }
+        if (texts.all { it.isBlank() }) return null
+
+        val sb = StringBuilder(formatTime(lineTime))
+        if (isBg) sb.append("{bg}")
+        syllables.forEachIndexed { i, syl ->
+            sb.append(formatTime(syl.time ?: 0L, isSyllable = true))
+            // Confía en el espaciado de la API: no añade espacios extra.
+            sb.append(texts[i])
+        }
+        // Marca de fin de la línea: sin ella la app cree que la última palabra
+        // dura hasta la siguiente línea y nunca muestra el círculo de espera.
+        val lastStart = syllables.last().time ?: lineTime
+        val sylEnd = syllables.maxOf { (it.time ?: 0L) + (it.duration ?: 0L) }
+        val lineEnd = if (sylEnd > lastStart) sylEnd else fallbackEnd
+        if (lineEnd > lastStart) sb.append(formatTime(lineEnd, isSyllable = true))
+        return sb.toString().trimEnd()
     }
 
 
@@ -204,6 +248,9 @@ object YouLyPlus {
     }
 
 
+    // Fuentes en orden de preferencia: Apple primero (letra limpia, sin créditos ni traducciones).
+    private const val SOURCE_ORDER = "apple,lyricsplus,musixmatch,spotify,musixmatch-word"
+
     private suspend fun fetchFromServer(
         baseUrl: String,
         title: String,
@@ -212,6 +259,20 @@ object YouLyPlus {
         album: String? = null,
         id: String? = null,
         isrc: String? = null,
+    ): LyricsResponse? =
+        // Si el servidor no acepta el parámetro de fuente, se reintenta sin él.
+        requestLyrics(baseUrl, title, artist, duration, album, id, isrc, SOURCE_ORDER)
+            ?: requestLyrics(baseUrl, title, artist, duration, album, id, isrc, null)
+
+    private suspend fun requestLyrics(
+        baseUrl: String,
+        title: String,
+        artist: String,
+        duration: Int,
+        album: String?,
+        id: String?,
+        isrc: String?,
+        source: String?,
     ): LyricsResponse? = runCatching {
         client.get(baseUrl.let { if (it.endsWith("/")) it else "$it/" } + "v2/lyrics/get") {
             parameter("title", title)
@@ -220,6 +281,7 @@ object YouLyPlus {
             if (album != null) parameter("album", album)
             if (id != null) parameter("id", id)
             if (isrc != null) parameter("isrc", isrc)
+            if (source != null) parameter("source", source)
         }.body<LyricsResponse>()
     }.getOrNull()
 }

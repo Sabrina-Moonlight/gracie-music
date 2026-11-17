@@ -134,7 +134,6 @@ import com.music.vivi.constants.DarkModeKey
 import com.music.vivi.constants.LyricsAnimationStyle
 import com.music.vivi.constants.LyricsAnimationStyleKey
 import com.music.vivi.constants.LyricsClickKey
-import com.music.vivi.constants.effectiveLyricsOffsetMs
 import com.music.vivi.constants.LyricsGlowEffectKey
 import com.music.vivi.constants.LyricsLineSpacingKey
 import com.music.vivi.constants.LyricsRomanizeAsMainKey
@@ -236,6 +235,7 @@ fun Lyrics(
     val density = LocalDensity.current
     val context = LocalContext.current
     val configuration = LocalWindowInfo.current
+    val isGuest = false
 
     val lyricsTextPosition by rememberEnumPreference(LyricsTextPositionKey, LyricsPosition.LEFT)
     val changeLyrics by rememberPreference(LyricsClickKey, true)
@@ -270,7 +270,7 @@ fun Lyrics(
 
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
-        defaultValue = PlayerBackgroundStyle.LIVE_MESH
+        defaultValue = PlayerBackgroundStyle.GRADIENT
     )
 
     val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
@@ -713,7 +713,7 @@ fun Lyrics(
                 }
                 
                 currentPlaybackPosition = position
-                val lyricsOffset = currentSong.effectiveLyricsOffsetMs()
+                val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
                 val effectivePosition = position + lyricsOffset
                 
                 val initialActiveIndices = findActiveLineIndices(lines, effectivePosition)
@@ -790,7 +790,7 @@ fun Lyrics(
                 isSeeking = sliderPosition != null
                 val position = sliderPosition ?: playerConnection.player.currentPosition
                 currentPlaybackPosition = position
-                val lyricsOffset = currentSong.effectiveLyricsOffsetMs()
+                val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
                 currentLineIndex = findCurrentLineIndex(lines, position + lyricsOffset)
             }
         }
@@ -900,7 +900,7 @@ fun Lyrics(
             val metroLyricsLineWrapper = @Composable { index: Int, item: LyricsEntry ->
                 val isSelected = selectedIndices.contains(index)
 
-                val lyricsOffset = currentSong.effectiveLyricsOffsetMs().toLong()
+                val lyricsOffset = currentSong?.song?.lyricsOffset?.toLong() ?: 0L
                 val effectivePlaybackPosition = currentPlaybackPosition + lyricsOffset
 
                 val pairedMainLineIndex = if (item.isBackground) (index - 1 downTo 0).firstOrNull { lines.getOrNull(it)?.isBackground == false } ?: -1 else -1
@@ -947,8 +947,8 @@ fun Lyrics(
                                 if (selectedIndices.size < maxSelectionLimit) selectedIndices.add(index)
                                 else showMaxSelectionToast = true
                             }
-                        } else if (isSynced && changeLyrics) {
-                            val lyricsOffsetVal = currentSong.effectiveLyricsOffsetMs()
+                        } else if (isSynced && changeLyrics && !isGuest) {
+                            val lyricsOffsetVal = currentSong?.song?.lyricsOffset ?: 0
                             playerConnection.seekTo((item.time - lyricsOffsetVal).coerceAtLeast(0))
                             scrollTargetIndex = index
                             isAutoScrollEnabled = true
@@ -1296,7 +1296,7 @@ fun Lyrics(
                     }
                 }
             } else {
-                val lyricsOffset = currentSong.effectiveLyricsOffsetMs().toLong()
+                val lyricsOffset = currentSong?.song?.lyricsOffset?.toLong() ?: 0L
                 val effectivePlaybackPosition = currentPlaybackPosition + lyricsOffset
 
                 itemsIndexed(
@@ -1334,7 +1334,6 @@ fun Lyrics(
                                             romanizeChineseLyrics ||
                                             romanizeHindiLyrics ||
                                             romanizePunjabiLyrics),
-                            showTranslated = false,
                             textSize = lyricsTextSize,
                             lineSpacing = lyricsLineSpacing,
                             isAutoScrollActive = isAutoScrollEnabled,
@@ -1350,8 +1349,8 @@ fun Lyrics(
                                         if (selectedIndices.size < maxSelectionLimit) selectedIndices.add(index)
                                         else showMaxSelectionToast = true
                                     }
-                                } else if (isSynced && changeLyrics) {
-                                    val lyricsOffset = currentSong.effectiveLyricsOffsetMs()
+                                } else if (isSynced && changeLyrics && !isGuest) {
+                                    val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
                                     playerConnection.seekTo((item.time - lyricsOffset).coerceAtLeast(0))
                                     scope.launch {
                                         lazyListState.scrollToItem(index = index)
@@ -1436,8 +1435,8 @@ fun Lyrics(
                                         if (selectedIndices.size < maxSelectionLimit) selectedIndices.add(index)
                                         else showMaxSelectionToast = true
                                     }
-                                } else if (isSynced && changeLyrics) {
-                                    val lyricsOffset = currentSong.effectiveLyricsOffsetMs()
+                                } else if (isSynced && changeLyrics && !isGuest) {
+                                    val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
                                     playerConnection.seekTo((item.time - lyricsOffset).coerceAtLeast(0))
                                     scope.launch {
                                         lazyListState.scrollToItem(index = index)
@@ -1492,9 +1491,9 @@ fun Lyrics(
                                             showMaxSelectionToast = true
                                         }
                                     }
-                                } else if (isSynced && changeLyrics) {
+                                } else if (isSynced && changeLyrics && !isGuest) {
                                     // Professional seek action with smooth animation
-                                    val lyricsOffset = currentSong.effectiveLyricsOffsetMs()
+                                    val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
                                     playerConnection.seekTo((item.time - lyricsOffset).coerceAtLeast(0))
                                     // Smooth slow scroll when clicking on lyrics (3 seconds)
                                     scope.launch {
@@ -2205,6 +2204,7 @@ fun Lyrics(
                                 )
                             }
                         }
+                        
                     }
                 }
             }

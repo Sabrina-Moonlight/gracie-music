@@ -3400,6 +3400,8 @@ class MusicService :
 
             // Música local: se lee directo del dispositivo, sin red ni base de datos.
             if (isLocalMediaId(mediaId)) {
+                // Id nuevo: la dirección del archivo (content:// o file://).
+                if (mediaId.contains("://")) return@Factory dataSpec.withUri(android.net.Uri.parse(mediaId))
                 val localId = mediaId.removePrefix(LocalMediaIdPrefix).toLongOrNull()
                     ?: throw PlaybackException(
                         getString(R.string.error_unknown),

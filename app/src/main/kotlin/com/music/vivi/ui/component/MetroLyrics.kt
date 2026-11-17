@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
@@ -61,6 +62,7 @@ import com.music.vivi.constants.LyricsRomanizeAsMainKey
 import com.music.vivi.lyrics.LyricsEntry
 import com.music.vivi.ui.screens.settings.LyricsPosition
 import com.music.vivi.utils.rememberPreference
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.cos
@@ -315,6 +317,7 @@ fun MetroLyricsLine(
                     lineHeight = (18 * lyricsLineSpacing.coerceAtMost(1.3f)).sp
                 )
             }
+
         }
     }
 
@@ -359,8 +362,36 @@ private fun WordLevelCanvasLyrics(
 
     var smoothPosition by remember { mutableLongStateOf(effectivePlaybackPosition + lyricsOffset) }
     
+    // Si la línea termina con una palabra con guiones ("lo-lo-love"), se sigue animando un momento
+    // después de que termina para que la última sílaba haga su rebote final.
+    val endsWithHyphenGroup = words.size >= 2 && words[words.size - 2].text.endsWith("-")
+    val lastWordEndMs = remember(words) { ((words.lastOrNull()?.endTime ?: 0.0) * 1000).toLong() }
+    var lingerAfterEnd by remember { mutableStateOf(false) }
+    var wasActive by remember { mutableStateOf(false) }
     LaunchedEffect(isActiveLine) {
-        if (isActiveLine && playerConnection != null) {
+        if (isActiveLine) {
+            wasActive = true
+            lingerAfterEnd = false
+        } else if (wasActive) {
+            wasActive = false
+            if (endsWithHyphenGroup) {
+                // Solo se sigue animando mientras dura el rebote (600 ms desde que termina la última
+                // sílaba). Antes eran 700 ms fijos desde que la línea se apagaba y la letra se quedaba
+                // iluminada de más.
+                val nowPos = (playerConnection?.player?.currentPosition ?: effectivePlaybackPosition) + lyricsOffset
+                val remaining = (lastWordEndMs + 600L - nowPos).coerceIn(0L, 700L)
+                if (remaining > 0L) {
+                    lingerAfterEnd = true
+                    delay(remaining)
+                    lingerAfterEnd = false
+                }
+            }
+        }
+    }
+    val animateLine = isActiveLine || lingerAfterEnd
+
+    LaunchedEffect(animateLine) {
+        if (animateLine && playerConnection != null) {
             var lastPlayerPos = playerConnection.player.currentPosition
             var lastUpdateTime = System.currentTimeMillis()
             
@@ -382,8 +413,8 @@ private fun WordLevelCanvasLyrics(
         }
     }
 
-    LaunchedEffect(effectivePlaybackPosition, isActiveLine) {
-        if (!isActiveLine) {
+    LaunchedEffect(effectivePlaybackPosition, animateLine) {
+        if (!animateLine) {
             smoothPosition = effectivePlaybackPosition
         }
     }
@@ -527,7 +558,7 @@ private fun WordLevelCanvasLyrics(
             )
         ) {
             if (mainText.isEmpty()) return@Canvas
-            if (!isActiveLine) {
+            if (!animateLine) {
                 drawText(layoutResult, color = lineColor)
             } else {
                 if (isRtlText) {
@@ -642,6 +673,12 @@ private fun WordLevelCanvasLyrics(
                 }
 
                 val (wordIdxMap, charInWordMap, wordLenMap) = charToWordData
+                // Después del final de la línea, las palabras cantadas se van apagando poco a poco
+                // mientras dura el rebote, hasta llegar al color de línea apagada (sin salto al final).
+                val lingerFade = if (!isActiveLine && lingerAfterEnd) {
+                    ((smoothPosition - lastWordEndMs) / 600f).coerceIn(0f, 1f)
+                } else 0f
+                val litAlpha = 1f + (lineColor.alpha - 1f) * lingerFade
                 val wordFactors = effectiveWords.map { word ->
                     val wStartMs = (word.startTime * 1000).toLong()
                     val wEndMs = (word.endTime * 1000).toLong()
@@ -830,7 +867,7 @@ private fun WordLevelCanvasLyrics(
                                 }
                             }
                         }
-                        val baseAlpha = if (isWordSung || charLp > 0.99f) 1f else (focusedAlpha + (1f - focusedAlpha) * sungFactor)
+                        val baseAlpha = if (isWordSung || charLp > 0.99f) litAlpha else (focusedAlpha + (1f - focusedAlpha) * sungFactor)
                         drawText(letterLayouts[i], color = expressiveAccent.copy(alpha = if (wordIdx == -1) focusedAlpha else baseAlpha))
                         if (!isWordSung && charLp > 0f && charLp < 1f) {
                             val fXL = charBounds.width * charLp

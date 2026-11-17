@@ -79,17 +79,13 @@ import com.music.vivi.constants.MixSortDescendingKey
 import com.music.vivi.constants.MixSortType
 import com.music.vivi.constants.MixSortTypeKey
 import com.music.vivi.constants.PlaylistGridViewKey
+import com.music.vivi.constants.LibraryMixFilterKey
 import com.music.vivi.constants.LibraryMixIsGridViewKey
-import com.music.vivi.constants.ShowCachedPlaylistKey
 import com.music.vivi.constants.ShowCommentButtonKey
-import com.music.vivi.constants.ShowDownloadedPlaylistKey
-import com.music.vivi.constants.ShowLikedPlaylistKey
-import com.music.vivi.constants.ShowTopPlaylistKey
 import com.music.vivi.constants.YtmSyncKey
 import com.music.vivi.db.entities.Album
 import com.music.vivi.db.entities.Artist
 import com.music.vivi.db.entities.Playlist
-import com.music.vivi.db.entities.PlaylistEntity
 import com.music.vivi.extensions.reversed
 import com.music.vivi.ui.component.LibraryAlbumGridItem
 import com.music.vivi.ui.component.LibraryArtistGridItem
@@ -103,15 +99,15 @@ import com.music.vivi.ui.component.LocalMenuState
 import com.music.vivi.ui.component.PlaylistGridItem
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
-import com.music.vivi.utils.rememberPreferenceSync
 import com.music.vivi.viewmodels.LibraryMixViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import java.util.UUID
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.ComponentActivity
 
 enum class LibraryFilterType { ALL, ARTIST, ALBUM, PLAYLIST }
 
@@ -123,10 +119,8 @@ enum class LibraryFilterType { ALL, ARTIST, ALBUM, PLAYLIST }
 fun LibraryMixScreen(
     navController: NavController,
 ) {
-    val parentEntry = remember(navController) {
-        navController.getBackStackEntry(navController.graph.id)
-    }
-    val viewModel: LibraryMixViewModel = hiltViewModel(parentEntry)
+    // El ViewModel vive en la Activity: MainActivity lo crea al abrir la app y así la librería ya está cargada.
+    val viewModel: LibraryMixViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -135,68 +129,17 @@ fun LibraryMixScreen(
 
     val (sortType, onSortTypeChange) = rememberEnumPreference(
         MixSortTypeKey,
-        MixSortType.CREATE_DATE
+        MixSortType.CREATE_DATE,
+        readInitialSync = true
     )
-    val (sortDescending, onSortDescendingChange) = rememberPreference(MixSortDescendingKey, true)
-    val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
+    val (sortDescending, onSortDescendingChange) = rememberPreference(MixSortDescendingKey, true, readInitialSync = true)
+    val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG, readInitialSync = true)
 
     val (ytmSync) = rememberPreference(YtmSyncKey, true)
 
-    val topSize by viewModel.topValue.collectAsState(initial = 50)
-    val recentLikedThumbnails by viewModel.recentLikedThumbnails.collectAsState()
-    val recentDownloadedThumbnails by viewModel.recentDownloadedThumbnails.collectAsState()
-    val likedPlaylist =
-        Playlist(
-            playlist = PlaylistEntity(
-                id = UUID.randomUUID().toString(),
-                name = stringResource(R.string.liked)
-            ),
-            songCount = 0,
-            songThumbnails = emptyList(),
-        )
-
-    val downloadPlaylist =
-        Playlist(
-            playlist = PlaylistEntity(
-                id = UUID.randomUUID().toString(),
-                name = stringResource(R.string.offline)
-            ),
-            songCount = 0,
-            songThumbnails = emptyList(),
-        )
-
-    val topPlaylist =
-        Playlist(
-            playlist = PlaylistEntity(
-                id = UUID.randomUUID().toString(),
-                name = stringResource(R.string.my_top) + " $topSize"
-            ),
-            songCount = 0,
-            songThumbnails = emptyList(),
-        )
-
-    val cachePlaylist =
-        Playlist(
-            playlist = PlaylistEntity(
-                id = UUID.randomUUID().toString(),
-                name = stringResource(R.string.cached_playlist)
-            ),
-            songCount = 0,
-            songThumbnails = emptyList(),
-        )
-
-    val (showLiked) = rememberPreferenceSync(ShowLikedPlaylistKey, true)
-    val (showDownloaded) = rememberPreferenceSync(ShowDownloadedPlaylistKey, true)
-    val (showTop) = rememberPreferenceSync(ShowTopPlaylistKey, true)
-    val (showCached) = rememberPreferenceSync(ShowCachedPlaylistKey, true)
-
-
     val filteredItems by viewModel.filteredUiItems.collectAsState()
 
-    val activeFilterName by viewModel.activeFilter.collectAsState()
-    val activeFilter = remember(activeFilterName) {
-        LibraryFilterType.entries.firstOrNull { it.name == activeFilterName } ?: LibraryFilterType.ALL
-    }
+    var activeFilter by rememberEnumPreference(LibraryMixFilterKey, LibraryFilterType.ALL, readInitialSync = true)
     
     val finalFilteredItems = remember(filteredItems, activeFilter) {
         when (activeFilter) {
@@ -207,23 +150,12 @@ fun LibraryMixScreen(
         }
     }
 
-    val isGridView = rememberPreferenceSync(LibraryMixIsGridViewKey, true)
+    val isGridView = rememberPreference(LibraryMixIsGridViewKey, true, readInitialSync = true)
     
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     val searchQuery by viewModel.searchQuery.collectAsState()
 
-    val visibleStaticItems = remember(showLiked, showDownloaded, showTop, showCached, activeFilter) {
-        buildList {
-            if (activeFilter == LibraryFilterType.ALL) {
-                if (showLiked) add("liked")
-                if (showDownloaded && activeFilter == LibraryFilterType.ALL) add("downloaded")
-                if (showTop) add("top")
-                if (showCached) add("cached")
-            }
-        }
-    }
-
-    val totalListItems = visibleStaticItems.size + (if (!isGridView.value) finalFilteredItems.size else 0)
+    val totalListItems = (if (!isGridView.value) finalFilteredItems.size else 0)
     val getShapeForIndex: (Int) -> Shape = { index ->
         val size = totalListItems
         when {
@@ -357,7 +289,7 @@ fun LibraryMixScreen(
                                 items(LibraryFilterType.entries.toTypedArray()) { filterType ->
                                     androidx.compose.material3.FilterChip(
                                         selected = activeFilter == filterType,
-                                        onClick = { viewModel.setActiveFilter(filterType.name) },
+                                        onClick = { activeFilter = filterType },
                                         label = {
                                             androidx.compose.material3.Text(
                                                 text = when (filterType) {
@@ -373,126 +305,6 @@ fun LibraryMixScreen(
                             }
                         }
                     
-                    if (showLiked && activeFilter == LibraryFilterType.ALL) {
-                        item(
-                            key = "likedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
-                        ) {
-                            if (isGridView.value) {
-                                PlaylistGridItem(
-                                    playlist = likedPlaylist,
-                                    fillMaxWidth = true,
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = { navController.navigate("auto_playlist/liked") },
-                                        ).animateItem(),
-                                )
-                            } else {
-                                PlaylistListItem(
-                                    playlist = likedPlaylist,
-                                    shape = getShapeForIndex(visibleStaticItems.indexOf("liked")),
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { navController.navigate("auto_playlist/liked") }
-                                        .animateItem(),
-                                )
-                            }
-                        }
-                    }
-
-                    if (showDownloaded && activeFilter == LibraryFilterType.ALL) {
-                        item(
-                            key = "downloadedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
-                        ) {
-                            if (isGridView.value) {
-                                PlaylistGridItem(
-                                    playlist = downloadPlaylist,
-                                    fillMaxWidth = true,
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = { navController.navigate("auto_playlist/downloaded") },
-                                        ).animateItem(),
-                                )
-                            } else {
-                                PlaylistListItem(
-                                    playlist = downloadPlaylist,
-                                    shape = getShapeForIndex(visibleStaticItems.indexOf("downloaded")),
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { navController.navigate("auto_playlist/downloaded") }
-                                        .animateItem(),
-                                )
-                            }
-                        }
-                    }
-
-                    if (showTop && activeFilter == LibraryFilterType.ALL) {
-                        item(
-                            key = "TopPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
-                        ) {
-                            if (isGridView.value) {
-                                PlaylistGridItem(
-                                    playlist = topPlaylist,
-                                    fillMaxWidth = true,
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = { navController.navigate("top_playlist/$topSize") },
-                                        ).animateItem(),
-                                )
-                            } else {
-                                PlaylistListItem(
-                                    playlist = topPlaylist,
-                                    shape = getShapeForIndex(visibleStaticItems.indexOf("top")),
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { navController.navigate("top_playlist/$topSize") }
-                                        .animateItem(),
-                                )
-                            }
-                        }
-                    }
-
-                    if (showCached && activeFilter == LibraryFilterType.ALL) {
-                        item(
-                            key = "cachePlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
-                        ) {
-                            if (isGridView.value) {
-                                PlaylistGridItem(
-                                    playlist = cachePlaylist,
-                                    fillMaxWidth = true,
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = { navController.navigate("cache_playlist/cached") },
-                                        ).animateItem(),
-                                )
-                            } else {
-                                PlaylistListItem(
-                                    playlist = cachePlaylist,
-                                    shape = getShapeForIndex(visibleStaticItems.indexOf("cached")),
-                                    autoPlaylist = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { navController.navigate("cache_playlist/cached") }
-                                        .animateItem(),
-                                )
-                            }
-                        }
-                    }
-
                     itemsIndexed(
                         items = finalFilteredItems,
                         key = { _, item ->
@@ -505,7 +317,7 @@ fun LibraryMixScreen(
                         }
                     ) { index, item ->
                         val modifier = Modifier.animateItem().fillMaxWidth()
-                        val dynamicShape = getShapeForIndex(visibleStaticItems.size + index)
+                        val dynamicShape = getShapeForIndex(index)
                         when (item) {
                             is Playlist -> {
                                 if (isGridView.value) {

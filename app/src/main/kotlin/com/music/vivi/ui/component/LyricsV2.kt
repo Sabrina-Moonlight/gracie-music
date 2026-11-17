@@ -109,6 +109,7 @@ fun LyricsLineV2(
             modifier = Modifier.fillMaxWidth(),
         )
     }
+
 }
 
 @Composable

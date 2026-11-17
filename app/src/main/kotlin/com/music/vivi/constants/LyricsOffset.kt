@@ -1,12 +1,12 @@
+/**
+ * vivimusic Project (C) 2026
+ * Licensed under GPL-3.0 | See git history for contributors
+ */
+
 package com.music.vivi.constants
 
-import com.music.vivi.db.entities.Song
-
-/** Adelanto base de las letras (ms). Se suma al valor guardado por canción. */
-const val DefaultLyricsOffsetMs = 100
-
 /**
- * Desfase real de la letra: lo guardado en la canción (diferencia) + la base.
- * Usar SIEMPRE esta función al leer; así la pantalla y la sincronía coinciden.
+ * Offset base (en ms) con el que empieza cada canción. El valor que se guarda por canción es
+ * solo la diferencia respecto a este valor, así las canciones ya guardadas también parten de 100 ms.
  */
-fun Song?.effectiveLyricsOffsetMs(): Int = (this?.song?.lyricsOffset ?: 0) + DefaultLyricsOffsetMs
+const val DefaultLyricsOffsetMs = 100

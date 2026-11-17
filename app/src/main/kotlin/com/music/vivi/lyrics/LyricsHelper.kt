@@ -12,8 +12,8 @@ import com.music.vivi.constants.LyricsPrioritizeSyncAccuracyKey
 import com.music.vivi.constants.LyricsProviderOrderKey
 import com.music.vivi.constants.PreferredLyricsProvider
 import com.music.vivi.constants.PreferredLyricsProviderKey
-import com.music.vivi.constants.isLocalMediaId
 import com.music.vivi.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
+import com.music.vivi.localmedia.isLocalMediaId
 import com.music.vivi.extensions.toEnum
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.utils.NetworkConnectivityObserver
@@ -28,10 +28,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -66,10 +67,6 @@ constructor(
 
 
 
-    /** Canciones locales: se buscan por título/artista; se saltan los proveedores que piden el videoId. */
-    private fun List<LyricsProvider>.forLocal(mediaId: String): List<LyricsProvider> =
-        if (isLocalMediaId(mediaId)) filter { it.name !in VIDEO_ID_PROVIDERS } else this
-
     private val cache = LruCache<String, List<LyricsResult>>(MAX_CACHE_SIZE)
     private var currentLyricsJob: Job? = null
 
@@ -78,8 +75,8 @@ constructor(
     private val fetchesMutex = Mutex()
 
     suspend fun getLyrics(mediaMetadata: MediaMetadata): LyricsWithProvider {
-        currentLyricsJob?.cancel()
-
+        // No cancelamos currentLyricsJob aquí: ese trabajo es la búsqueda manual de letras,
+        // y la precarga en segundo plano la cortaba a la mitad.
         val cached = cache.get(mediaMetadata.id)?.firstOrNull()
         if (cached != null) {
             return LyricsWithProvider(cached.lyrics, cached.providerName)
@@ -106,15 +103,19 @@ constructor(
                     val preferences = context.dataStore.data.first()
                     val prioritizeSync = preferences[LyricsPrioritizeSyncAccuracyKey] ?: true
                     
-                    val providers = resolveLyricsProviders().forLocal(mediaMetadata.id)
+                    val providers = resolveLyricsProviders()
                     
                     val channel = kotlinx.coroutines.channels.Channel<Triple<Int, String, String>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
                     
                     val jobs = providers.mapIndexedNotNull { index, provider ->
-                        if (provider.isEnabled(context)) {
+                        // Los proveedores de YouTube buscan por id de video: no aplican a archivos locales.
+                        val needsVideoId = provider === YouTubeLyricsProvider ||
+                            provider === YouTubeSubtitleLyricsProvider
+                        if (provider.isEnabled(context) && !(needsVideoId && mediaMetadata.id.isLocalMediaId())) {
                             launch {
                                 try {
-                                    withTimeoutOrNull(3500L) {
+                                    // Si un proveedor tarda más de 3,5 s, se sigue sin él.
+                                    withTimeoutOrNull(PROVIDER_FETCH_TIMEOUT_MS) {
                                         val result = provider.getLyrics(
                                             mediaMetadata.id,
                                             mediaMetadata.title,
@@ -215,6 +216,8 @@ constructor(
                                 }
                             }
                         }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         reportException(e)
                     } finally {
@@ -231,11 +234,7 @@ constructor(
         }
 
         return try {
-            val result = deferred.await()
-            if (result.lyrics != LYRICS_NOT_FOUND) {
-                cache.put(cacheKey, listOf(LyricsResult(result.provider, result.lyrics)))
-            }
-            result
+            deferred.await()
         } finally {
             fetchesMutex.withLock {
                 activeFetches.remove(cacheKey)
@@ -254,7 +253,7 @@ constructor(
         currentLyricsJob?.cancel()
 
         val cacheKey = "$songArtists-$songTitle".replace(" ", "")
-        cache.get(cacheKey)?.let { results ->
+        cache.get(cacheKey)?.takeIf { it.isNotEmpty() }?.let { results ->
             results.forEach {
                 callback(it)
             }
@@ -276,36 +275,52 @@ constructor(
         }
 
         val allResult = mutableListOf<LyricsResult>()
-        val providers = resolveLyricsProviders().forLocal(mediaId)
+        val providers = resolveLyricsProviders()
         currentLyricsJob = CoroutineScope(SupervisorJob()).launch {
-            providers.forEach { provider ->
-                if (provider.isEnabled(context)) {
+            // Todos los proveedores buscan a la vez, cada uno guarda sus resultados en su propio canal.
+            val enabled = providers.filter { it.isEnabled(context) }
+            val channels = enabled.map {
+                kotlinx.coroutines.channels.Channel<LyricsResult>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+            }
+            enabled.forEachIndexed { i, provider ->
+                launch {
                     try {
-                        provider.getAllLyrics(mediaId, songTitle, songArtists, duration, album) { lyrics ->
-                            val result = LyricsResult(provider.name, lyrics)
-                            allResult += result
-                            callback(result)
+                        // Si un proveedor tarda demasiado, se sigue con los de abajo.
+                        withTimeoutOrNull(PROVIDER_TIMEOUT_MS) {
+                            provider.getAllLyrics(mediaId, songTitle, songArtists, duration, album) { lyrics ->
+                                channels[i].trySend(LyricsResult(provider.name, lyrics))
+                            }
                         }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         // Catch network-related exceptions like UnresolvedAddressException
                         reportException(e)
+                    } finally {
+                        channels[i].close()
                     }
                 }
             }
-            cache.put(cacheKey, allResult)
+            // Se muestran en el orden de prioridad: los de un proveedor solo salen
+            // cuando los de los proveedores de arriba ya terminaron de salir.
+            for (channel in channels) {
+                for (result in channel) {
+                    allResult += result
+                    callback(result)
+                }
+            }
+            // Solo se guarda si la búsqueda terminó completa y encontró algo;
+            // así una búsqueda cortada o vacía no se queda guardada.
+            if (isActive && allResult.isNotEmpty()) cache.put(cacheKey, allResult)
         }
 
         currentLyricsJob?.join()
     }
 
-    fun cancelCurrentLyricsJob() {
-        currentLyricsJob?.cancel()
-        currentLyricsJob = null
-    }
-
     companion object {
-        private const val MAX_CACHE_SIZE = 50
-        private val VIDEO_ID_PROVIDERS = setOf("YouTube Music", "YouTube Subtitle", "YouLyPlus")
+        private const val MAX_CACHE_SIZE = 3
+        private const val PROVIDER_TIMEOUT_MS = 15_000L
+        private const val PROVIDER_FETCH_TIMEOUT_MS = 3_500L
     }
 }
 

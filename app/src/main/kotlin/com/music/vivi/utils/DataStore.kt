@@ -78,55 +78,21 @@ inline fun <reified T : Enum<T>> enumPreference(
 fun <T> rememberPreference(
     key: Preferences.Key<T>,
     defaultValue: T,
+    readInitialSync: Boolean = false,
 ): MutableState<T> {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    val state =
-        remember {
-            context.dataStore.data
-                .map { it[key] ?: defaultValue }
-                .distinctUntilChanged()
-        }.collectAsStateWithLifecycle(defaultValue)
-
-    return remember {
-        object : MutableState<T> {
-            override var value: T
-                get() = state.value
-                set(value) {
-                    coroutineScope.launch {
-                        context.dataStore.edit {
-                            it[key] = value
-                        }
-                    }
-                }
-
-            override fun component1() = value
-
-            override fun component2(): (T) -> Unit = { value = it }
-        }
+    val initialValue = remember {
+        if (readInitialSync) context.dataStore[key] ?: defaultValue else defaultValue
     }
-}
 
-/**
- * Igual que [rememberPreference], pero el primer valor se lee ya guardado (sin pasar por el valor
- * por defecto), para que la pantalla no parpadee al abrirse con ajustes distintos del defecto.
- */
-@Composable
-fun <T> rememberPreferenceSync(
-    key: Preferences.Key<T>,
-    defaultValue: T,
-): MutableState<T> {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
-    val initial = remember(key) { context.dataStore.get(key, defaultValue) }
     val state =
         remember {
             context.dataStore.data
                 .map { it[key] ?: defaultValue }
                 .distinctUntilChanged()
-        }.collectAsStateWithLifecycle(initial)
+        }.collectAsStateWithLifecycle(initialValue)
 
     return remember {
         object : MutableState<T> {
@@ -151,16 +117,22 @@ fun <T> rememberPreferenceSync(
 inline fun <reified T : Enum<T>> rememberEnumPreference(
     key: Preferences.Key<String>,
     defaultValue: T,
+    readInitialSync: Boolean = false,
 ): MutableState<T> {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    // Con readInitialSync el valor guardado se lee al instante (evita ver el valor por defecto un momento).
+    val initialValue = remember {
+        if (readInitialSync) context.dataStore[key].toEnum(defaultValue = defaultValue) else defaultValue
+    }
 
     val state =
         remember {
             context.dataStore.data
                 .map { it[key].toEnum(defaultValue = defaultValue) }
                 .distinctUntilChanged()
-        }.collectAsStateWithLifecycle(defaultValue)
+        }.collectAsStateWithLifecycle(initialValue)
 
     return remember {
         object : MutableState<T> {

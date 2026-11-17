@@ -59,16 +59,13 @@ constructor(
         }
     }
 
-    /** Estado de red al momento de preguntar (el flujo puede tardar en actualizarse). */
-    fun isOnlineNow(): Boolean = try {
-        networkConnectivity.isCurrentlyConnected()
-    } catch (e: Exception) {
-        true
-    }
-
-    fun setCurrentSong(song: Song) {
-        _currentSong.value = song
-    }
+    /** Comprueba la conexión en este momento (la misma comprobación que usa la búsqueda). */
+    fun isOnlineNow(): Boolean =
+        try {
+            networkConnectivity.isCurrentlyConnected()
+        } catch (e: Exception) {
+            true // Si falla la comprobación, no se avisa
+        }
 
     fun search(
         mediaId: String,
@@ -101,15 +98,12 @@ constructor(
         lyricsEntity: LyricsEntity?,
     ) {
         database.query {
+            lyricsEntity?.let(::delete)
             val lyricsWithProvider =
                 runBlocking {
                     lyricsHelper.getLyrics(mediaMetadata)
                 }
-            // Si no se encuentra, se conserva la letra anterior y no se guarda "no encontrada".
-            if (lyricsWithProvider.lyrics != LyricsEntity.LYRICS_NOT_FOUND) {
-                lyricsEntity?.let(::delete)
-                upsert(LyricsEntity(mediaMetadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
-            }
+            upsert(LyricsEntity(mediaMetadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
         }
     }
 }

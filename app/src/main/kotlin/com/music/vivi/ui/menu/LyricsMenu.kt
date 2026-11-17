@@ -62,7 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.music.vivi.LocalDatabase
 import com.music.vivi.R
-import com.music.vivi.constants.DefaultLyricsOffsetMs
 import com.music.vivi.db.entities.LyricsEntity
 import com.music.vivi.db.entities.SongEntity
 import com.music.vivi.models.MediaMetadata
@@ -74,6 +73,8 @@ import com.music.vivi.ui.component.NewAction
 import com.music.vivi.ui.component.NewActionGrid
 import com.music.vivi.ui.component.TextFieldDialog
 import com.music.vivi.viewmodels.LyricsMenuViewModel
+import com.music.vivi.constants.DefaultLyricsOffsetMs
+import com.music.vivi.constants.LyricsKeepControlsKey
 import com.music.vivi.utils.rememberPreference
 import androidx.compose.runtime.collectAsState
 
@@ -89,10 +90,8 @@ fun LyricsMenu(
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
+    var keepControls by rememberPreference(LyricsKeepControlsKey, defaultValue = false)
     
-
-
-
     var showEditDialog by rememberSaveable {
         mutableStateOf(false)
     }
@@ -145,6 +144,7 @@ fun LyricsMenu(
                 ),
             )
         }
+
 
     if (showSearchDialog) {
         DefaultDialog(
@@ -201,7 +201,8 @@ fun LyricsMenu(
                         )
                         showSearchResultDialog = true
                         
-                        // Show warning only if network is definitely unavailable
+                        // Aviso solo si ahora mismo no hay conexión (misma comprobación que
+                        // usa la búsqueda), no con un valor guardado que puede estar viejo.
                         if (!viewModel.isOnlineNow()) {
                             Toast.makeText(context, context.getString(R.string.error_no_internet), Toast.LENGTH_SHORT).show()
                         }
@@ -423,7 +424,6 @@ fun LyricsMenu(
             Material3MenuGroup(
                 expressive = true,
                 items = buildList {
-                    
                     add(
                         Material3MenuItemData(
                             title = { Text(stringResource(R.string.lyrics_offset)) },
@@ -447,6 +447,34 @@ fun LyricsMenu(
                         )
                     )
                     
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.lyrics_keep_controls)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.lock),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = { keepControls = !keepControls },
+                            trailingContent = {
+                                Switch(
+                                    checked = keepControls,
+                                    onCheckedChange = { keepControls = it },
+                                    thumbContent = {
+                                        Icon(
+                                            painter = painterResource(
+                                                id = if (keepControls) R.drawable.check else R.drawable.close
+                                            ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    )
+
                     add(
                         Material3MenuItemData(
                             title = { Text(text = stringResource(R.string.romanize_current_track)) },

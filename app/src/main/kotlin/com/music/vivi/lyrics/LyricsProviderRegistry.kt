@@ -65,6 +65,7 @@ object LyricsProviderRegistry {
         PreferredLyricsProvider.YOULYPLUS        -> "YouLyPlus"
         PreferredLyricsProvider.PAXSENIX         -> "Paxsenix"
         PreferredLyricsProvider.UNISON           -> "Unison"
+        PreferredLyricsProvider.SPOTIFY          -> "LrcLib"
         PreferredLyricsProvider.BINI_LYRICS      -> "BiniLyrics"
         PreferredLyricsProvider.LRC_RED          -> "LrcRed"
         PreferredLyricsProvider.YOUTUBE_SUBTITLE -> "YouTubeSubtitle"

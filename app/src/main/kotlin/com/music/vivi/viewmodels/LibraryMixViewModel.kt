@@ -15,7 +15,6 @@ import com.music.vivi.constants.MixSortType
 import com.music.vivi.constants.MixSortTypeKey
 import com.music.vivi.constants.PlaylistSortType
 import com.music.vivi.constants.SongSortType
-import com.music.vivi.constants.TopSize
 import com.music.vivi.db.MusicDatabase
 import com.music.vivi.db.entities.Album
 import com.music.vivi.db.entities.Artist
@@ -23,10 +22,7 @@ import com.music.vivi.db.entities.Playlist
 import com.music.vivi.extensions.toEnum
 import com.music.vivi.constants.PinnedLibraryItemsKey
 import com.music.vivi.utils.SyncUtils
-import com.music.vivi.constants.LibraryMixFilterKey
 import com.music.vivi.utils.dataStore
-import com.music.vivi.utils.get
-import androidx.datastore.preferences.core.edit
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +36,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.Collator
@@ -57,7 +54,7 @@ import com.music.vivi.extensions.filterExplicitAlbums
 class LibraryMixViewModel
 @Inject
 constructor(
-    @ApplicationContext private val context: Context,
+    @ApplicationContext context: Context,
     database: MusicDatabase,
     private val syncUtils: SyncUtils,
 ) : ViewModel() {
@@ -87,25 +84,10 @@ constructor(
         }
     }
 
-    /** Filtro de la biblioteca (nombre de LibraryFilterType). Se lee ya guardado y se conserva al cambiar de pestaña. */
-    val activeFilter = MutableStateFlow(context.dataStore.get(LibraryMixFilterKey, "ALL"))
-
-    fun setActiveFilter(name: String) {
-        activeFilter.value = name
-        viewModelScope.launch(Dispatchers.IO) {
-            context.dataStore.edit { it[LibraryMixFilterKey] = name }
-        }
-    }
-
     val searchQuery = MutableStateFlow("")
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    val debouncedSearchQuery = searchQuery.debounce(250)
+    val debouncedSearchQuery = searchQuery.debounce { if (it.isEmpty()) 0L else 250L }
 
-    val topValue =
-        context.dataStore.data
-            .map { it[TopSize] ?: "50" }
-            .distinctUntilChanged()
-            
     val recentLikedThumbnails = database.likedSongs(SongSortType.CREATE_DATE, true)
         .map { songs -> songs.take(3).mapNotNull { it.thumbnailUrl } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -177,6 +159,10 @@ constructor(
                 }
             }
         }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val _isLibraryLoaded = MutableStateFlow(false)
+    /** Pasa a true cuando la lista de la librería ya emitió por primera vez. */
+    val isLibraryLoaded: StateFlow<Boolean> = _isLibraryLoaded
 
     val filteredUiItems = combine(
         artists, albums, playlists, debouncedSearchQuery, sortSettings
@@ -252,6 +238,7 @@ constructor(
         }
         result
     }.flowOn(Dispatchers.Default)
+     .onEach { _isLibraryLoaded.value = true }
      .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {

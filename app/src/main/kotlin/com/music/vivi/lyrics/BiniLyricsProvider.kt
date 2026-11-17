@@ -16,20 +16,24 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
-import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 /**
  * Lyrics provider backed by the Binimum API.
  *
  * Endpoint: `GET https://lyrics-api.binimum.org/getLyrics?track=...&artist=...`
- * Returns a JSON with a TTML URL, which is then parsed into RichSync LRC format.
+ * Returns a JSON with a TTML URL, which is then parsed into RichSync LRC format
+ * (same TTML parser as [LrcRedLyricsProvider], since the files come from lrc.red).
  */
 object BiniLyricsProvider : LyricsProvider {
 
     override val name = "Bini Lyrics"
 
     private const val BASE_URL = "https://lyrics-api.binimum.org"
+
+    /** Máxima diferencia de duración (segundos) para dar un resultado por bueno. */
+    private const val MAX_DURATION_DIFF_SECONDS = 3.0
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -74,10 +78,25 @@ object BiniLyricsProvider : LyricsProvider {
                 return@withContext Result.failure(Exception("Bini Lyrics: no results found"))
             }
 
-            // Get the first result's TTML url
-            val firstResult = results.getJSONObject(0)
-            val lyricsUrl = firstResult.optString("lyricsUrl").takeIf { it.isNotBlank() }
-                ?: return@withContext Result.failure(Exception("Bini Lyrics: no lyricsUrl in result"))
+            // Elige el resultado cuya duración más se parece a la de la canción que suena
+            // (como hace LrcRed): evita coger una versión en vivo o un remix con otros tiempos.
+            val candidates = (0 until results.length())
+                .map { results.getJSONObject(it) }
+                .filter { it.optString("lyricsUrl").isNotBlank() }
+            if (candidates.isEmpty()) {
+                return@withContext Result.failure(Exception("Bini Lyrics: no lyricsUrl in result"))
+            }
+
+            fun distance(result: JSONObject): Double {
+                val resultDuration = result.optDouble("duration", 0.0)
+                return if (duration > 0 && resultDuration > 0.0) abs(resultDuration - duration) else 0.0
+            }
+
+            val best = candidates
+                .filter { distance(it) <= MAX_DURATION_DIFF_SECONDS }
+                .minByOrNull { distance(it) }
+                ?: return@withContext Result.failure(Exception("Bini Lyrics: no result matches the song duration"))
+            val lyricsUrl = best.getString("lyricsUrl")
 
             // Fetch the TTML
             val ttmlReq = Request.Builder().url(lyricsUrl).build()
@@ -108,75 +127,17 @@ object BiniLyricsProvider : LyricsProvider {
     // Parsing Logic
     // ──────────────────────────────────────────────────────────────────────
 
-    private val pRegex = """<p\s+[^>]*?begin=["']([\w:.]+)["'][^>]*>(.*?)</p>""".toRegex(RegexOption.DOT_MATCHES_ALL)
-    private val spanRegex = """<span\s+[^>]*?begin=["']([\w:.]+)["'][^>]*>(.*?)</span>""".toRegex(RegexOption.DOT_MATCHES_ALL)
-
     /**
-     * Parse Apple Music TTML format and convert to standard LRC or RichSync LRC.
+     * Convierte el TTML (Apple Music) a LRC con tiempos por palabra.
+     * Usa el mismo lector que LrcRed: junta bien las sílabas, separa las voces de fondo
+     * en su propia línea {bg}, marca el final de cada línea y respeta los cantantes.
+     * En las voces de fondo quita los paréntesis (como hace YouLyPlus).
      * Visible for testing.
      */
-    internal fun ttmlToLrc(ttml: String): String {
-        val lrcBuilder = java.lang.StringBuilder()
-
-        for (pMatch in pRegex.findAll(ttml)) {
-            val pBeginSec = parseTtmlTimeToSeconds(pMatch.groupValues[1]) ?: continue
-            val innerHtml = pMatch.groupValues[2]
-
-            val mainTime = formatLrcTime(pBeginSec)
-            lrcBuilder.append("[$mainTime]")
-
-            val spanMatches = spanRegex.findAll(innerHtml).toList()
-            if (spanMatches.isNotEmpty()) {
-                for (spanMatch in spanMatches) {
-                    val spanBeginSec = parseTtmlTimeToSeconds(spanMatch.groupValues[1]) ?: continue
-                    // Clean HTML entities or nested tags from the word just in case
-                    val word = spanMatch.groupValues[2].replace(Regex("<[^>]*>"), "").trim()
-                    if (word.isNotEmpty()) {
-                        val spanTime = formatLrcTime(spanBeginSec)
-                        lrcBuilder.append("<$spanTime> $word ")
-                    }
-                }
-            } else {
-                // Unsynced spans or just plain text inside <p>
-                val plainText = innerHtml.replace(Regex("<[^>]*>"), "").trim()
-                lrcBuilder.append(plainText)
+    internal fun ttmlToLrc(ttml: String): String =
+        LrcRedLyricsProvider.parseTtmlToLrc(ttml)
+            .lineSequence()
+            .joinToString("\n") { line ->
+                if (line.contains("]{bg}")) line.replace("(", "").replace(")", "") else line
             }
-            lrcBuilder.append("\n")
-        }
-
-        return lrcBuilder.toString().trimEnd()
-    }
-
-    private fun formatLrcTime(sec: Float): String {
-        val mm = (sec / 60).toInt()
-        val ss = sec % 60
-        // Result format: MM:SS.xxx where x is fractional padded
-        val ssStr = String.format(Locale.US, "%05.2f", ss) // "09.52", "45.10" etc
-        // ViviMusic regex for Line Rich Sync expects \d{2,3} for ms block: [MM:SS.xx] or [MM:SS.xxx]
-        return String.format(Locale.US, "%02d:%s", mm, ssStr)
-    }
-
-    private fun parseTtmlTimeToSeconds(timeStr: String): Float? {
-        val cleanStr = timeStr.replace(Regex("[a-zA-Z]+$"), "")
-        val isMs = timeStr.endsWith("ms", ignoreCase = true)
-        val parts = cleanStr.split(":")
-
-        val seconds = when (parts.size) {
-            3 -> {
-                val h = parts[0].toFloatOrNull() ?: return null
-                val m = parts[1].toFloatOrNull() ?: return null
-                val s = parts[2].toFloatOrNull() ?: return null
-                h * 3600f + m * 60f + s
-            }
-            2 -> {
-                val m = parts[0].toFloatOrNull() ?: return null
-                val s = parts[1].toFloatOrNull() ?: return null
-                m * 60f + s
-            }
-            else -> {
-                cleanStr.toFloatOrNull() ?: return null
-            }
-        }
-        return if (isMs) seconds / 1000f else seconds
-    }
 }
