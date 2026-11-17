@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 data class WordTimestamp(
     val text: String,
     val startTime: Double,
-    val endTime: Double
+    val endTime: Double,
+    val hasTrailingSpace: Boolean = true,
+    val isBackground: Boolean = false,
+    val isLineTimed: Boolean = false
 )
 
 data class LyricsEntry(

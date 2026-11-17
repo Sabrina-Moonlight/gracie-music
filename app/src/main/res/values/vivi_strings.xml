@@ -1213,4 +1213,8 @@
     <string name="album">Album</string>
     <string name="genre">Genre</string>
     <string name="audio_quality_high_desc">256+ kbps with Premium</string>
+    <string name="lyrics_style_apple">Apple</string>
+    <string name="lyrics_style_braccato">Braccato</string>
+    <string name="lyrics_style_expressive">Expressive</string>
+    <string name="lyrics_style_simple">Simple</string>
 </resources>
