@@ -426,7 +426,7 @@ fun OnlinePlaylistScreen(
             }
         }
 
-        val isFloating = transparentAppBar && !isSearching && !inSelectMode
+        val isFloating = true // botones siempre con fondo suave y borde
         val buttonContainerColor by animateColorAsState(
             targetValue = if (isFloating) {
                 MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
@@ -614,11 +614,7 @@ fun OnlinePlaylistScreen(
                     }
                 }
             },
-            colors = if (transparentAppBar && !isSearching && !inSelectMode) {
-                androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            } else {
-                androidx.compose.material3.TopAppBarDefaults.topAppBarColors()
-            }
+            colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
         )
 
         SnackbarHost(
@@ -699,51 +695,14 @@ private fun OnlinePlaylistHeader(
             // Title
             Text(
                 text = playlist.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
-
-            // Author Name
-            playlist.author?.name?.let { authorName ->
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .padding(horizontal = 32.dp)
-                        .clip(CircleShape)
-                        .clickable(enabled = playlist.author?.id != null) {
-                            playlist.author?.id?.let { authorId ->
-                                navController.navigate("artist/$authorId")
-                            }
-                        }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    if (playlist.authorThumbnail != null) {
-                        AsyncImage(
-                            model = playlist.authorThumbnail,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(
-                        text = authorName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
 
             Spacer(Modifier.height(8.dp))
 
@@ -955,6 +914,24 @@ private fun OnlinePlaylistHeader(
 
             Spacer(Modifier.height(16.dp))
 
+            // Autor: texto simple debajo de los botones
+            playlist.author?.name?.let { authorName ->
+                val authorId = playlist.author?.id
+                Text(
+                    text = authorName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = authorId != null) {
+                            authorId?.let { navController.navigate("artist/$it") }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
 
             // Description
             val description = playlist.description

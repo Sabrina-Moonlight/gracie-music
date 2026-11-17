@@ -226,14 +226,6 @@ internal class LyricsItemFlip {
     }
 }
 
-internal fun buildLinesBefore(processedItems: List<LyricsListItem>): IntArray {
-    val out = IntArray(processedItems.size + 1)
-    for (i in processedItems.indices) {
-        out[i + 1] = out[i] + if (processedItems[i] is LyricsListItem.Line) 1 else 0
-    }
-    return out
-}
-
 @Stable
 internal class LyricsScrollShifter {
     private val origin = TimeSource.Monotonic.markNow()

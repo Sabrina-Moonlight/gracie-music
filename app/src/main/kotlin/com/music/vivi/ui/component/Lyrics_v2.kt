@@ -97,6 +97,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import com.music.vivi.ui.utils.fadingEdge
+import com.music.vivi.ui.component.lyrics.IntervalIndicator
+import com.music.vivi.ui.component.lyrics.lyricsProgressiveBlur
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -155,7 +157,9 @@ fun LyricsV2(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     playerCoordinates: LayoutCoordinates? = null,
     onControlsVisibilityChange: (Boolean) -> Unit = {},
-    controlsVisible: Boolean = false
+    controlsVisible: Boolean = false,
+    // Avisa de la línea principal que suena (índice + 1, 0 = ninguna) cada vez que cambia.
+    onActiveLineChange: (Int) -> Unit = {}
 ) {
     if (!showLyrics) return
 
@@ -214,6 +218,9 @@ fun LyricsV2(
     val isGuest = false
 
     val scrollLyrics by rememberPreference(LyricsScrollKey, true)
+    val lyricsByRealTiming by rememberPreference(com.music.vivi.constants.LyricsActiveByRealTimingKey, true)
+    val lyricsProgressiveBlur by rememberPreference(com.music.vivi.constants.LyricsProgressiveBlurKey, false)
+    val lyricsPlusLighterPref by rememberPreference(com.music.vivi.constants.LyricsPlusLighterKey, false)
     
     val romanizeJapaneseLyrics by rememberPreference(LyricsRomanizeJapaneseKey, true)
     val romanizeKoreanLyrics by rememberPreference(LyricsRomanizeKoreanKey, true)
@@ -234,6 +241,9 @@ fun LyricsV2(
         key = com.music.vivi.constants.PlayerBackgroundStyleKey,
         defaultValue = com.music.vivi.constants.PlayerBackgroundStyle.GRADIENT
     )
+
+    val isPlusLighter = lyricsPlusLighterPref &&
+        playerBackground != com.music.vivi.constants.PlayerBackgroundStyle.DEFAULT
 
     val adaptivePrimary =
         if (playerBackground == com.music.vivi.constants.PlayerBackgroundStyle.DEFAULT) MaterialTheme.colorScheme.onSurface else Color.White
@@ -521,13 +531,18 @@ fun LyricsV2(
                 val initialPos = remember { positionProvider() }
                 val initialActiveLine = remember(lines, initialPos, lyricsOffset) {
                     if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset).maxOrNull() ?: 0
+                        LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset, lyricsByRealTiming).maxOrNull() ?: 0
                     } else 0
                 }
                 var currentPlaybackPosition by remember { mutableLongStateOf(initialPos) }
                 var currentLineIndex by remember { mutableIntStateOf(initialActiveLine) }
                 var activeLineIndices by remember {
-                    mutableStateOf(if (lines.isNotEmpty()) LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset) else emptySet())
+                    mutableStateOf(if (lines.isNotEmpty()) LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset, lyricsByRealTiming) else emptySet())
+                }
+                LaunchedEffect(lines) {
+                    snapshotFlow {
+                        (activeLineIndices.filter { lines.getOrNull(it)?.isBackground == false }.maxOrNull() ?: -1) + 1
+                    }.collect { onActiveLineChange(it) }
                 }
                 // After tapping a lyric line: time of the tap (0 = not waiting) and the
                 // position we jumped to. Lines stay unlit until the sound really advances.
@@ -662,7 +677,7 @@ fun LyricsV2(
                     isAutoScrollEnabled = scrollLyrics
                     val pos = positionProvider()
                     val active = if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset).maxOrNull() ?: 0
+                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset, lyricsByRealTiming).maxOrNull() ?: 0
                     } else 0
                     scrollTargetIndex = active
                     currentLineIndex = active
@@ -672,7 +687,7 @@ fun LyricsV2(
                     userManualOffset = 0f
                 }
 
-                LaunchedEffect(lyrics, lines) {
+                LaunchedEffect(lyrics, lines, lyricsByRealTiming) {
                     if (lyrics.isNullOrEmpty() || !lyrics.startsWith("[")) {
                         currentLineIndex = -1
                         activeLineIndices = emptySet()
@@ -731,8 +746,8 @@ fun LyricsV2(
                         currentPlaybackPosition = position
                         val effectivePosition = position + lyricsOffset
 
-                        val initialActiveIndices = LyricsUtils.findActiveLineIndices(lines, effectivePosition)
-                        val scrollActiveIndicesRaw = LyricsUtils.findActiveLineIndices(lines, effectivePosition + (if (hasWordTimings) 0L else 250L))
+                        val initialActiveIndices = LyricsUtils.findActiveLineIndices(lines, effectivePosition, lyricsByRealTiming)
+                        val scrollActiveIndicesRaw = LyricsUtils.findActiveLineIndices(lines, effectivePosition + (if (hasWordTimings) 0L else 250L), lyricsByRealTiming)
 
                         // La voz de fondo solo mantiene activa a su línea principal si no hay ya una
                         // línea principal posterior sonando; si no, la letra se queda "pegada" arriba.
@@ -996,7 +1011,18 @@ fun LyricsV2(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .fadingEdge(top = LYRICS_FADE_TOP_DP, bottom = LYRICS_FADE_BOTTOM_DP)
+                            .fadingEdge(
+                                top = LYRICS_FADE_TOP_DP,
+                                bottom = LYRICS_FADE_BOTTOM_DP,
+                                blendMode = if (isPlusLighter) androidx.compose.ui.graphics.BlendMode.Plus
+                                else androidx.compose.ui.graphics.BlendMode.SrcOver,
+                            )
+                            .lyricsProgressiveBlur(
+                                topEndFraction = 0.22f,
+                                bottomStartFraction = 0.78f,
+                                maxRadius = 8.dp,
+                                enabled = lyricsProgressiveBlur && isAutoScrollEnabled && !isSelectionModeActive,
+                            )
                             .clipToBounds()
                             .pointerInput(Unit) {
                                 coroutineScope {
@@ -1198,6 +1224,7 @@ fun LyricsV2(
                                                 expressiveAccent = adaptivePrimary,
                                                 bgVisible = bgVisible,
                                                 bgInstantCollapse = false,
+                                                isPlusLighter = isPlusLighter,
                                                 onClick = {
                                                     if (isSelectionModeActive) {
                                                         toggleSelection(index)
@@ -1224,7 +1251,7 @@ fun LyricsV2(
                                             IntervalIndicator(
                                                 gapStartMs = listItem.gapStartMs,
                                                 gapEndMs = listItem.gapEndMs - 650L,
-                                                currentPositionMs = currentPlaybackPosition,
+                                                currentPositionMs = { currentPlaybackPosition },
                                                 visible = indicatorVisible,
                                                 color = adaptivePrimary,
                                                 modifier = Modifier

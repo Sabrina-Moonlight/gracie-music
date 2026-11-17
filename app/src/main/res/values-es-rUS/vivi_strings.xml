@@ -637,4 +637,10 @@
     <string name="discord_activity_name_description">Nombre personalizado para la actividad (déjelo vacío para usar el nombre predeterminado)</string>
     <string name="discord_advanced_mode">Modo avanzado</string>
     <string name="discord_advanced_mode_description">Mostrar opciones de personalización adicionales para la Presencia Enriquecida</string>
+    <string name="lyrics_real_timing">Resaltar letras según sus tiempos</string>
+    <string name="lyrics_real_timing_desc">Cada línea se ilumina solo durante su propio tiempo, aunque se solapen</string>
+    <string name="lyrics_progressive_blur">Desenfoque progresivo de letras</string>
+    <string name="lyrics_progressive_blur_desc">Desenfoca poco a poco las líneas hacia los bordes y deja nítida la activa (Android 13+)</string>
+    <string name="lyrics_plus_lighter">Plus lighter</string>
+    <string name="lyrics_plus_lighter_desc">Aclara las letras con mezcla plus-lighter sobre el fondo del player</string>
 </resources>

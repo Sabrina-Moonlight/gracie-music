@@ -115,6 +115,7 @@ fun MetroLyricsLine(
     expressiveAccent: Color,
     bgVisible: Boolean = true,
     bgInstantCollapse: Boolean = false,
+    isPlusLighter: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val (romanizeAsMain) = rememberPreference(LyricsRomanizeAsMainKey, false)
@@ -136,7 +137,9 @@ fun MetroLyricsLine(
     val mainText = if (entry.isBackground) mainTextRaw?.removePrefix("(")?.removeSuffix(")") ?: "" else mainTextRaw ?: ""
     val subText = if (entry.isBackground) subTextRaw?.removePrefix("(")?.removeSuffix(")") else subTextRaw
 
-    val focusedAlpha = if (entry.isBackground) 0.5f else 0.3f
+    // Plus lighter: las líneas apagadas son más tenues porque la mezcla las aclara.
+    val unlitAlpha = if (isPlusLighter) 0.2f else 0.3f
+    val focusedAlpha = if (entry.isBackground) 0.5f else unlitAlpha
     val activeAlpha = 1f
     
     val targetAlpha = when {

@@ -18,7 +18,11 @@ fun Modifier.fadingEdge(
     top: Dp? = null,
     right: Dp? = null,
     bottom: Dp? = null,
-) = graphicsLayer(alpha = 0.99f)
+    blendMode: BlendMode = BlendMode.SrcOver,
+) = graphicsLayer {
+    alpha = 0.99f
+    this.blendMode = blendMode
+}
     .drawWithContent {
         drawContent()
         if (top != null) {
@@ -86,9 +90,11 @@ fun Modifier.fadingEdge(
 fun Modifier.fadingEdge(
     horizontal: Dp? = null,
     vertical: Dp? = null,
+    blendMode: BlendMode = BlendMode.SrcOver,
 ) = fadingEdge(
     left = horizontal,
     right = horizontal,
     top = vertical,
     bottom = vertical,
+    blendMode = blendMode,
 )

@@ -292,6 +292,9 @@ fun AppearanceSettings(
     val (lyricsGlowEffect, onLyricsGlowEffectChange) = rememberPreference(LyricsGlowEffectKey, defaultValue = false)
     val (appleMusicLyricsBlur, onAppleMusicLyricsBlurChange) = rememberPreference(AppleMusicLyricsBlurKey, defaultValue = true)
     val (lyricsStandardBlur, onLyricsStandardBlurChange) = rememberPreference(LyricsStandardBlurKey, defaultValue = false)
+    val (lyricsRealTiming, onLyricsRealTimingChange) = rememberPreference(com.music.vivi.constants.LyricsActiveByRealTimingKey, defaultValue = true)
+    val (lyricsProgressiveBlur, onLyricsProgressiveBlurChange) = rememberPreference(com.music.vivi.constants.LyricsProgressiveBlurKey, defaultValue = false)
+    val (lyricsPlusLighter, onLyricsPlusLighterChange) = rememberPreference(com.music.vivi.constants.LyricsPlusLighterKey, defaultValue = false)
     val (swipeLyrics, onSwipeLyricsChange) = rememberPreference(SwipeLyricsKey, defaultValue = false)
     val (enableLyricsThumbnailPlayPause, onEnableLyricsThumbnailPlayPauseChange) = rememberPreference(EnableLyricsThumbnailPlayPauseKey, defaultValue = false)
 
@@ -1727,6 +1730,71 @@ fun AppearanceSettings(
                         onClick = { onLyricsStandardBlurChange(!lyricsStandardBlur) }
                     )
                 } else null,
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
+                    title = { Text(stringResource(R.string.lyrics_real_timing)) },
+                    description = { Text(stringResource(R.string.lyrics_real_timing_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = lyricsRealTiming,
+                            onCheckedChange = onLyricsRealTimingChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (lyricsRealTiming) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onLyricsRealTimingChange(!lyricsRealTiming) }
+                ),
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    Material3SettingsItem(
+                        icon = painterResource(R.drawable.lyrics),
+                        title = { Text(stringResource(R.string.lyrics_progressive_blur)) },
+                        description = { Text(stringResource(R.string.lyrics_progressive_blur_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = lyricsProgressiveBlur,
+                                onCheckedChange = onLyricsProgressiveBlurChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter = painterResource(
+                                            id = if (lyricsProgressiveBlur) R.drawable.check else R.drawable.close
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
+                            )
+                        },
+                        onClick = { onLyricsProgressiveBlurChange(!lyricsProgressiveBlur) }
+                    )
+                } else null,
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
+                    title = { Text(stringResource(R.string.lyrics_plus_lighter)) },
+                    description = { Text(stringResource(R.string.lyrics_plus_lighter_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = lyricsPlusLighter,
+                            onCheckedChange = onLyricsPlusLighterChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (lyricsPlusLighter) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onLyricsPlusLighterChange(!lyricsPlusLighter) }
+                ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
                     title = { Text(stringResource(R.string.lyrics_text_size)) },

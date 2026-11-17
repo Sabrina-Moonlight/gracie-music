@@ -37,6 +37,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -785,7 +789,16 @@ fun LocalPlaylistScreen(
                             if (!isSearching) {
                                 navController.backToMain()
                             }
-                        }
+                        },
+                        colors = IconButtonDefaults.outlinedIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+                        ),
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .border(
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                                shape = CircleShape
+                            )
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.arrow_back),
@@ -832,7 +845,18 @@ fun LocalPlaylistScreen(
                 } else if (!isSearching) {
                     // Only search button remains in TopAppBar
                     IconButton(
-                        onClick = { isSearching = true }
+                        onClick = { isSearching = true },
+                        colors = IconButtonDefaults.outlinedIconButtonColors(containerColor = Color.Transparent),
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                                shape = CircleShape
+                            )
+                            .border(
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                                shape = CircleShape
+                            )
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.search),
@@ -840,7 +864,8 @@ fun LocalPlaylistScreen(
                         )
                     }
                 }
-            }
+            },
+            colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
         )
 
         SnackbarHost(

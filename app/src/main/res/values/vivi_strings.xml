@@ -1217,4 +1217,10 @@
     <string name="lyrics_style_braccato">Braccato</string>
     <string name="lyrics_style_expressive">Expressive</string>
     <string name="lyrics_style_simple">Simple</string>
+    <string name="lyrics_real_timing">Highlight lyrics by their timestamps</string>
+    <string name="lyrics_real_timing_desc">Each line stays lit only during its own timing, even when lines overlap</string>
+    <string name="lyrics_progressive_blur">Progressive lyrics blur</string>
+    <string name="lyrics_progressive_blur_desc">Gradually blur lines toward the edges while keeping the active line clear (Android 13+)</string>
+    <string name="lyrics_plus_lighter">Plus lighter</string>
+    <string name="lyrics_plus_lighter_desc">Brighten lyrics with plus-lighter blending over the player background</string>
 </resources>

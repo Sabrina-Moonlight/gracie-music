@@ -86,6 +86,7 @@ import com.music.vivi.utils.makeTimeString
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.extensions.togglePlayPause
 import com.music.vivi.ui.component.LyricsV2
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import com.music.vivi.ui.component.LocalBottomSheetPageState
@@ -196,12 +197,20 @@ fun PlayerV2(
     var playerCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     var lastInteractionTime by remember { mutableLongStateOf(0L) }
     var hideDelayMs by remember { mutableLongStateOf(1500L) }
+    var lyricsActiveLine by remember { mutableIntStateOf(0) }
     LaunchedEffect(playerState) { hideDelayMs = 1500L }
     LaunchedEffect(playerState, lyricsKeepControls, lastInteractionTime) {
         if (playerState == PlayerInternalState.LYRICS) {
             controlsVisible = true
             if (!lyricsKeepControls) {
                 delay(hideDelayMs)
+                // Si hay una línea sonando, esperar a que termine antes de ocultar (máx. 12 s).
+                val lineAtStart = lyricsActiveLine
+                if (lineAtStart != 0) {
+                    kotlinx.coroutines.withTimeoutOrNull(12_000L) {
+                        snapshotFlow { lyricsActiveLine }.first { it != lineAtStart }
+                    }
+                }
                 controlsVisible = false
             }
         } else {
@@ -300,18 +309,10 @@ fun PlayerV2(
     }
 
     // ── 6. Colores, fondo y preferencias ──
-    var storedPlayerBackground by rememberEnumPreference(
+    val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
         defaultValue = PlayerBackgroundStyle.GRADIENT
     )
-    LaunchedEffect(storedPlayerBackground) {
-        if (storedPlayerBackground == PlayerBackgroundStyle.APPLE_MUSIC) {
-            storedPlayerBackground = PlayerBackgroundStyle.DEFAULT
-        }
-    }
-    val playerBackground =
-        if (storedPlayerBackground == PlayerBackgroundStyle.APPLE_MUSIC) PlayerBackgroundStyle.DEFAULT
-        else storedPlayerBackground
     val useDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val isDefaultBackground = playerBackground == PlayerBackgroundStyle.DEFAULT
 
@@ -506,7 +507,8 @@ fun PlayerV2(
                     tint = adaptivePrimary.copy(alpha = 0.5f),
                     modifier = Modifier.size(72.dp)
                 )
-            } else {
+            } else if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
+                // Con el fondo Apple Music la carátula grande la dibuja el fondo (Player.kt).
                 Blendingimage(
                     fromCoverUrl = fromCoverUrl,
                     toCoverUrl = toCoverUrl,
@@ -739,7 +741,8 @@ fun PlayerV2(
                                                 modifier = Modifier.fillMaxSize(),
                                                 playerCoordinates = playerCoordinates,
                                                 onControlsVisibilityChange = { controlsVisible = it },
-                                                controlsVisible = controlsVisible
+                                                controlsVisible = controlsVisible,
+                                                onActiveLineChange = { lyricsActiveLine = it }
                                             )
                                         } else {
                                             QueueV2(

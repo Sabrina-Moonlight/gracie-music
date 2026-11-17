@@ -639,6 +639,7 @@ object LyricsUtils {
     fun findActiveLineIndices(
         lines: List<LyricsEntry>,
         position: Long,
+        byRealTiming: Boolean = true,
     ): Set<Int> {
         val active = mutableSetOf<Int>()
         val hasWordTimings = lines.any { !it.words.isNullOrEmpty() }
@@ -650,7 +651,10 @@ object LyricsUtils {
             // Determine this line's end time
             val lineEndMs: Long = if (!line.words.isNullOrEmpty()) {
                 // Use last word's endTime converted to ms
-                (line.words.last().endTime * 1000).toLong()
+                val wordsEndMs = (line.words.last().endTime * 1000).toLong()
+                // Sin "tiempos reales": la línea sigue activa hasta que empieza la siguiente.
+                if (byRealTiming || index + 1 >= lines.size) wordsEndMs
+                else maxOf(wordsEndMs, lines[index + 1].time)
             } else {
                 // Fallback: next line's start time
                 if (index + 1 < lines.size) lines[index + 1].time else Long.MAX_VALUE

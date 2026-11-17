@@ -197,7 +197,7 @@ import com.music.vivi.ui.component.BottomSheet
 import com.music.vivi.ui.component.BottomSheetState
 import com.music.vivi.ui.component.LocalBottomSheetPageState
 import com.music.vivi.ui.component.LocalMenuState
-import com.music.vivi.ui.component.Lyrics
+import com.music.vivi.ui.component.LyricsV2
 import com.music.vivi.ui.component.PlayerSliderTrack
 import com.music.vivi.ui.component.ResizableIconButton
 import com.music.vivi.ui.component.SquigglySlider
@@ -1048,7 +1048,7 @@ fun BottomSheetPlayer(
 
                                     // Layer 2: Clear Artwork (Dissolves along smootherStep into backdrop)
                                     val clearArtworkAlpha by animateFloatAsState(
-                                        targetValue = if (showInlineLyrics) 0f else 1f,
+                                        targetValue = if (showInlineLyrics || lyricsOpen) 0f else 1f,
                                         animationSpec = tween(500),
                                         label = "clearArtworkAlpha"
                                     )
@@ -2380,10 +2380,11 @@ fun InlineLyricsView(
             }
             else -> {
                 val lyricsContent: @Composable () -> Unit = {
-                    Lyrics(
-                        sliderPositionProvider = positionProvider,
-                        modifier = Modifier.padding(horizontal = 24.dp),
-                        showLyrics = showLyrics
+                    LyricsV2(
+                        mediaMetadata = mediaMetadata,
+                        showLyrics = showLyrics,
+                        positionProvider = positionProvider,
+                        modifier = Modifier.padding(horizontal = 24.dp)
                     )
                 }
                 ProvideTextStyle(

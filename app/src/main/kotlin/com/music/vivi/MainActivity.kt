@@ -94,6 +94,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import com.airbnb.lottie.compose.LottieAnimation
@@ -893,8 +895,30 @@ class MainActivity : ComponentActivity() {
                     LocalSyncUtils provides syncUtils,
                     LocalSnackbarHostState provides snackbarHostState,
                 ) {
+                    // Degradado de arriba (colores del tema) en Home, Library, Downloads y playlists.
+                    // En esas pantallas el fondo y la barra de arriba son transparentes para que se vea.
+                    val gradientRoute = navBackStackEntry?.destination?.route
+                    val hasTopGradient = gradientRoute == Screens.Home.route ||
+                        gradientRoute == Screens.Library.route ||
+                        gradientRoute == Screens.Local.route ||
+                        gradientRoute == "local_playlist/{playlistId}" ||
+                        gradientRoute == "online_playlist/{playlistId}"
+                    val gradientTop = MaterialTheme.colorScheme.primaryContainer
+                    val gradientMid = MaterialTheme.colorScheme.secondaryContainer
+                    val pageBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface
+                    // Estas pantallas comparten la barra de scroll: al volver a Home/Library/Downloads
+                    // se reinicia para que no quede una banda "bajada".
+                    LaunchedEffect(gradientRoute) {
+                        if (gradientRoute == Screens.Home.route ||
+                            gradientRoute == Screens.Library.route ||
+                            gradientRoute == Screens.Local.route
+                        ) {
+                            topAppBarScrollBehavior.state.contentOffset = 0f
+                            topAppBarScrollBehavior.state.heightOffset = 0f
+                        }
+                    }
                     Scaffold(
-                        containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
+                        containerColor = if (hasTopGradient) Color.Transparent else pageBg,
                         topBar = {
                             AnimatedVisibility(
                                 visible = shouldShowTopBar,
@@ -975,8 +999,8 @@ class MainActivity : ComponentActivity() {
                                         },
                                         scrollBehavior = topAppBarScrollBehavior,
                                         colors = TopAppBarDefaults.topAppBarColors(
-                                            containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
-                                            scrolledContainerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
+                                            containerColor = if (hasTopGradient) Color.Transparent else pageBg,
+                                            scrolledContainerColor = if (hasTopGradient) Color.Transparent else pageBg,
                                             titleContentColor = MaterialTheme.colorScheme.onSurface,
                                             actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                             navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1127,6 +1151,22 @@ class MainActivity : ComponentActivity() {
                         },
                         modifier = Modifier
                             .fillMaxSize()
+                            .then(
+                                if (hasTopGradient) {
+                                    Modifier
+                                        .background(pageBg)
+                                        .drawBehind {
+                                            drawRect(
+                                                Brush.verticalGradient(
+                                                    0f to gradientTop.copy(alpha = 0.30f),
+                                                    0.42f to gradientMid.copy(alpha = 0.14f),
+                                                    1f to Color.Transparent,
+                                                    endY = 430.dp.toPx()
+                                                )
+                                            )
+                                        }
+                                } else Modifier
+                            )
                             .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
                     ) {
                         Row(Modifier.fillMaxSize()) {

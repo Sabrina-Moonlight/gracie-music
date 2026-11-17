@@ -556,21 +556,11 @@ val DeeplFormalityKey = stringPreferencesKey("deeplFormality")
 val LyricsGlowEffectKey = booleanPreferencesKey("lyricsGlowEffect")
 val AppleMusicLyricsBlurKey = booleanPreferencesKey("appleMusicLyricsBlur")
 val LyricsStandardBlurKey = booleanPreferencesKey("lyricsStandardBlur")
+val LyricsActiveByRealTimingKey = booleanPreferencesKey("lyricsActiveByRealTiming")
+val LyricsProgressiveBlurKey = booleanPreferencesKey("lyricsProgressiveBlur")
+val LyricsPlusLighterKey = booleanPreferencesKey("lyricsPlusLighter")
 
 val LyricsAnimationStyleKey = stringPreferencesKey("lyricsAnimationStyle")
-enum class LyricsAnimationStyle {
-    NONE,
-    FADE,
-    GLOW,
-    SLIDE,
-    KARAOKE,
-    APPLE,
-    APPLE_V2,
-    VIVIMUSIC_1,
-    LYRICS_V2,
-    METRO_LYRICS,
-}
-
 val LyricsTextSizeKey = floatPreferencesKey("lyricsTextSize")
 val LyricsLineSpacingKey = floatPreferencesKey("lyricsLineSpacing")
 
