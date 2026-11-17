@@ -45,10 +45,6 @@ import com.music.vivi.ui.component.ExpressiveSettingGroup
 import com.music.vivi.ui.component.Material3SettingsItem
 import com.music.vivi.ui.screens.Screens
 import com.music.vivi.ui.utils.backToMain
-import com.music.vivi.vivimusic.updater.getUpdateAvailableState
-import com.music.vivi.vivimusic.updater.getAutoUpdateCheckSetting
-import com.music.vivi.vivimusic.updater.checkForUpdate
-import com.music.vivi.vivimusic.updater.saveUpdateAvailableState
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,35 +55,6 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val isAndroid12OrLater = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
-    val autoUpdateSetting = remember { getAutoUpdateCheckSetting(context) }
-    var isUpdateAvailable by remember { mutableStateOf(getUpdateAvailableState(context)) }
-
-    DisposableEffect(context) {
-        val sharedPrefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
-        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "update_available") {
-                isUpdateAvailable = getUpdateAvailableState(context)
-            }
-        }
-        sharedPrefs.registerOnSharedPreferenceChangeListener(listener)
-        isUpdateAvailable = getUpdateAvailableState(context)
-        onDispose {
-            sharedPrefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        if (autoUpdateSetting) {
-            checkForUpdate(
-                context = context,
-                onSuccess = { _, isAvailable, _, _, _, _, _, _ ->
-                    saveUpdateAvailableState(context, isAvailable)
-                },
-                onError = {}
-            )
-        }
-    }
 
     Column(
         Modifier

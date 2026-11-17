@@ -169,7 +169,15 @@ class WelcomeActivity : ComponentActivity() {
             com.music.vivi.utils.setAppLocale(this, locale)
         }
 
-        if (!forceShow) {
+        val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        // Solo se muestra la primera vez y solo si falta el permiso de notificaciones.
+        if (!forceShow && !(isFirstRun && needsNotificationPermission)) {
+            if (isFirstRun) lifecycleScope.launch { dataStore.edit { it[IsFirstRunKey] = false } }
             finishOnboarding()
             return
         }
@@ -219,29 +227,6 @@ val GoogleSansFlex = FontFamily(
 @Composable
 fun WelcomePagerScreen(onFinished: () -> Unit) {
     val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
-    val scope = rememberCoroutineScope()
-    val commonAnimSpec = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
-    val pageTransitionSpatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-    val primaryColor = MaterialTheme.colorScheme.primary
-
-    val (appLanguage, onAppLanguageChange) = rememberPreference(key = AppLanguageKey, defaultValue = SYSTEM_DEFAULT)
-    var showAppLanguageDialog by rememberSaveable { mutableStateOf(false) }
-    var showFinishingTransition by remember { mutableStateOf(false) }
-
-    LaunchedEffect(showFinishingTransition) {
-        if (showFinishingTransition) {
-            delay(1200)
-            onFinished()
-        }
-    }
-
-
-    val topCardShape =
-        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
-    val middleCardShape = RoundedCornerShape(4.dp)
-    val bottomCardShape =
-        RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
 
     val customWelcomeFontFamily = FontFamily(
         Font(
@@ -255,7 +240,6 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
             )
         )
     )
-
     val thinHeaderStyle = TextStyle(
         fontFamily = customWelcomeFontFamily,
         fontSize = 48.sp
@@ -272,29 +256,15 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
         )
     }
 
-    var canInstallPackages by remember {
-        mutableStateOf(
-            if (BuildConfig.FLAVOR.contains("gms") && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
-            } else true
-        )
-    }
-
-    var isLastPageScrolledToEnd by remember { mutableStateOf(true) }
-
+    // Al volver de los ajustes del sistema, se vuelve a comprobar el permiso.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    hasNotificationPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.POST_NOTIFICATIONS
-                    ) == PackageManager.PERMISSION_GRANTED
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    canInstallPackages = runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
-                }
+            if (event == Lifecycle.Event.ON_RESUME && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                hasNotificationPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -303,538 +273,18 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
 
     val notificationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted ->
-            hasNotificationPermission = isGranted
-        }
+        onResult = { isGranted -> hasNotificationPermission = isGranted }
     )
 
-    val installParamsLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            canInstallPackages = runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
-        }
-    }
-
-    val pages = listOf(
-        OnboardingPageInfo(
-            content = { _ ->
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Spacer(modifier = Modifier.height(48.dp))
-
-                    RotatingShapeContainer(
-                        modifier = Modifier
-                            .size(280.dp)
-                            .align(Alignment.CenterHorizontally)
-                    )
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    val welcomeString = stringResource(id = com.music.vivi.R.string.welcome_to_vivi)
-                    val annotatedWelcome = remember(welcomeString, primaryColor) {
-                        buildAnnotatedString {
-                            val target = "Gracie"
-                            val index = welcomeString.indexOf(target)
-                            if (index != -1) {
-                                val prefix = welcomeString.substring(0, index).trim()
-                                append(prefix)
-                                append("\n")
-                                withStyle(
-                                    style = SpanStyle(
-                                        color = primaryColor,
-                                        fontFamily = GoogleSansFlex,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                ) {
-                                    append(target)
-                                }
-                                append(welcomeString.substring(index + target.length))
-                            } else {
-                                append(welcomeString)
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = annotatedWelcome,
-                        style = thinHeaderStyle.copy(fontSize = 56.sp, lineHeight = 64.sp),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    val flavorSuffix = if (BuildConfig.FLAVOR.contains("gms", ignoreCase = true)) "Gms Edition" else "Foss Edition"
-                    AssistChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                text = "$flavorSuffix v${BuildConfig.VERSION_NAME}",
-                                fontFamily = GoogleSansFlex
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                painter = painterResource(id = R.drawable.info),
-                                contentDescription = null,
-                                modifier = Modifier.size(AssistChipDefaults.IconSize)
-                            )
-                        },
-                        shape = CircleShape,
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                            labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        border = null
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    AssistChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                text = "By vividh p ashokan",
-                                fontFamily = GoogleSansFlex
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                painter = painterResource(id = R.drawable.person),
-                                contentDescription = null,
-                                modifier = Modifier.size(AssistChipDefaults.IconSize)
-                            )
-                        },
-                        shape = CircleShape,
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                            labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        border = null
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
+    val onNotificationClick: () -> Unit = {
+        if (hasNotificationPermission) {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                 }
-            }
-        ),
-        OnboardingPageInfo(
-            content = { _ ->
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Spacer(modifier = Modifier.height(80.dp))
-
-                    Text(
-                        text = stringResource(com.music.vivi.R.string.perm_required),
-                        style = thinHeaderStyle,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = stringResource(com.music.vivi.R.string.perm_permissions),
-                        fontFamily = GoogleSansFlex,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 48.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        lineHeight = 56.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = stringResource(com.music.vivi.R.string.perm_intro_text),
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontFamily = GoogleSansFlex
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        PermissionCard(
-                            icon = painterResource(id = R.drawable.notification),
-                            iconColor = Color(0xFFffaee4),
-                            iconTint = Color(0xFF8d0053),
-                            title = stringResource(com.music.vivi.R.string.perm_notif_title),
-                            description = stringResource(com.music.vivi.R.string.perm_notif_desc),
-                            shape = if (BuildConfig.FLAVOR.contains("gms", ignoreCase = true)) topCardShape else RoundedCornerShape(20.dp),
-                            control = {
-                                Switch(
-                                    checked = hasNotificationPermission,
-                                    onCheckedChange = {
-                                        if (hasNotificationPermission) {
-                                            val intent =
-                                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                                    putExtra(
-                                                        Settings.EXTRA_APP_PACKAGE,
-                                                        context.packageName
-                                                    )
-                                                }
-                                            context.startActivity(intent)
-                                        } else {
-                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                            }
-                                        }
-                                    },
-                                    thumbContent = {
-                                        Icon(
-                                            painter = painterResource(if (hasNotificationPermission) R.drawable.check else R.drawable.close),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                )
-                            },
-                            onClick = {
-                                if (hasNotificationPermission) {
-                                    val intent =
-                                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                            putExtra(
-                                                Settings.EXTRA_APP_PACKAGE,
-                                                context.packageName
-                                            )
-                                        }
-                                    context.startActivity(intent)
-                                } else {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                }
-                            }
-                        )
-
-                        if (BuildConfig.FLAVOR.contains("gms", ignoreCase = true)) {
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            PermissionCard(
-                                icon = painterResource(id = R.drawable.update),
-                                iconColor = Color(0xFFffb683),
-                                iconTint = Color(0xFF753403),
-                                title = stringResource(com.music.vivi.R.string.perm_install_title),
-                                description = stringResource(com.music.vivi.R.string.perm_install_desc),
-                                shape = bottomCardShape,
-                                control = {
-                                    Icon(
-                                        painter = painterResource(if (canInstallPackages) R.drawable.check else R.drawable.navigate_next),
-                                        contentDescription = null,
-                                        tint = if (canInstallPackages) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                onClick = {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                        val intent =
-                                            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                                data = Uri.parse("package:${context.packageName}")
-                                            }
-                                        installParamsLauncher.launch(intent)
-                                    }
-                                }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(100.dp))
-                    }
-                }
-            }
-        ),
-        OnboardingPageInfo(
-            content = { _ ->
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Spacer(modifier = Modifier.height(80.dp))
-
-                    Text(
-                        text = "Join our",
-                        style = thinHeaderStyle,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Community",
-                        fontFamily = GoogleSansFlex,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 48.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        lineHeight = 56.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "Gracie Music is open-source and depends on community support to grow. Your help makes a difference!",
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontFamily = GoogleSansFlex
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        PermissionCard(
-                            icon = painterResource(id = R.drawable.star),
-                            iconColor = Color(0xFFfff1a8),
-                            iconTint = Color(0xFF8d6e00),
-                            title = "Star on GitHub",
-                            description = "Help us reach more people by starring our repository.",
-                            shape = topCardShape,
-                            control = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.navigate_next),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            onClick = {
-                                uriHandler.safeOpenUri(context, "https://github.com/vivizzz007/vivi-music")
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        PermissionCard(
-                            icon = painterResource(com.music.vivi.R.drawable.telegram),
-                            iconColor = Color(0xFF67d4ff),
-                            iconTint = Color(0xFF004e5d),
-                            title = "Join Telegram",
-                            description = "Get the latest updates and chat with the community.",
-                            shape = middleCardShape,
-                            control = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.navigate_next),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            onClick = {
-                                uriHandler.safeOpenUri(context, "https://t.me/vivimusicapp")
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        PermissionCard(
-                            icon = painterResource(com.music.vivi.R.drawable.currency_rupee_upi),
-                            iconColor = Color(0xFFffb4ab),
-                            iconTint = Color(0xFF690005),
-                            title = "Support via UPI",
-                            description = "Directly support development via UPI.",
-                            shape = middleCardShape,
-                            control = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.navigate_next),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            onClick = {
-                                uriHandler.safeOpenUri(context, "upi://pay?pa=vividhpashokan@axl&pn=Vividh P Ashokan")
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        PermissionCard(
-                            icon = painterResource(com.music.vivi.R.drawable.buymeacoffee),
-                            iconColor = Color(0xFFffb4ab),
-                            iconTint = Color(0xFF690005),
-                            title = "Buy Me a Coffee",
-                            description = "Support the project through Ko-fi.",
-                            shape = bottomCardShape,
-                            control = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.navigate_next),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            onClick = {
-                                uriHandler.safeOpenUri(context, "https://ko-fi.com/vividhpashokan")
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(100.dp))
-                    }
-                }
-            }
-        ),
-        OnboardingPageInfo(
-            content = { onUpdateScroll ->
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Spacer(modifier = Modifier.height(80.dp))
-
-                    Column(modifier = Modifier.padding(bottom = 16.dp)) {
-                        Text(
-                            text = stringResource(com.music.vivi.R.string.feat_discover),
-                            style = thinHeaderStyle,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            text = stringResource(com.music.vivi.R.string.feat_features),
-                            fontFamily = GoogleSansFlex,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 48.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            lineHeight = 56.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = stringResource(com.music.vivi.R.string.feat_intro),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = GoogleSansFlex
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Box(modifier = Modifier.weight(1f)) {
-                        val scrollState = rememberScrollState()
-
-                        val isAtBottom by remember {
-                            derivedStateOf {
-                                val layoutInfo = scrollState.maxValue
-                                layoutInfo == 0 || scrollState.value >= (layoutInfo - 20)
-                            }
-                        }
-
-                        LaunchedEffect(isAtBottom) {
-                            onUpdateScroll(isAtBottom)
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(scrollState)
-                        ) {
-                            FeatureCard(
-                                icon = painterResource(id = R.drawable.lyrics),
-                                iconColor = Color(0xFFffaee4),
-                                iconTint = Color(0xFF8d0053),
-                                title = stringResource(com.music.vivi.R.string.feat_lyrics_title),
-                                description = stringResource(com.music.vivi.R.string.feat_lyrics_desc),
-                                shape = topCardShape
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            FeatureCard(
-                                icon = painterResource(id = R.drawable.download),
-                                iconColor = Color(0xFF80da88),
-                                iconTint = Color(0xFF00522c),
-                                shape = middleCardShape,
-                                title = stringResource(com.music.vivi.R.string.feat_download_title),
-                                description = stringResource(com.music.vivi.R.string.feat_download_desc)
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            FeatureCard(
-                                icon = painterResource(id = R.drawable.high_quality),
-                                iconColor = Color(0xFFffb683),
-                                iconTint = Color(0xFF753403),
-                                title = stringResource(com.music.vivi.R.string.feat_quality_title),
-                                description = stringResource(com.music.vivi.R.string.feat_quality_desc),
-                                shape = middleCardShape
-                            )
-
-                            if (BuildConfig.FLAVOR.contains("gms", ignoreCase = true)) {
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                FeatureCard(
-                                    icon = painterResource(id = R.drawable.update),
-                                    iconColor = Color(0xFF67d4ff),
-                                    iconTint = Color(0xFF004e5d),
-                                    title = stringResource(com.music.vivi.R.string.feat_update_title),
-                                    description = stringResource(com.music.vivi.R.string.feat_update_desc),
-                                    shape = middleCardShape
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            FeatureCard(
-                                icon = painterResource(id = R.drawable.gavel),
-                                iconColor = Color(0xFFb6c6ed),
-                                iconTint = Color(0xFF001b3f),
-                                title = stringResource(com.music.vivi.R.string.feat_license_title),
-                                description = stringResource(com.music.vivi.R.string.feat_license_desc),
-                                shape = middleCardShape
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            FeatureCard(
-                                icon = painterResource(id = R.drawable.terminal),
-                                iconColor = Color(0xFFcabeff),
-                                iconTint = Color(0xFF1c0062),
-                                title = stringResource(com.music.vivi.R.string.feat_github_title),
-                                description = stringResource(com.music.vivi.R.string.feat_github_desc),
-                                shape = bottomCardShape
-                            )
-
-                            Spacer(modifier = Modifier.height(100.dp))
-                        }
-                    }
-                }
-            }
-        )
-    )
-
-    val pagerState = rememberPagerState(pageCount = { pages.size })
-    val isFirstPage = pagerState.currentPage == 0
-    val isTargetFirstPage = pagerState.targetPage == 0
-    val isLastPage = pagerState.currentPage == pages.size - 1
-
-    if (showAppLanguageDialog) {
-        EnumDialog(
-            onDismiss = { showAppLanguageDialog = false },
-            onSelect = { selectedLang ->
-                scope.launch {
-                    context.dataStore.edit { it[AppLanguageKey] = selectedLang }
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                        val locale = if (selectedLang == SYSTEM_DEFAULT) java.util.Locale.getDefault() else java.util.Locale.forLanguageTag(selectedLang)
-                        com.music.vivi.utils.setAppLocale(context, locale)
-                        (context as? Activity)?.recreate()
-                    }
-                }
-                showAppLanguageDialog = false
-            },
-            title = stringResource(com.music.vivi.R.string.app_language),
-            current = appLanguage,
-            values = (listOf(SYSTEM_DEFAULT) + LanguageCodeToName.keys.toList()),
-            valueText = {
-                LanguageCodeToName.getOrElse(it) { stringResource(com.music.vivi.R.string.system_default) }
-            }
-        )
-    }
-
-
-    BackHandler(enabled = !isTargetFirstPage && !showFinishingTransition) {
-        scope.launch {
-            pagerState.animateScrollToPage(
-                pagerState.currentPage - 1,
-                animationSpec = pageTransitionSpatialSpec
             )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -842,192 +292,67 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter
     ) {
-        AnimatedVisibility(
-            visible = !showFinishingTransition,
-            enter = fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
-            modifier = Modifier.fillMaxSize()
+        Column(
+            modifier = Modifier
+                .widthIn(max = 700.dp)
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.Start
         ) {
-            Column(
-                modifier = Modifier
-                    .widthIn(max = 700.dp)
-                    .fillMaxSize()
-                    .padding(24.dp)
-            ) {
-                HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = false,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) { index ->
-                    pages[index].content { scrolledToEnd ->
-                        if (index == pages.size - 1) {
-                            isLastPageScrolledToEnd = true
-                        }
-                    }
-                }
+            Spacer(modifier = Modifier.height(80.dp))
 
-                Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = stringResource(com.music.vivi.R.string.perm_required),
+                style = thinHeaderStyle,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = stringResource(com.music.vivi.R.string.perm_permissions),
+                fontFamily = GoogleSansFlex,
+                fontWeight = FontWeight.Bold,
+                fontSize = 48.sp,
+                color = MaterialTheme.colorScheme.primary,
+                lineHeight = 56.sp
+            )
 
-                val languageButtonWidth by animateDpAsState(
-                    targetValue = if (isTargetFirstPage) 64.dp else 0.dp,
-                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                    label = "languageButtonWidth"
-                )
-                val languageButtonAlpha by animateFloatAsState(
-                    targetValue = if (isTargetFirstPage) 1f else 0f,
-                    animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                    label = "languageButtonAlpha"
-                )
-                val spacingValue by animateDpAsState(
-                    targetValue = if (isTargetFirstPage) 12.dp else 0.dp,
-                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                    label = "buttonSpacing"
-                )
+            Spacer(modifier = Modifier.height(32.dp))
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                        .height(80.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val languageButtonShapes = IconButtonDefaults.shapes(
-                        shape = CircleShape,
-                        pressedShape = RoundedCornerShape(12.dp)
-                    )
-                    FilledTonalIconButton(
-                        onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(
-                                            Settings.ACTION_APP_LOCALE_SETTINGS,
-                                            "package:${context.packageName}".toUri()
-                                        )
-                                    )
-                                }
-                            } else {
-                                showAppLanguageDialog = true
-                            }
-                        },
-                        modifier = Modifier
-                            .size(languageButtonWidth)
-                            .alpha(languageButtonAlpha),
-                        shapes = languageButtonShapes,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Icon(
-                            painter = painterResource(id = com.music.vivi.R.drawable.language),
-                            contentDescription = "Language",
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(spacingValue))
-
-                    val isNextEnabled = !isLastPage || isLastPageScrolledToEnd
-                    val alphaNext by animateFloatAsState(
-                        targetValue = if (isNextEnabled) 1f else 0.5f,
-                        label = "nextAlpha"
-                    )
-
-                    WelcomeExpressiveButton(
-                        text = if (isLastPage) stringResource(com.music.vivi.R.string.get_started) else stringResource(com.music.vivi.R.string.next),
-                        onClick = {
-                            if (isLastPage) {
-                                if (isLastPageScrolledToEnd) showFinishingTransition = true
-                            } else {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(
-                                        pagerState.currentPage + 1,
-                                        animationSpec = pageTransitionSpatialSpec
-                                    )
-                                }
-                            }
-                        },
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = alphaNext),
-                        contentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = alphaNext),
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        showArrowOnly = isTargetFirstPage
-                    )
-                }
-            }
-        }
-
-        // Finishing transition screen (blob cluster loading)
-        AnimatedVisibility(
-            visible = showFinishingTransition,
-            enter = fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()) + scaleIn(initialScale = 0.92f),
-            exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec())
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.Start
-            ) {
-                Spacer(modifier = Modifier.height(80.dp))
-
-                Column(modifier = Modifier.padding(bottom = 16.dp)) {
-                    Text(
-                        text = "Setting up",
-                        style = thinHeaderStyle,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Gracie Music…",
-                        fontFamily = GoogleSansFlex,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 48.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        lineHeight = 56.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                BlobClusterLoading(
-                    modifier = Modifier
-                        .size(180.dp)
-                        .align(Alignment.CenterHorizontally)
-                )
-
-                Spacer(modifier = Modifier.weight(1.2f))
-            }
-        }
-
-        // Top-left back arrow overlay using TopAppBar for alignment with settings screens
-        AnimatedVisibility(
-            visible = !isTargetFirstPage && !showFinishingTransition,
-            enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()),
-            exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec())
-        ) {
-            TopAppBar(
-                title = {},
-                navigationIcon = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            pagerState.animateScrollToPage(
-                                pagerState.currentPage - 1,
-                                animationSpec = pageTransitionSpatialSpec
+            PermissionCard(
+                icon = painterResource(id = R.drawable.notification),
+                iconColor = Color(0xFFffaee4),
+                iconTint = Color(0xFF8d0053),
+                title = stringResource(com.music.vivi.R.string.perm_notif_title),
+                description = stringResource(com.music.vivi.R.string.perm_notif_desc),
+                shape = RoundedCornerShape(20.dp),
+                control = {
+                    Switch(
+                        checked = hasNotificationPermission,
+                        onCheckedChange = { onNotificationClick() },
+                        thumbContent = {
+                            Icon(
+                                painter = painterResource(if (hasNotificationPermission) R.drawable.check else R.drawable.close),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                    }) {
-                        Icon(
-                            painter = painterResource(com.music.vivi.R.drawable.arrow_back),
-                            contentDescription = stringResource(com.music.vivi.R.string.back_button_desc)
-                        )
-                    }
+                    )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
+                onClick = onNotificationClick
             )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            WelcomeExpressiveButton(
+                text = stringResource(com.music.vivi.R.string.get_started),
+                onClick = onFinished,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

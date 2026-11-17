@@ -77,7 +77,6 @@ import com.music.vivi.constants.PlayerThumbnailShadowElevationKey
 import com.music.vivi.constants.LibraryFilter
 import com.music.vivi.ui.component.lyrics.words.LyricsAnimationStyle
 import com.music.vivi.constants.LyricsAnimationStyleKey
-import com.music.vivi.constants.LyricsStandardBlurKey
 import com.music.vivi.constants.LyricsTextPositionKey
 import com.music.vivi.constants.LyricsTextSizeKey
 import com.music.vivi.constants.PlayerBackgroundStyle
@@ -129,7 +128,6 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import com.music.vivi.constants.LyricsClickKey
 import com.music.vivi.constants.AppleMusicLyricsBlurKey
-import com.music.vivi.constants.LyricsGlowEffectKey
 import com.music.vivi.constants.LyricsLineSpacingKey
 import com.music.vivi.constants.LyricsScrollKey
 import com.music.vivi.constants.MiniPlayerBackgroundStyleKey
@@ -289,9 +287,7 @@ fun AppearanceSettings(
     val onLyricsAnimationStyleChange: (LyricsAnimationStyle) -> Unit = { onLyricsAnimationStyleNameChange(it.name) }
     val (lyricsTextSize, onLyricsTextSizeChange) = rememberPreference(LyricsTextSizeKey, defaultValue = 24f)
     val (lyricsLineSpacing, onLyricsLineSpacingChange) = rememberPreference(LyricsLineSpacingKey, defaultValue = 1.3f)
-    val (lyricsGlowEffect, onLyricsGlowEffectChange) = rememberPreference(LyricsGlowEffectKey, defaultValue = false)
     val (appleMusicLyricsBlur, onAppleMusicLyricsBlurChange) = rememberPreference(AppleMusicLyricsBlurKey, defaultValue = true)
-    val (lyricsStandardBlur, onLyricsStandardBlurChange) = rememberPreference(LyricsStandardBlurKey, defaultValue = false)
     val (lyricsRealTiming, onLyricsRealTimingChange) = rememberPreference(com.music.vivi.constants.LyricsActiveByRealTimingKey, defaultValue = true)
     val (lyricsProgressiveBlur, onLyricsProgressiveBlurChange) = rememberPreference(com.music.vivi.constants.LyricsProgressiveBlurKey, defaultValue = false)
     val (lyricsPlusLighter, onLyricsPlusLighterChange) = rememberPreference(com.music.vivi.constants.LyricsPlusLighterKey, defaultValue = false)
@@ -1686,50 +1682,6 @@ fun AppearanceSettings(
                     },
                     onClick = { showLyricsAnimationStyleDialog = true }
                 ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.lyrics),
-                    title = { Text(stringResource(R.string.lyrics_glow_effect)) },
-                    description = { Text(stringResource(R.string.lyrics_glow_effect_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = lyricsGlowEffect,
-                            onCheckedChange = onLyricsGlowEffectChange,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (lyricsGlowEffect) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onLyricsGlowEffectChange(!lyricsGlowEffect) }
-                ),
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Material3SettingsItem(
-                        icon = painterResource(R.drawable.lyrics),
-                        title = { Text(stringResource(R.string.standard_lyrics_blur)) },
-                        description = { Text(stringResource(R.string.apple_music_lyrics_blur_desc)) },
-                        trailingContent = {
-                            Switch(
-                                checked = lyricsStandardBlur,
-                                onCheckedChange = onLyricsStandardBlurChange,
-                                thumbContent = {
-                                    Icon(
-                                        painter = painterResource(
-                                            id = if (lyricsStandardBlur) R.drawable.check else R.drawable.close
-                                        ),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                    )
-                                }
-                            )
-                        },
-                        onClick = { onLyricsStandardBlurChange(!lyricsStandardBlur) }
-                    )
-                } else null,
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),
                     title = { Text(stringResource(R.string.lyrics_real_timing)) },

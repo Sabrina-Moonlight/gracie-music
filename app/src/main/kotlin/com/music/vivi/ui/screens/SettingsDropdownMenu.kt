@@ -49,7 +49,6 @@ import com.music.vivi.utils.listItemShape
 import com.music.vivi.viewmodels.AccountSettingsViewModel
 import com.music.vivi.utils.SyncStatus
 import com.music.vivi.viewmodels.HomeViewModel
-import com.music.vivi.vivimusic.updater.getUpdateAvailableState
 import kotlinx.coroutines.flow.map
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -64,16 +63,9 @@ fun SettingsDropdownMenu(
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     
-    var isUpdateAvailable by remember { mutableStateOf(getUpdateAvailableState(context)) }
     val (innerTubeCookie, _) = rememberPreference(InnerTubeCookieKey, "")
     val isLoggedIn = remember(innerTubeCookie) {
         innerTubeCookie.isNotEmpty() && "SAPISID" in parseCookieString(innerTubeCookie)
-    }
-
-    LaunchedEffect(expanded) {
-        if (expanded) {
-            isUpdateAvailable = getUpdateAvailableState(context)
-        }
     }
 
     val (accountEmail, _) = rememberPreference(AccountEmailKey, "")

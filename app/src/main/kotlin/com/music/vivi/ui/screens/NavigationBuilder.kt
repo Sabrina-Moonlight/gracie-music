@@ -56,7 +56,6 @@ import com.music.vivi.ui.screens.settings.AccountSettingsScreen
 import com.music.vivi.ui.screens.settings.StorageSettings
 import com.music.vivi.ui.screens.settings.ThemeSettings
 import com.music.vivi.ui.screens.wrapped.WrappedScreen
-import com.music.vivi.vivimusic.updater.UpdateScreen
 import com.music.vivi.utils.rememberEnumPreference
 import com.music.vivi.utils.rememberPreference
 import com.music.vivi.ui.screens.equalizer.axion.AxionEqScreen
@@ -369,10 +368,6 @@ fun NavGraphBuilder.navigationBuilder(
 
 
 
-
-    composable("update") {
-        UpdateScreen(navController)
-    }
 
     composable("login") {
         LoginScreen(navController)
