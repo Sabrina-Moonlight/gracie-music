@@ -13,11 +13,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -210,8 +212,32 @@ internal fun ExpressiveWordAnimation(
     var frameWallTimeMs by remember { mutableLongStateOf(0L) }
 
     val animationVisibility = rememberLyricsAnimationVisibility()
-    LaunchedEffect(isActiveLine, isPlaying, animationVisibility) {
-        if (isActiveLine) animateLyricsFrames(animationVisibility) { frameWallTimeMs = it }
+    // Si la línea acaba en sílabas con "-" ("lo-lo-love"), se sigue animando hasta 600 ms después
+    // de la última sílaba para que haga su rebote final (como en el código original de Gracie).
+    val endsWithHyphenGroup = words.size >= 2 && words[words.size - 2].text.endsWith("-")
+    val lastWordEndMs = remember(words) { ((words.lastOrNull()?.endTime ?: 0.0) * 1000).toLong() }
+    var lingerAfterEnd by remember { mutableStateOf(false) }
+    var wasActive by remember { mutableStateOf(false) }
+    LaunchedEffect(isActiveLine) {
+        if (isActiveLine) {
+            wasActive = true
+            lingerAfterEnd = false
+        } else if (wasActive) {
+            wasActive = false
+            if (endsWithHyphenGroup) {
+                val remaining = (lastWordEndMs + 600L - latestPosition()).coerceIn(0L, 700L)
+                if (remaining > 0L) {
+                    lingerAfterEnd = true
+                    delay(remaining)
+                    lingerAfterEnd = false
+                }
+            }
+        }
+    }
+    val animateLine = isActiveLine || lingerAfterEnd
+
+    LaunchedEffect(animateLine, isPlaying, animationVisibility) {
+        if (animateLine) animateLyricsFrames(animationVisibility) { frameWallTimeMs = it }
     }
 
     val (effectiveWords, effectiveToOriginalIdx) =
@@ -626,7 +652,7 @@ internal fun ExpressiveWordAnimation(
                     ).graphicsLayer {
                         clip = false
                         compositingStrategy =
-                            if (isActiveLine) {
+                            if (animateLine) {
                                 CompositingStrategy.Offscreen
                             } else {
                                 CompositingStrategy.Auto
@@ -642,7 +668,7 @@ internal fun ExpressiveWordAnimation(
             val pastBrush = pastBrushCache.get(litColor)
             val unlitBrush = unlitBrushCache.get(unlitColor)
 
-            if (!isActiveLine) {
+            if (!animateLine) {
                 val inactiveLineColor = lineColor()
                 if (!hasSyllableRomanization) {
                     drawText(

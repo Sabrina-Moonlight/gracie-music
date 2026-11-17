@@ -575,11 +575,12 @@ object LyricsUtils {
         return try {
             data.split("|").mapNotNull { wordData ->
                 val parts = wordData.split(":")
-                if (parts.size == 3) {
+                if (parts.size == 3 || parts.size == 4) {
                     WordTimestamp(
                         text = parts[0],
                         startTime = parts[1].toDouble(),
-                        endTime = parts[2].toDouble()
+                        endTime = parts[2].toDouble(),
+                        hasTrailingSpace = parts.getOrNull(3) != "0"
                     )
                 } else null
             }

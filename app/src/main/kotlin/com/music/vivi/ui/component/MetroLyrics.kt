@@ -237,7 +237,7 @@ fun MetroLyricsLine(
                         text = word.text,
                         startTime = word.startTime,
                         endTime = word.endTime,
-                        hasTrailingSpace = idx < wordList.size - 1,
+                        hasTrailingSpace = word.hasTrailingSpace,
                         isBackground = entry.isBackground
                     )
                 }

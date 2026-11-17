@@ -28,7 +28,8 @@ object TTMLParser {
     data class ParsedWord(
         val text: String,
         val startTime: Double,
-        val endTime: Double
+        val endTime: Double,
+        val hasTrailingSpace: Boolean = true
     )
 
     private data class SpanInfo(
@@ -115,7 +116,7 @@ object TTMLParser {
         }
 
         val words = mergeSpansIntoWords(spanInfos)
-        val lineText = if (words.isEmpty()) getDirectText(p).trim() else words.joinToString(" ") { it.text }
+        val lineText = if (words.isEmpty()) getDirectText(p).trim() else buildLineText(words)
 
         if (lineText.isNotEmpty()) {
             lines.add(ParsedLine(lineText, startTime, words, agent, isPBackground, backgroundLines))
@@ -163,34 +164,24 @@ object TTMLParser {
             return if (text.isEmpty()) null else ParsedLine(text, start, emptyList(), null, true)
         }
         val words = mergeSpansIntoWords(spanInfos)
-        val text = if (words.isEmpty()) getDirectText(span).trim() else words.joinToString(" ") { it.text }
+        val text = if (words.isEmpty()) getDirectText(span).trim() else buildLineText(words)
         return if (text.isEmpty()) null else ParsedLine(text, start, words, null, true)
     }
 
-    /** Une sílabas sin espacio entre ellas en una sola palabra (la app trabaja con palabras). */
-    private fun mergeSpansIntoWords(spanInfos: List<SpanInfo>): List<ParsedWord> {
-        if (spanInfos.isEmpty()) return emptyList()
-        val words = mutableListOf<ParsedWord>()
-        var currentText = StringBuilder(spanInfos[0].text)
-        var currentStart = spanInfos[0].startTime
-        var currentEnd = spanInfos[0].endTime
-        for (index in 1 until spanInfos.size) {
-            val prev = spanInfos[index - 1]
-            val span = spanInfos[index]
-            // Hay corte de palabra si hubo espacio y la anterior no acaba en guion (como Metrolist).
-            if (prev.hasTrailingSpace && !prev.text.endsWith('-')) {
-                words.add(ParsedWord(currentText.toString().trim(), currentStart, currentEnd))
-                currentText = StringBuilder(span.text)
-                currentStart = span.startTime
-                currentEnd = span.endTime
-            } else {
-                currentText.append(span.text)
-                currentEnd = span.endTime
-            }
+    /** Cada sílaba queda como palabra propia (como Metrolist); el espacio final dice dónde acaba la palabra. */
+    private fun mergeSpansIntoWords(spanInfos: List<SpanInfo>): List<ParsedWord> =
+        spanInfos.mapNotNull {
+            val text = it.text.trim()
+            if (text.isEmpty()) null else ParsedWord(text, it.startTime, it.endTime, it.hasTrailingSpace)
         }
-        words.add(ParsedWord(currentText.toString().trim(), currentStart, currentEnd))
-        return words.filter { it.text.isNotEmpty() }
-    }
+
+    private fun buildLineText(words: List<ParsedWord>): String =
+        buildString {
+            words.forEachIndexed { i, w ->
+                append(w.text)
+                if (w.hasTrailingSpace && !w.text.endsWith('-') && i < words.lastIndex) append(' ')
+            }
+        }.trim()
 
     private fun getDirectText(el: XmlElement): String {
         val sb = StringBuilder()
@@ -285,7 +276,7 @@ object TTMLParser {
                 
                 if (line.words.isNotEmpty()) {
                     val wordsData = line.words.joinToString("|") { word ->
-                        "${word.text}:${word.startTime}:${word.endTime}"
+                        "${word.text}:${word.startTime}:${word.endTime}:${if (word.hasTrailingSpace) 1 else 0}"
                     }
                     appendLine("<$wordsData>")
                 }
@@ -301,7 +292,7 @@ object TTMLParser {
                     
                     if (bgLine.words.isNotEmpty()) {
                         val bgWordsData = bgLine.words.joinToString("|") { word ->
-                            "${word.text}:${word.startTime}:${word.endTime}"
+                            "${word.text}:${word.startTime}:${word.endTime}:${if (word.hasTrailingSpace) 1 else 0}"
                         }
                         appendLine("<$bgWordsData>")
                     }

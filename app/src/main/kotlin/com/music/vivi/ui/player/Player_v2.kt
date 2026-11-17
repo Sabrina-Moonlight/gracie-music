@@ -482,7 +482,7 @@ fun PlayerV2(
 
     // ── Carátula con degradado inferior estilo Natune ──
     @Composable
-    fun CoverArt(corner: Dp, modifier: Modifier = Modifier) {
+    fun CoverArt(corner: Dp, modifier: Modifier = Modifier, showWithAppleMusic: Boolean = false) {
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(corner))
@@ -507,8 +507,9 @@ fun PlayerV2(
                     tint = adaptivePrimary.copy(alpha = 0.5f),
                     modifier = Modifier.size(72.dp)
                 )
-            } else if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
-                // Con el fondo Apple Music la carátula grande la dibuja el fondo (Player.kt).
+            } else if (showWithAppleMusic || playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
+                // Con el fondo Apple Music la carátula grande la dibuja el fondo (Player.kt);
+                // la pequeña de la cabecera de letras sí se dibuja (showWithAppleMusic).
                 Blendingimage(
                     fromCoverUrl = fromCoverUrl,
                     toCoverUrl = toCoverUrl,
@@ -672,6 +673,7 @@ fun PlayerV2(
                                     ) {
                                         CoverArt(
                                             corner = 8.dp,
+                                            showWithAppleMusic = true,
                                             modifier = Modifier
                                                 .size(64.dp)
                                                 .sharedBounds(

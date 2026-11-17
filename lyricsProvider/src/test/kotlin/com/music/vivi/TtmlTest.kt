@@ -33,9 +33,12 @@ class TtmlTest {
         val parsed = TTMLParser.parseTTML(ttml)
         assertEquals(1, parsed.size)
         assertEquals("hello world", parsed[0].text)
-        assertEquals(2, parsed[0].words.size)
-        assertEquals("hello", parsed[0].words[0].text)
-        assertEquals("world", parsed[0].words[1].text)
+        assertEquals(3, parsed[0].words.size)
+        assertEquals("hel", parsed[0].words[0].text)
+        assertFalse(parsed[0].words[0].hasTrailingSpace)
+        assertEquals("lo", parsed[0].words[1].text)
+        assertTrue(parsed[0].words[1].hasTrailingSpace)
+        assertEquals("world", parsed[0].words[2].text)
     }
 
     @Test
