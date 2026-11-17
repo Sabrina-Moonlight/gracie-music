@@ -120,17 +120,57 @@ object LrcRedLyricsProvider : LyricsProvider {
         return null
     }
 
-    private suspend fun search(title: String, artist: String): List<LrcredResult> {
-        val query = "$title $artist".trim()
-        if (query.isEmpty()) return emptyList()
+    /** Forma antigua de lrc.red (la del código original): search.json + s/ISRC.ttml. */
+    @Serializable
+    private data class OldHit(
+        val isrc: String? = null,
+        val title: String? = null,
+        val artist: String? = null,
+        val duration: Double? = null,
+    )
+
+    @Serializable
+    private data class OldResponse(val hits: List<OldHit>? = null)
+
+    private suspend fun searchOld(query: String): List<LrcredResult> {
+        val body = fetchText("search.json", query) ?: return emptyList()
+        return (lenientJson.decodeFromString<OldResponse>(body).hits ?: emptyList())
+            .filter { !it.isrc.isNullOrBlank() }
+            .map {
+                val isrc = it.isrc!!.trim().uppercase()
+                LrcredResult(
+                    isrc = isrc,
+                    trackName = it.title,
+                    artistName = it.artist,
+                    duration = it.duration,
+                    lyricsUrl = "s/$isrc.ttml",
+                )
+            }
+    }
+
+    private suspend fun searchNew(query: String): List<LrcredResult> {
         val body = fetchText("api/v1", query) ?: return emptyList()
         return lenientJson.decodeFromString<LrcredSearchResponse>(body).results
     }
 
+    /** Primero la forma original (funcionaba); si falla o viene vacía, la nueva. */
+    private suspend fun search(title: String, artist: String): List<LrcredResult> {
+        val query = "$title $artist".trim()
+        if (query.isEmpty()) return emptyList()
+        runCatching { searchOld(query) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return runCatching { searchNew(query) }.getOrNull() ?: emptyList()
+    }
+
     private suspend fun fetchTtml(match: LrcredResult): String? {
-        val lyricsUrl = match.lyricsUrl?.takeIf { it.isNotBlank() } ?: return null
-        val ttml = fetchText(lyricsUrl.removePrefix("/")) ?: return null
-        return ttml.takeIf { it.isNotBlank() }
+        val paths = listOfNotNull(
+            match.lyricsUrl?.takeIf { it.isNotBlank() },
+            match.isrc?.takeIf { it.isNotBlank() }?.let { "s/${it.trim().uppercase()}.ttml" },
+        ).map { it.removePrefix("/") }.distinct()
+        for (path in paths) {
+            val ttml = runCatching { fetchText(path) }.getOrNull()
+            if (!ttml.isNullOrBlank()) return ttml
+        }
+        return null
     }
 
     /** TTML -> formato de la app, con el lector de Metrolist; si no entiende nada, el lector antiguo. */
@@ -249,7 +289,7 @@ object LrcRedLyricsProvider : LyricsProvider {
         for (item in results) {
             val itemDuration = item.duration ?: 0.0
             if (targetDuration > 0 && itemDuration > 0) {
-                if (abs(itemDuration - targetDuration) > 2.0) continue
+                if (abs(itemDuration - targetDuration) > 3.0) continue
             }
 
             val itemFullTitle = normalize(item.trackName)

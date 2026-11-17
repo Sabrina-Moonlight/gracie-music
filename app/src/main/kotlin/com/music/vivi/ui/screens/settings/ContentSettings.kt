@@ -73,6 +73,7 @@ import com.music.vivi.constants.EnableBetterLyricsKey
 import com.music.vivi.constants.EnableKugouKey
 import com.music.vivi.constants.EnableLrcLibKey
 import com.music.vivi.constants.EnableLrcRedKey
+import com.music.vivi.constants.EnableYouLyPlusKey
 import com.music.vivi.constants.EnablePaxsenixKey
 import com.music.vivi.constants.EnableUnisonKey
 import com.music.vivi.constants.EnableBiniLyricsKey
@@ -194,6 +195,7 @@ fun ContentSettings(
     val (enableKugou, onEnableKugouChange) = rememberPreference(key = EnableKugouKey, defaultValue = true)
     val (enableLrclib, onEnableLrclibChange) = rememberPreference(key = EnableLrcLibKey, defaultValue = true)
     val (enableLrcRed, onEnableLrcRedChange) = rememberPreference(key = EnableLrcRedKey, defaultValue = true)
+    val (enableYouLyPlus, onEnableYouLyPlusChange) = rememberPreference(key = EnableYouLyPlusKey, defaultValue = true)
     val (enableBetterLyrics, onEnableBetterLyricsChange) = rememberPreference(key = EnableBetterLyricsKey, defaultValue = true)
     val (enablePaxsenix, onEnablePaxsenixChange) = rememberPreference(key = EnablePaxsenixKey, defaultValue = true)
     val (enableUnison, onEnableUnisonChange) = rememberPreference(key = EnableUnisonKey, defaultValue = true)
@@ -411,8 +413,9 @@ fun ContentSettings(
     if (showProviderPriorityDialog) {
         val defaultOrder = LyricsProviderRegistry.getDefaultProviderOrder()
         // User-toggleable provider names (excludes always-on YouTube providers)
-        val userToggleable = setOf("Paxsenix", "BetterLyrics", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics")
+        val userToggleable = setOf("YouLyPlus", "Paxsenix", "BetterLyrics", "LrcLib", "LrcRed", "Kugou", "Unison", "BiniLyrics")
         val enabledProviders = setOfNotNull(
+            "YouLyPlus".takeIf { enableYouLyPlus },
             "LrcLib".takeIf { enableLrclib },
             "LrcRed".takeIf { enableLrcRed },
             "Kugou".takeIf { enableKugou },
@@ -1071,6 +1074,27 @@ fun ContentSettings(
                         )
                     },
                     onClick = { onEnableLrclibChange(!enableLrclib) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
+                    title = { Text("YouLyPlus") },
+                    description = { Text("Letras con tiempo por palabra (servidores de la extensión YouLy+)") },
+                    trailingContent = {
+                        Switch(
+                            checked = enableYouLyPlus,
+                            onCheckedChange = onEnableYouLyPlusChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (enableYouLyPlus) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onEnableYouLyPlusChange(!enableYouLyPlus) }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.lyrics),

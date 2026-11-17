@@ -53,7 +53,10 @@ constructor(
         val orderString = preferences[LyricsProviderOrderKey].orEmpty()
 
         if (orderString.isNotBlank()) {
-            return LyricsProviderRegistry.getOrderedProviders(orderString)
+            // Los proveedores nuevos que no estén en el orden guardado van al final.
+            val saved = LyricsProviderRegistry.deserializeProviderOrder(orderString)
+            val complete = saved + LyricsProviderRegistry.getDefaultProviderOrder().filter { it !in saved }
+            return complete.mapNotNull { LyricsProviderRegistry.getProviderByName(it) }
         }
 
         // Migration path: place the old preferred provider first in the default order

@@ -14,6 +14,7 @@ import com.music.vivi.constants.PreferredLyricsProvider
  */
 object LyricsProviderRegistry {
     private val providerMap = mapOf(
+        "YouLyPlus"       to YouLyPlusLyricsProvider,
         "Paxsenix"        to PaxSenixLyricsProvider,
         "BetterLyrics"    to BetterLyricsProvider,
         "LrcLib"          to LrcLibLyricsProvider,
@@ -38,6 +39,7 @@ object LyricsProviderRegistry {
         providers.filter { it in providerNames }.joinToString(",")
 
     fun getDefaultProviderOrder(): List<String> = listOf(
+        "YouLyPlus",
         "Paxsenix",
         "BetterLyrics",
         "LrcLib",
@@ -62,12 +64,14 @@ object LyricsProviderRegistry {
         PreferredLyricsProvider.SPOTIFY          -> "LrcLib"
         PreferredLyricsProvider.BINI_LYRICS      -> "BiniLyrics"
         PreferredLyricsProvider.LRC_RED          -> "LrcRed"
+        PreferredLyricsProvider.YOULYPLUS        -> "YouLyPlus"
         PreferredLyricsProvider.YOUTUBE_SUBTITLE -> "YouTubeSubtitle"
         PreferredLyricsProvider.YOUTUBE_MUSIC    -> "YouTubeMusic"
     }
 
     /** Returns the human-readable display name for a registry provider key. */
     fun getDisplayName(name: String): String = when (name) {
+        "YouLyPlus"       -> "YouLyPlus"
         "Paxsenix"        -> "PaxSenix"
         "BetterLyrics"    -> "Better Lyrics"
         "LrcLib"          -> "LrcLib"

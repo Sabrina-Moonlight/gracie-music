@@ -105,6 +105,7 @@ val SuggestionRegionKey = stringPreferencesKey("suggestionRegion")
 val EnableKugouKey = booleanPreferencesKey("enableKugou")
 val EnableLrcLibKey = booleanPreferencesKey("enableLrclib")
 val EnableLrcRedKey = booleanPreferencesKey("enableLrcRed")
+val EnableYouLyPlusKey = booleanPreferencesKey("enableYouLyPlus")
 val EnableBetterLyricsKey = booleanPreferencesKey("enableBetterLyrics")
 val EnableSpotifyLyricsKey = booleanPreferencesKey("enableSpotifyLyrics")
 
@@ -499,7 +500,8 @@ enum class PreferredLyricsProvider {
     BINI_LYRICS,
     LRC_RED,
     YOUTUBE_SUBTITLE,
-    YOUTUBE_MUSIC
+    YOUTUBE_MUSIC,
+    YOULYPLUS
 }
 
 enum class PlayerButtonsStyle {
