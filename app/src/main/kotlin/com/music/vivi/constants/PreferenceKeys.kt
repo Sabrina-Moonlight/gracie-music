@@ -106,10 +106,8 @@ val EnableKugouKey = booleanPreferencesKey("enableKugou")
 val EnableLrcLibKey = booleanPreferencesKey("enableLrclib")
 val EnableLrcRedKey = booleanPreferencesKey("enableLrcRed")
 val EnableBetterLyricsKey = booleanPreferencesKey("enableBetterLyrics")
-val EnableMusixmatchKey = booleanPreferencesKey("enableMusixmatch")
 val EnableSpotifyLyricsKey = booleanPreferencesKey("enableSpotifyLyrics")
 
-val EnableYouLyPlusKey = booleanPreferencesKey("enableYouLyPlus")
 val EnablePaxsenixKey = booleanPreferencesKey("enablePaxsenix")
 val EnableUnisonKey = booleanPreferencesKey("enableUnison")
 val EnableBiniLyricsKey = booleanPreferencesKey("enableBiniLyrics")
@@ -495,8 +493,6 @@ enum class PreferredLyricsProvider {
     LRCLIB,
     KUGOU,
     BETTER_LYRICS,
-    MUSIXMATCH,
-    YOULYPLUS,
     PAXSENIX,
     UNISON,
     SPOTIFY,

@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class LyricsData(
-    val id: Long,
+    val id: Long = 0,
     @SerialName("videoId")
     val videoId: String? = null,
     val song: String? = null,

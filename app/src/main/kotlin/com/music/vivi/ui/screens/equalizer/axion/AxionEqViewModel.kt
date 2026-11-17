@@ -177,7 +177,7 @@ class AxionEqViewModel @Inject constructor(
             
             val profile = SavedEQProfile(
                 id = "vivi_tuning",
-                name = "Vivi Tuning",
+                name = "Gracie Tuning",
                 deviceModel = "ViviEqualizer",
                 bands = bands,
                 preamp = calculatedPreamp,

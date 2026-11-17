@@ -15,7 +15,7 @@ data class SearchResult(
     val trackName: String? = null,
     val artistName: String? = null,
     val albumName: String? = null,
-    val duration: Int? = null,
+    val durationMs: Long? = null,
     val artwork: String? = null
 ) {
     val displayName: String get() = trackName ?: songName ?: ""
@@ -24,9 +24,9 @@ data class SearchResult(
 
 @Serializable
 data class LyricsContent(
-    val timestamp: Long,
-    val endtime: Long,
-    val duration: Long,
+    val timestamp: Long = 0,
+    val endtime: Long = 0,
+    val duration: Long = 0,
     val structure: String? = null,
     val text: List<LyricText> = emptyList(),
     val background: Boolean = false,
@@ -39,7 +39,7 @@ data class LyricText(
     val text: String,
     val timestamp: Long,
     val endtime: Long,
-    val duration: Long,
+    val duration: Long = 0,
     val part: Boolean = false
 )
 
@@ -80,7 +80,7 @@ data class AppleMusicSongsResult(
 @Serializable
 data class AppleMusicSongData(
     val id: String,
-    val type: String
+    val type: String = ""
 )
 
 @Serializable

@@ -98,44 +98,6 @@ fun SettingsDropdownMenu(
             .width(280.dp) // Ensures consistent wide size inspired by Chrome menus
             .background(MaterialTheme.colorScheme.surface),
     ) {
-        // --- 0. Chrome-like Top Icons Row with Circular Backgrounds ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val iconButtonModifier = Modifier.size(40.dp)
-            val iconButtonColors = IconButtonDefaults.iconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-
-            IconButton(
-                onClick = { 
-                    onDismissRequest()
-                    val targetApkName = if (BuildConfig.FLAVOR.contains("foss", ignoreCase = true)) "izzydroid-universal-foss-release.apk" else "vivi.apk"
-                    val shareUrl = "https://github.com/vivizzz007/vivi-music/releases/latest/download/$targetApkName"
-                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                        putExtra(Intent.EXTRA_TEXT, shareUrl)
-                        type = "text/plain"
-                    }
-                    context.startActivity(Intent.createChooser(sendIntent, null))
-                }, 
-                modifier = iconButtonModifier,
-                colors = iconButtonColors,
-                shapes = IconButtonDefaults.shapes()
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.share_hotspot),
-                    contentDescription = "Share App",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(4.dp))
-
         // --- Section 1: Account, Sync & Integrations ---
         val section1Count = if (isLoggedIn) 2 else 1
         Surface(

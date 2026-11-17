@@ -1,6 +1,9 @@
 /**
  * vivimusic Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
+ *
+ * Orden de búsqueda, lectura de la respuesta y limpieza del LRC adaptados del código de
+ * Metrolist (UnisonProvider). La salida sigue siendo el formato actual de la app.
  */
 package com.music.unison
 
@@ -14,7 +17,13 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.delay
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -81,7 +90,13 @@ object Unison {
 
     // ─── API calls ───────────────────────────────────────────────────────────
 
-    /** Fetch the single best matching lyric directly from /lyrics. */
+    private const val MAX_LYRICS_RESPONSE_CHARS = 1024 * 1024
+    private val lenientJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    /**
+     * Pide /lyrics con las mismas reglas que Metrolist: pide JSON, descarta respuestas de más de 1 MB,
+     * 404/204 = sin letra y 503 se reintenta un par de veces. Devuelve null si no hay letra usable.
+     */
     private suspend fun fetchBest(
         videoId: String? = null,
         song: String? = null,
@@ -89,13 +104,26 @@ object Unison {
         album: String? = null,
         duration: Int? = null,
     ): LyricsData? = runCatching {
-        client.get("/lyrics") {
-            if (videoId != null) parameter("v", videoId)
-            if (song != null) parameter("song", song)
-            if (artist != null) parameter("artist", artist)
-            if (album != null) parameter("album", album)
-            if (duration != null && duration > 0) parameter("duration", duration)
-        }.body<LyricsResponse>().takeIf { it.success }?.data
+        var body: String? = null
+        for (attempt in 0..2) {
+            val response: HttpResponse = client.get("/lyrics") {
+                if (videoId != null) parameter("v", videoId)
+                if (song != null) parameter("song", song)
+                if (!artist.isNullOrBlank()) parameter("artist", artist)
+                if (!album.isNullOrBlank()) parameter("album", album)
+                if (duration != null && duration > 0) parameter("duration", duration)
+                header("Accept", "application/json")
+            }
+            if (response.status == HttpStatusCode.ServiceUnavailable && attempt < 2) {
+                delay(500L shl attempt)
+                continue
+            }
+            if (!response.status.isSuccess()) return@runCatching null
+            body = response.bodyAsText().takeIf { it.length <= MAX_LYRICS_RESPONSE_CHARS }
+            break
+        }
+        val parsed = lenientJson.decodeFromString<LyricsResponse>(body ?: return@runCatching null)
+        parsed.takeIf { it.success }?.data?.takeIf { !it.lyrics.isNullOrBlank() }
     }.getOrNull()
 
     /** Fetch all matching results from /lyrics/search (sorted by score desc). */
@@ -115,18 +143,55 @@ object Unison {
 
     // ─── Format helpers ──────────────────────────────────────────────────────
 
+    private val lrcTimeTag = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?]""")
+
+    /**
+     * Como Metrolist: una línea con varias marcas de tiempo se repite en cada una, se quitan las
+     * líneas vacías y se ordena por tiempo. Si el LRC ya trae marcas de palabra (<...>) se deja tal cual.
+     */
+    private fun normalizeLrc(lrc: String): String {
+        if (lrc.contains('<')) return lrc
+        val entries = mutableListOf<Pair<Long, String>>()
+        lrc.lineSequence().forEach { rawLine ->
+            val line = rawLine.trim()
+            if (line.isEmpty()) return@forEach
+            val matches = lrcTimeTag.findAll(line).toList()
+            if (matches.isEmpty()) return@forEach
+            val text = line.substring(matches.last().range.last + 1).trim()
+            if (text.isEmpty()) return@forEach
+            matches.forEach { m ->
+                val min = m.groupValues[1].toLongOrNull() ?: return@forEach
+                val sec = m.groupValues[2].toLongOrNull() ?: return@forEach
+                val frac = when (m.groupValues[3].length) {
+                    0 -> 0L
+                    1 -> m.groupValues[3].toLong() * 100
+                    2 -> m.groupValues[3].toLong() * 10
+                    else -> m.groupValues[3].take(3).toLong()
+                }
+                entries.add((min * 60_000 + sec * 1_000 + frac) to text)
+            }
+        }
+        if (entries.isEmpty()) return lrc
+        return entries.sortedBy { it.first }.joinToString("\n") { (ms, text) ->
+            String.format(java.util.Locale.US, "[%02d:%02d.%02d]%s", ms / 60_000, (ms % 60_000) / 1000, (ms % 1000) / 10, text)
+        }
+    }
+
     /**
      * Converts raw lyrics text to the format the player expects.
      * - TTML → parsed & converted to LRC+word-timing via TTMLParser
-     * - LRC / plain → returned as-is
+     * - LRC → limpiado con la lógica de Metrolist
+     * - plain → returned as-is
      */
     private fun convertLyrics(raw: String, format: String?): String {
         val isTtml = format?.lowercase() == "ttml" || raw.trimStart().startsWith("<tt", ignoreCase = true)
-        return if (isTtml) {
-            val parsed = TTMLParser.parseTTML(raw)
-            if (parsed.isNotEmpty()) TTMLParser.toLRC(parsed) else raw
-        } else {
-            raw
+        return when {
+            isTtml -> {
+                val parsed = TTMLParser.parseTTML(raw)
+                if (parsed.isNotEmpty()) TTMLParser.toLRC(parsed) else raw
+            }
+            format?.lowercase() == "lrc" -> normalizeLrc(raw)
+            else -> raw
         }
     }
 
@@ -147,9 +212,22 @@ object Unison {
         val cleanedArtist = cleanArtist(artist)
         val effectiveDuration = duration.takeIf { it > 0 }
 
-        // Strategy 1: direct best-match via /lyrics (uses videoId if available)
+        // Estrategia de Metrolist 1: por videoId.
+        if (!videoId.isNullOrBlank()) {
+            fetchBest(videoId = videoId)?.let { item ->
+                item.lyrics?.takeIf { it.isNotBlank() }?.let { return@runCatching convertLyrics(it, item.format) }
+            }
+        }
+
+        // Estrategia de Metrolist 2: por título/artista/álbum/duración sin limpiar.
+        if (title.isNotBlank()) {
+            fetchBest(song = title, artist = artist, album = album, duration = effectiveDuration)?.let { item ->
+                item.lyrics?.takeIf { it.isNotBlank() }?.let { return@runCatching convertLyrics(it, item.format) }
+            }
+        }
+
+        // Respaldo propio de la app: mismos datos pero con título/artista limpios.
         fetchBest(
-            videoId = videoId,
             song = cleanedTitle,
             artist = cleanedArtist,
             album = album,
@@ -159,7 +237,7 @@ object Unison {
             if (!raw.isNullOrBlank()) return@runCatching convertLyrics(raw, item.format)
         }
 
-        // Strategy 2: search with cleaned metadata
+        // Respaldo final: búsqueda con datos limpios
         val results = search(
             song = cleanedTitle,
             artist = cleanedArtist,

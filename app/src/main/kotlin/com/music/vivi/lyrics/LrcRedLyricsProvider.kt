@@ -1,6 +1,9 @@
 /**
  * vivimusic Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
+ *
+ * Búsqueda, elección del mejor resultado y descarga adaptadas del código de Metrolist
+ * (LrcredLyricsProvider). La lectura del TTML usa el mismo lector que Better Lyrics.
  */
 
 package com.music.vivi.lyrics
@@ -10,7 +13,12 @@ import com.music.vivi.constants.EnableLrcRedKey
 import com.music.vivi.utils.dataStore
 import com.music.vivi.utils.get
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
+import com.music.vivi.betterlyrics.TTMLParser
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
@@ -22,8 +30,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.text.Normalizer
-import java.util.Locale
 import kotlin.math.abs
 
 object LrcRedLyricsProvider : LyricsProvider {
@@ -42,24 +48,107 @@ object LrcRedLyricsProvider : LyricsProvider {
             defaultRequest {
                 url("https://lrc.red/")
             }
-            expectSuccess = true
+            expectSuccess = false
         }
     }
 
     override fun isEnabled(context: Context): Boolean = context.dataStore[EnableLrcRedKey] ?: true
 
     @Serializable
-    data class Hit(
-        val isrc: String? = null,
-        val title: String? = null,
-        val artist: String? = null,
-        val duration: Double? = null
+    data class LrcredSearchResponse(
+        val results: List<LrcredResult> = emptyList(),
+        val source: String? = null,
+        val total: Int? = null,
     )
 
     @Serializable
-    data class Response(
-        val hits: List<Hit>? = null
+    data class LrcredResult(
+        val id: String? = null,
+        val isrc: String? = null,
+        @SerialName("track_name")
+        val trackName: String? = null,
+        @SerialName("artist_name")
+        val artistName: String? = null,
+        @SerialName("album_name")
+        val albumName: String? = null,
+        val duration: Double? = null,
+        val lyricsUrl: String? = null,
+        @SerialName("timing_type")
+        val timingType: String? = null,
     )
+
+    private const val MAX_LYRICS_RESPONSE_CHARS = 1024 * 1024
+    private val lenientJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    private val NON_ALPHANUMERIC_OR_SPACE = Regex("""[^\p{L}\p{N}\s]""")
+    private val MULTIPLE_SPACES = Regex("""\s+""")
+    private val BRACKETED_FEAT =
+        Regex("""[\(\[](?:feat\.?|ft\.?|with|prod\.?|bonus track|remaster(?:ed)?)[^\)\]]*[\)\]]""", RegexOption.IGNORE_CASE)
+    private val TRAILING_FEAT = Regex("""\b(?:feat\.?|ft\.?|with)\s+.*$""", RegexOption.IGNORE_CASE)
+    private val BRACKETED_MEDIA_TAGS =
+        Regex(
+            """[\(\[](?:official|music video|video|audio|lyrics?|visualizer|album version|explicit)[^\)\]]*[\)\]]""",
+            RegexOption.IGNORE_CASE,
+        )
+    private val ARTIST_DELIMITER = Regex("""[,&/]|(?:\b(?:feat\.?|ft\.?|with|x)\b)""", RegexOption.IGNORE_CASE)
+    private val VIDEO_TAG_REMOVAL =
+        Regex(
+            """\s*[\(\[](?:Official\s*(?:Music\s*)?Video|Music\s*Video|Official\s*Audio|Audio|Lyric\s*Video|Official\s*Lyric\s*Video)[\)\]]""",
+            RegexOption.IGNORE_CASE,
+        )
+
+    private val MODIFIER_KEYWORDS = listOf(
+        "slowed", "reverb", "remix", "mixed", "dj mix", "mashup", "cover", "tribute", "karaoke",
+        "instrumental", "acoustic", "sped up", "speed up", "live", "edit", "versión", "version", "bpm",
+        "guitar", "piano", "lofi", "lo-fi", "nightcore", "club mix", "extended mix", "radio edit",
+    )
+
+    /** Pide texto con límite de 1 MB; 404/204 = sin letra; 503 se reintenta un par de veces. */
+    private suspend fun fetchText(path: String, query: String? = null): String? {
+        for (attempt in 0..2) {
+            val response: HttpResponse = client.get(path) {
+                if (query != null) parameter("q", query)
+            }
+            if (response.status == HttpStatusCode.ServiceUnavailable && attempt < 2) {
+                delay(500L shl attempt)
+                continue
+            }
+            if (response.status == HttpStatusCode.NotFound || response.status == HttpStatusCode.NoContent) return null
+            if (!response.status.isSuccess()) throw IllegalStateException("lrc.red HTTP ${response.status.value}")
+            return response.bodyAsText().takeIf { it.length <= MAX_LYRICS_RESPONSE_CHARS }
+        }
+        return null
+    }
+
+    private suspend fun search(title: String, artist: String): List<LrcredResult> {
+        val query = "$title $artist".trim()
+        if (query.isEmpty()) return emptyList()
+        val body = fetchText("api/v1", query) ?: return emptyList()
+        return lenientJson.decodeFromString<LrcredSearchResponse>(body).results
+    }
+
+    private suspend fun fetchTtml(match: LrcredResult): String? {
+        val lyricsUrl = match.lyricsUrl?.takeIf { it.isNotBlank() } ?: return null
+        val ttml = fetchText(lyricsUrl.removePrefix("/")) ?: return null
+        return ttml.takeIf { it.isNotBlank() }
+    }
+
+    /** TTML -> formato de la app, con el lector de Metrolist; si no entiende nada, el lector antiguo. */
+    private fun ttmlToLrc(ttml: String): String {
+        val parsed = TTMLParser.parseTTML(ttml)
+        if (parsed.isNotEmpty()) return TTMLParser.toLRC(parsed)
+        return parseTtmlToLrc(ttml)
+    }
+
+    private suspend fun fetchFromApi(title: String, artist: String, durationSec: Int, album: String?): String? {
+        val results = search(title, artist)
+        if (results.isEmpty()) return null
+        val match = findBestMatch(results, title, artist, durationSec.toLong(), album, isrc = null) ?: return null
+        val ttml = fetchTtml(match) ?: return null
+        return ttmlToLrc(ttml).takeIf { it.isNotBlank() }
+    }
+
+    private fun cleanVideoTitle(title: String): String = title.replace(VIDEO_TAG_REMOVAL, "").trim()
 
     override suspend fun getLyrics(
         id: String,
@@ -68,21 +157,13 @@ object LrcRedLyricsProvider : LyricsProvider {
         duration: Int,
         album: String?
     ): Result<String> = runCatching {
-        val q = "$title $artist".trim()
-        val response = client.get("search.json") {
-            parameter("q", q)
-        }.body<Response>()
+        fetchFromApi(title, artist, duration, album)?.let { return@runCatching it }
 
-        val hits = response.hits ?: throw IllegalStateException("No results from lrc.red")
-        
-        val hit = bestHit(hits, title, artist, duration)
-            ?: throw IllegalStateException("No matching track found")
-
-        val isrc = hit.isrc?.trim()?.uppercase(Locale.ROOT)
-            ?: throw IllegalStateException("ISRC missing in hit")
-            
-        val ttml = client.get("s/$isrc.ttml").bodyAsText()
-        parseTtmlToLrc(ttml)
+        val cleanTitle = cleanVideoTitle(title)
+        if (cleanTitle != title || duration > 0) {
+            fetchFromApi(cleanTitle, artist, 0, album)?.let { return@runCatching it }
+        }
+        throw IllegalStateException("No matching track found on lrc.red")
     }
 
     override suspend fun getAllLyrics(
@@ -93,84 +174,167 @@ object LrcRedLyricsProvider : LyricsProvider {
         album: String?,
         callback: (String) -> Unit
     ) {
-        val q = "$title $artist".trim()
-        val response = runCatching { 
-            client.get("search.json") { parameter("q", q) }.body<Response>() 
-        }.getOrNull()
-        
-        val hits = response?.hits ?: return
+        val results = runCatching { search(title, artist) }.getOrNull() ?: return
 
         var count = 0
-        hits.forEach { hit ->
-            if (count > 4) return@forEach
+        // Primero los que traen tiempo por palabra.
+        for (hit in results.sortedBy { if (it.timingType.equals("word", ignoreCase = true)) 0 else 1 }) {
+            if (count > 4) break
             currentCoroutineContext().ensureActive()
-            
+
             val hitDurationS = hit.duration ?: 0.0
             val isDurationMatch = duration <= 0 || hitDurationS <= 0.0 || abs(hitDurationS - duration) <= 3.0
+            if (!isDurationMatch) continue
 
-            if (isDurationMatch && !hit.isrc.isNullOrBlank()) {
-                val isrc = hit.isrc.trim().uppercase(Locale.ROOT)
-                runCatching {
-                    val ttml = client.get("s/$isrc.ttml").bodyAsText()
-                    val lrc = parseTtmlToLrc(ttml)
-                    if (lrc.isNotBlank()) {
-                        callback(lrc)
-                        count++
-                    }
+            runCatching {
+                val ttml = fetchTtml(hit) ?: return@runCatching
+                val lrc = ttmlToLrc(ttml)
+                if (lrc.isNotBlank()) {
+                    callback(lrc)
+                    count++
                 }
             }
         }
     }
 
-    private fun bestHit(hits: List<Hit>, title: String, artist: String, durationSeconds: Int): Hit? {
-        val wantedTitle = coreOf(title)
-        val wantedVersion = versionOf(title)
-        val wantedArtists = artistsOf(artist)
-        val seconds = durationSeconds.toDouble()
+    private fun normalize(str: String?): String {
+        if (str.isNullOrBlank()) return ""
+        return str.lowercase().replace(NON_ALPHANUMERIC_OR_SPACE, " ").replace(MULTIPLE_SPACES, " ").trim()
+    }
 
-        fun distance(hit: Hit): Double =
-            if (durationSeconds > 0 && hit.duration != null) abs(hit.duration - seconds) else 0.0
+    private fun cleanBaseTitle(str: String?): String {
+        if (str.isNullOrBlank()) return ""
+        var s = str.lowercase()
+        s = s.replace(BRACKETED_FEAT, "")
+        s = s.replace(TRAILING_FEAT, "")
+        s = s.replace(BRACKETED_MEDIA_TAGS, "")
+        return normalize(s)
+    }
 
-        return hits
-            .filter { hit ->
-                val name = hit.title ?: return@filter false
-                !hit.isrc.isNullOrBlank() &&
-                    coreOf(name) == wantedTitle &&
-                    versionOf(name) == wantedVersion &&
-                    (wantedArtists.isEmpty() || artistsOf(hit.artist.orEmpty()).any { it in wantedArtists }) &&
-                    (durationSeconds <= 0 || distance(hit) <= 3.0)
+    private fun extractArtists(str: String?): List<String> {
+        if (str.isNullOrBlank()) return emptyList()
+        return str.split(ARTIST_DELIMITER).map { normalize(it) }.filter { it.isNotEmpty() }
+    }
+
+    private fun findBestMatch(
+        results: List<LrcredResult>,
+        title: String,
+        artist: String,
+        durationSec: Long,
+        album: String?,
+        isrc: String?,
+    ): LrcredResult? {
+        if (results.isEmpty()) return null
+        val targetDuration = durationSec.toDouble()
+
+        if (!isrc.isNullOrBlank()) {
+            val targetIsrc = isrc.trim().uppercase()
+            results.firstOrNull { it.isrc?.trim()?.uppercase() == targetIsrc }?.let { return it }
+        }
+
+        val targetFullTitle = normalize(title)
+        val targetBaseTitle = cleanBaseTitle(title)
+        val targetArtist = normalize(artist)
+        val targetAlbum = normalize(album)
+
+        val targetTitleLower = title.lowercase()
+        val targetAlbumLower = album?.lowercase().orEmpty()
+        val targetModifiers = MODIFIER_KEYWORDS.filter { kw ->
+            targetTitleLower.contains(kw) || targetAlbumLower.contains(kw)
+        }
+
+        var bestItem: LrcredResult? = null
+        var maxScore = Double.NEGATIVE_INFINITY
+
+        for (item in results) {
+            val itemDuration = item.duration ?: 0.0
+            if (targetDuration > 0 && itemDuration > 0) {
+                if (abs(itemDuration - targetDuration) > 2.0) continue
             }
-            .minByOrNull(::distance)
+
+            val itemFullTitle = normalize(item.trackName)
+            val itemBaseTitle = cleanBaseTitle(item.trackName)
+            val itemArtist = normalize(item.artistName)
+            val itemAlbum = normalize(item.albumName)
+
+            var score = 0.0
+
+            if (targetFullTitle.isNotEmpty() && itemFullTitle.isNotEmpty() && targetFullTitle == itemFullTitle) {
+                score += 50.0
+            } else if (targetBaseTitle.isNotEmpty() && itemBaseTitle.isNotEmpty()) {
+                if (targetBaseTitle == itemBaseTitle) {
+                    score += 35.0
+                } else if (itemBaseTitle.contains(targetBaseTitle) || targetBaseTitle.contains(itemBaseTitle)) {
+                    score += 15.0
+                } else {
+                    score -= 40.0
+                }
+            }
+
+            if (targetArtist.isNotEmpty() && itemArtist.isNotEmpty()) {
+                if (targetArtist == itemArtist) {
+                    score += 30.0
+                } else if (itemArtist.contains(targetArtist) || targetArtist.contains(itemArtist)) {
+                    score += 15.0
+                } else {
+                    val targetArtists = extractArtists(artist)
+                    val itemArtists = extractArtists(item.artistName)
+                    val hasOverlap = targetArtists.any { ta ->
+                        itemArtists.any { ia -> ia == ta || ia.contains(ta) || ta.contains(ia) }
+                    }
+                    if (hasOverlap) score += 10.0 else continue
+                }
+            }
+
+            if (targetAlbum.isNotEmpty() && itemAlbum.isNotEmpty()) {
+                if (targetAlbum == itemAlbum) {
+                    score += 35.0
+                } else if (itemAlbum.contains(targetAlbum) || targetAlbum.contains(itemAlbum)) {
+                    score += 20.0
+                }
+                val targetIsSingle = targetAlbum.contains("single")
+                val itemIsSingle = itemAlbum.contains("single")
+                if (!targetIsSingle && itemIsSingle) {
+                    score -= 15.0
+                } else if (targetIsSingle && itemIsSingle) {
+                    score += 10.0
+                }
+            }
+
+            if (targetDuration > 0 && itemDuration > 0) {
+                val diff = abs(itemDuration - targetDuration)
+                if (diff == 0.0) {
+                    score += 25.0
+                } else if (diff <= 1.0) {
+                    score += 20.0
+                } else if (diff <= 2.0) {
+                    score += 15.0
+                }
+            }
+
+            when (item.timingType?.lowercase()) {
+                "word" -> score += 15.0
+                "line" -> score += 8.0
+                else -> score -= 10.0
+            }
+
+            val itemTrackLower = item.trackName?.lowercase().orEmpty()
+            val itemAlbumLower = item.albumName?.lowercase().orEmpty()
+            val itemModifiers = MODIFIER_KEYWORDS.filter { kw ->
+                itemTrackLower.contains(kw) || itemAlbumLower.contains(kw)
+            }
+            for (kw in itemModifiers) {
+                if (kw !in targetModifiers) score -= 30.0
+            }
+
+            if (score > maxScore) {
+                maxScore = score
+                bestItem = item
+            }
+        }
+
+        return if (bestItem != null && maxScore > 0.0) bestItem else null
     }
-
-    private fun coreOf(title: String): String =
-        normalized(title.replace(Regex("""[(\[][^)\]]*[)\]]"""), " ").substringBefore(" - "))
-            .ifEmpty { normalized(title) }
-
-    private fun versionOf(title: String): Set<String> {
-        val extras = Regex("""[(\[][^)\]]*[)\]]""").findAll(title).joinToString(" ") { it.value } +
-            " " + title.substringAfter(" - ", "")
-        return normalized(extras).split(' ').filter { 
-            it in setOf(
-                "live", "remix", "remixed", "mix", "acoustic", "unplugged", "instrumental",
-                "karaoke", "cappella", "acapella", "demo", "edit", "version", "cover",
-                "sped", "slowed", "reverb", "nightcore", "lofi", "orchestral", "extended"
-            )
-        }.toSet()
-    }
-
-    private fun artistsOf(artist: String): Set<String> =
-        artist.split(Regex("""\s*(?:,|&|;|/|\s+and\s+|\s+x\s+|\s+with\s+|\s+feat\.?\s+|\s+ft\.?\s+)\s*""", RegexOption.IGNORE_CASE))
-            .map(::normalized).filter { it.isNotEmpty() }.toSet()
-
-    private fun normalized(value: String): String =
-        Normalizer.normalize(value, Normalizer.Form.NFD)
-            .replace(Regex("""\p{Mn}+"""), "")
-            .lowercase(Locale.ROOT)
-            .map { if (it.isLetterOrDigit()) it else ' ' }
-            .joinToString("")
-            .replace(Regex("""\s+"""), " ")
-            .trim()
 
     /**
      * Parses Apple Music TTML into LRC format. 

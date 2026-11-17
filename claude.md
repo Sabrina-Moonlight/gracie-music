@@ -7,6 +7,11 @@
 - Da los pasos que necesites para cumplir el objetivo.
 - Pregunta solo si algo te bloquea. Si puedes seguir con una suposición razonable, hazla y dila en una línea.
 
+## Trabajo en pasos y plan
+- Trabaja **poco a poco**: un paso del `PLAN_GRACIE.md` por entrega, con su ZIP. Si un paso es largo, pártelo en entregas pequeñas. Nunca dejes el trabajo a medias sin ZIP: ella tiene pocos tokens, así que antes de agotar el espacio entrega lo que ya está listo.
+- El `PLAN_GRACIE.md` se entrega **siempre como archivo suelto** en el chat, nunca dentro del ZIP. Actualízalo (marca el paso hecho) en cada entrega.
+- Del código original de Gracie y del de Vivi: prohibido copiar y pegar; úsalos de guía y escribe código propio. De Metrolist sí se puede copiar y adaptar.
+
 ## Alcance y tokens
 - Ahorra tokens. Haz solo lo pedido y lo necesario para llegar ahí.
 - Si te pide **añadir o cambiar** algo: solo eso, con el cambio más pequeño posible. Sin extras, refactors ni mejoras no pedidas.

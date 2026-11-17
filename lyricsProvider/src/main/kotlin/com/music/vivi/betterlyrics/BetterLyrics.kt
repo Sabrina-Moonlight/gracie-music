@@ -6,12 +6,13 @@ package com.music.vivi.betterlyrics
 
 import com.music.vivi.betterlyrics.models.TTMLResponse
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.parameter
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -43,6 +44,9 @@ object BetterLyrics {
         }
     }
 
+    // Igual que Metrolist: respuestas de más de 1 MB se descartan.
+    private const val MAX_LYRICS_RESPONSE_CHARS = 1024 * 1024
+
     private suspend fun fetchTTML(
         artist: String,
         title: String,
@@ -58,13 +62,32 @@ object BetterLyrics {
             if (!album.isNullOrBlank()) {
                 parameter("al", album)
             }
+            header("Accept", "application/json")
         }
         if (response.status == HttpStatusCode.OK) {
-            response.body<TTMLResponse>().ttml
+            val body = response.bodyAsText()
+            if (body.length > MAX_LYRICS_RESPONSE_CHARS) {
+                null
+            } else {
+                Json { ignoreUnknownKeys = true }.decodeFromString<TTMLResponse>(body).ttml.takeIf { it.isNotBlank() }
+            }
         } else {
             null
         }
     }.getOrNull()
+
+    /** Como Metrolist: primero con álbum; si no hay resultado, otra vez sin álbum. */
+    private suspend fun fetchTTMLWithFallback(
+        artist: String,
+        title: String,
+        duration: Int,
+        album: String?,
+    ): String? {
+        val trimmedAlbum = album?.trim()?.takeIf { it.isNotEmpty() }
+        fetchTTML(artist, title, duration, trimmedAlbum)?.let { return it }
+        if (trimmedAlbum != null) return fetchTTML(artist, title, duration, null)
+        return null
+    }
 
     suspend fun getLyrics(
         title: String,
@@ -74,7 +97,7 @@ object BetterLyrics {
     ) = runCatching {
         // Use exact title and artist - no normalization to ensure correct sync
         // Normalizing can return wrong lyrics (e.g., radio edit vs original)
-        val ttml = fetchTTML(artist, title, duration, album)
+        val ttml = fetchTTMLWithFallback(artist, title, duration, album)
             ?: throw IllegalStateException("Lyrics unavailable")
         
         val parsedLines = TTMLParser.parseTTML(ttml)

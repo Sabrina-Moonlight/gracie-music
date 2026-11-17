@@ -398,17 +398,6 @@ fun StorageSettings(
             )
         )
         ExpressiveSettingGroup(
-            title = stringResource(R.string.lyrics_cache),
-            items = listOf(
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.clear_all),
-                    title = { Text(stringResource(R.string.clear_lyrics_cache)) },
-                    onClick = { clearLyricsCacheDialog = true }
-                )
-            )
-        )
-
-        ExpressiveSettingGroup(
             title = stringResource(R.string.image_cache),
             items = listOf(
                 Material3SettingsItem(
@@ -466,6 +455,16 @@ fun StorageSettings(
                         android.util.Log.d("StorageSettings", "Clear image cache button clicked!")
                         clearImageCacheDialog = true
                     }
+                )
+            )
+        )
+        ExpressiveSettingGroup(
+            title = stringResource(R.string.lyrics_cache),
+            items = listOf(
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.clear_all),
+                    title = { Text(stringResource(R.string.clear_lyrics_cache)) },
+                    onClick = { clearLyricsCacheDialog = true }
                 )
             )
         )
