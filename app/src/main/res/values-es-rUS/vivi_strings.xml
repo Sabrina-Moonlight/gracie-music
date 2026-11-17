@@ -227,7 +227,6 @@
     <string name="lyrics_romanize_chinese">Romanizar letras chinas</string>
     <string name="updater">Actualizador</string>
     <string name="check_for_updates">Buscar actualizaciones automáticamente</string>
-    <string name="update_notifications">Habilitar las notificaciones de actualización</string>
     <string name="update_available_title">Actualización disponible</string>
     <string name="update_channel_name">Actualizaciones de la app</string>
     <string name="update_channel_desc">Notificaciones de nuevas versiones</string>

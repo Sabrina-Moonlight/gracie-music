@@ -25,8 +25,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import com.music.vivi.ui.component.lyrics.words.FixedMotionDurationScale
-import kotlinx.atomicfu.locks.SynchronizedObject
-import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
@@ -55,7 +53,10 @@ private const val MIN_FLIP_DISTANCE_PX = 0.5f
 private const val SHIFT_RING = 32
 
 private val springCache = LinkedHashMap<Long, LyPlusSpring>(64)
-private val springCacheLock = SynchronizedObject()
+private val springCacheLock = Any()
+
+// Amortiguación por defecto del resorte del scroll (0.3 a 0.97).
+internal const val SPRING_ZETA_DEFAULT = 0.9f
 
 internal fun lyPlusSpringFor(
     durationMs: Long,

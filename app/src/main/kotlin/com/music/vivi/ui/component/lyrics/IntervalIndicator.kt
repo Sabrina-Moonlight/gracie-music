@@ -158,14 +158,16 @@ internal fun IntervalIndicator(
 @Composable
 private fun IntervalWavyIndicator(
     progress: () -> Float,
+    color: Color,
+    trackColor: Color,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
 ) {
     CircularWavyProgressIndicator(
         progress = progress,
         modifier = modifier,
-        color = MaterialTheme.colorScheme.primary,
-        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        color = color,
+        trackColor = trackColor,
         waveSpeed = if (animate) WavyProgressIndicatorDefaults.CircularWavelength else 0.dp,
     )
 }
