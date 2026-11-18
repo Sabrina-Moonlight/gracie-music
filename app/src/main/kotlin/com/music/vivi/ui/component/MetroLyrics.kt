@@ -95,6 +95,23 @@ private fun splitHyphenWords(words: List<WordTimestamp>): List<WordTimestamp> =
         }
     }
 
+/**
+ * La voz de fondo llega como "(palabra" ... "palabra)". El texto que se muestra ya no lleva los
+ * paréntesis, así que se quitan también de las palabras con tiempo; si no, la primera y la última
+ * no coinciden con el texto y nunca se iluminan.
+ */
+private fun stripBackgroundParens(words: List<WordTimestamp>): List<WordTimestamp> =
+    words.mapIndexedNotNull { i, w ->
+        var t = w.text
+        if (i == 0) t = t.removePrefix("(")
+        if (i == words.lastIndex) t = t.removeSuffix(")")
+        when {
+            t.isEmpty() -> null
+            t == w.text -> w
+            else -> w.copy(text = t)
+        }
+    }
+
 @Composable
 fun MetroLyricsLine(
     entry: LyricsEntry,
@@ -265,7 +282,9 @@ fun MetroLyricsLine(
                 }
             }
             // Palabras con guion ("lo-lo-love") se parten en silabas para el rebote de Expressive.
-            val effectiveWords = remember(baseWords) { splitHyphenWords(baseWords) }
+            val effectiveWords = remember(baseWords) {
+                splitHyphenWords(if (entry.isBackground) stripBackgroundParens(baseWords) else baseWords)
+            }
             val lineEndMs = remember(effectiveWords) {
                 effectiveWords.maxOfOrNull { (it.endTime * 1000).toLong() }
             }

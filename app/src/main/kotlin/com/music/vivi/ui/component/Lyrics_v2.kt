@@ -686,7 +686,11 @@ fun LyricsV2(
                     isAutoScrollEnabled = scrollLyrics
                     val pos = positionProvider()
                     val active = if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset, lyricsByRealTiming).maxOrNull() ?: 0
+                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset, lyricsByRealTiming).maxOrNull()
+                            // Hueco sin nada sonando: partir de la última línea ya cantada, no del inicio.
+                            ?: lines.indices.lastOrNull {
+                                !lines[it].isBackground && lines[it].time <= pos + lyricsOffset
+                            } ?: 0
                     } else 0
                     scrollTargetIndex = active
                     currentLineIndex = active
