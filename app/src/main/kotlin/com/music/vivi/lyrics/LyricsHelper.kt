@@ -118,7 +118,10 @@ constructor(
                             launch {
                                 try {
                                     // Si un proveedor tarda más de 3,5 s, se sigue sin él.
-                                    withTimeoutOrNull(PROVIDER_FETCH_TIMEOUT_MS) {
+                                    withTimeoutOrNull(
+                                        if (provider === YouLyPlusLyricsProvider) YOULYPLUS_FETCH_TIMEOUT_MS
+                                        else PROVIDER_FETCH_TIMEOUT_MS
+                                    ) {
                                         val result = provider.getLyrics(
                                             mediaMetadata.id,
                                             mediaMetadata.title,
@@ -324,6 +327,8 @@ constructor(
         private const val MAX_CACHE_SIZE = 3
         private const val PROVIDER_TIMEOUT_MS = 15_000L
         private const val PROVIDER_FETCH_TIMEOUT_MS = 3_500L
+        // YouLyPlus consulta varios servidores comunitarios y suele tardar más.
+        private const val YOULYPLUS_FETCH_TIMEOUT_MS = 4_800L
     }
 }
 

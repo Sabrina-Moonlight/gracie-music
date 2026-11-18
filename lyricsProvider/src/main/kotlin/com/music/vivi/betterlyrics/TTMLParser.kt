@@ -261,6 +261,10 @@ object TTMLParser {
         }
     }
 
+    /** Protege `%`, `:` y `|` del texto de una palabra: son los separadores del formato de salida. */
+    private fun escapeWord(text: String): String =
+        text.replace("%", "%25").replace(":", "%3A").replace("|", "%7C")
+
     fun toLRC(lines: List<ParsedLine>): String {
         return buildString {
             lines.forEach { line ->
@@ -276,7 +280,7 @@ object TTMLParser {
                 
                 if (line.words.isNotEmpty()) {
                     val wordsData = line.words.joinToString("|") { word ->
-                        "${word.text}:${word.startTime}:${word.endTime}:${if (word.hasTrailingSpace) 1 else 0}"
+                        "${escapeWord(word.text)}:${word.startTime}:${word.endTime}:${if (word.hasTrailingSpace) 1 else 0}"
                     }
                     appendLine("<$wordsData>")
                 }
@@ -292,7 +296,7 @@ object TTMLParser {
                     
                     if (bgLine.words.isNotEmpty()) {
                         val bgWordsData = bgLine.words.joinToString("|") { word ->
-                            "${word.text}:${word.startTime}:${word.endTime}:${if (word.hasTrailingSpace) 1 else 0}"
+                            "${escapeWord(word.text)}:${word.startTime}:${word.endTime}:${if (word.hasTrailingSpace) 1 else 0}"
                         }
                         appendLine("<$bgWordsData>")
                     }

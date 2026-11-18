@@ -12,6 +12,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -47,7 +48,7 @@ object YouLyPlus {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
                 connectTimeoutMillis = 3_000
-                requestTimeoutMillis = 8_000
+                requestTimeoutMillis = 5_000
             }
             install(ContentNegotiation) {
                 json(Json { isLenient = true; ignoreUnknownKeys = true })
@@ -119,8 +120,13 @@ object YouLyPlus {
     }
 
     /** Pide la letra a un servidor (con las fuentes preferidas; si no las acepta, sin ellas). */
-    private suspend fun ask(server: String, q: Query): String? =
-        (request(server, q, SOURCES) ?: request(server, q, null))?.toLrc()
+    private suspend fun ask(server: String, q: Query): String? = coroutineScope {
+        // Las dos peticiones (con y sin fuentes preferidas) salen a la vez: antes la segunda
+        // esperaba a que la primera fallara y el límite de tiempo la cortaba antes de empezar.
+        val preferred = async(Dispatchers.IO) { request(server, q, SOURCES) }
+        val plain = async(Dispatchers.IO) { request(server, q, null) }
+        (preferred.await() ?: plain.await())?.toLrc()
+    }
 
     private suspend fun request(server: String, q: Query, sources: String?): LyricsResponse? =
         runCatching {

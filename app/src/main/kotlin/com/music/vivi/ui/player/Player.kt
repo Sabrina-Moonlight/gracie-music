@@ -696,6 +696,7 @@ fun BottomSheetPlayer(
 
     // Fondo del V2 con letras: se reinicia la deriva del blur al cerrar las letras
     val lyricsOpen = usePlayerV2 && PlayerV2Backdrop.lyricsOpen
+    val queueOpenV2 = usePlayerV2 && PlayerV2Backdrop.queueOpen
     val lyricsProgress by animateFloatAsState(
         targetValue = if (lyricsOpen) 1f else 0f,
         animationSpec = tween(1200, easing = FastOutSlowInEasing),
@@ -1048,7 +1049,7 @@ fun BottomSheetPlayer(
 
                                     // Layer 2: Clear Artwork (Dissolves along smootherStep into backdrop)
                                     val clearArtworkAlpha by animateFloatAsState(
-                                        targetValue = if (showInlineLyrics || lyricsOpen) 0f else 1f,
+                                        targetValue = if (showInlineLyrics || lyricsOpen || queueOpenV2) 0f else 1f,
                                         animationSpec = tween(500),
                                         label = "clearArtworkAlpha"
                                     )

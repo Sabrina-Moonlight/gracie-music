@@ -622,10 +622,19 @@ fun LyricsV2(
                         if (activeIndicatorIndex != -1) {
                             activeIndicatorIndex
                         } else {
-                            mergedLyricsList.indexOfFirst {
+                            val exact = mergedLyricsList.indexOfFirst {
                                 (it is LyricsListItemV2.Line && it.index == deferredCurrentLineIndex) ||
                                 (it is LyricsListItemV2.Indicator && it.afterLineIndex == deferredCurrentLineIndex)
-                            }.coerceAtLeast(0)
+                            }
+                            when {
+                                exact != -1 -> exact
+                                deferredCurrentLineIndex < 0 -> 0
+                                // La línea actual no está en la lista (hueco sin círculo, línea
+                                // filtrada): se muestra la siguiente que va a cantar, no el inicio.
+                                else -> mergedLyricsList.indexOfFirst {
+                                    it is LyricsListItemV2.Line && it.index >= deferredCurrentLineIndex
+                                }.takeIf { it != -1 } ?: mergedLyricsList.lastIndex.coerceAtLeast(0)
+                            }
                         }
                     }
                 }
@@ -792,6 +801,17 @@ fun LyricsV2(
                             if (scrollMax != -1) {
                                 scrollTargetIndex = scrollMax
                                 deferredCurrentLineIndex = scrollMax
+                            } else {
+                                // Nada suena en ese punto (p. ej. al repetir la canción, antes de la
+                                // primera voz, o un salto a un hueco): se vuelve a la línea anterior
+                                // a ese instante, o al estado inicial si aún no empezó la letra.
+                                val before = lines.indices.lastOrNull {
+                                    !lines[it].isBackground && lines[it].time <= effectivePosition
+                                } ?: -1
+                                lastMainMaxSeen = before
+                                scrollTargetIndex = before
+                                deferredCurrentLineIndex = before
+                                previousScrollActiveIndices = emptySet()
                             }
                         }
                         lastPlaybackPosition = position
@@ -1213,7 +1233,9 @@ fun LyricsV2(
                                                 effectivePlaybackPosition = effectivePlaybackPosition,
                                                 lyricsOffset = lyricsOffset,
                                                 isSynced = true,
-                                                isActive = activeLineIndices.contains(index),
+                                                // La voz de fondo se ilumina cuando suena ella o su línea principal (como en Metrolist).
+                                                isActive = activeLineIndices.contains(index) ||
+                                                    (line.isBackground && activeLineIndices.contains(pairedMainLineIndex)),
                                                 distanceFromCurrent = kotlin.math.abs(index - deferredCurrentLineIndex),
                                                 lyricsTextPosition = LyricsPosition.LEFT,
                                                 textColor = adaptivePrimary,

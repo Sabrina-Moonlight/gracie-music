@@ -139,6 +139,7 @@ object PlayerRestore {
 /** Avisa a Player.kt de que las letras están abiertas (para el fondo). */
 internal object PlayerV2Backdrop {
     var lyricsOpen by mutableStateOf(false)
+    var queueOpen by mutableStateOf(false)
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -186,9 +187,13 @@ fun PlayerV2(
     }
     LaunchedEffect(playerState) {
         PlayerV2Backdrop.lyricsOpen = playerState == PlayerInternalState.LYRICS
+        PlayerV2Backdrop.queueOpen = playerState == PlayerInternalState.QUEUE
     }
     DisposableEffect(Unit) {
-        onDispose { PlayerV2Backdrop.lyricsOpen = false }
+        onDispose {
+            PlayerV2Backdrop.lyricsOpen = false
+            PlayerV2Backdrop.queueOpen = false
+        }
     }
 
     // ── 2. Controles que se ocultan (solo LYRICS) ──

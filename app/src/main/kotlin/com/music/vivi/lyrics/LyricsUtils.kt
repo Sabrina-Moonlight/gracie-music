@@ -577,7 +577,7 @@ object LyricsUtils {
                 val parts = wordData.split(":")
                 if (parts.size == 3 || parts.size == 4) {
                     WordTimestamp(
-                        text = parts[0],
+                        text = parts[0].replace("%3A", ":").replace("%7C", "|").replace("%25", "%"),
                         startTime = parts[1].toDouble(),
                         endTime = parts[2].toDouble(),
                         hasTrailingSpace = parts.getOrNull(3) != "0"

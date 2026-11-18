@@ -126,7 +126,13 @@ fun MetroLyricsLine(
     val isPlaying by (playerConnection?.isPlaying ?: remember { MutableStateFlow(true) }).collectAsState()
     val latestPosition by rememberUpdatedState(effectivePlaybackPosition)
     val clock = remember(playerConnection) { playerConnection?.let { LyricsPlayerClock(it.player) } }
-    val positionProvider: () -> Long = { clock?.now()?.plus(lyricsOffset) ?: latestPosition }
+    // Se lee latestPosition (estado de Compose) para que Apple/Simple recalculen la palabra activa
+    // en cada cuadro: sin eso, el reloj directo del reproductor no avisa de cambios y la sílaba
+    // activa nunca se actualizaba. El reloj sigue dando la posición suave.
+    val positionProvider: () -> Long = {
+        val stateBased = latestPosition
+        clock?.now()?.plus(lyricsOffset) ?: stateBased
+    }
     
     val romanizedTextState by entry.romanizedTextFlow.collectAsState()
     val isRomanizedAvailable = romanizedTextState != null
@@ -266,7 +272,7 @@ fun MetroLyricsLine(
 
             val baseLineColor = expressiveAccent.copy(alpha = if (entry.isBackground) focusedAlpha else animatedAlpha)
             
-            val lineColorValue = if (isActive && !entry.isBackground) expressiveAccent.copy(alpha = 1f) else baseLineColor
+            val lineColorValue = if (isActive) expressiveAccent.copy(alpha = 1f) else baseLineColor
             if (isSynced && animationStyle != LyricsAnimationStyle.NONE && effectiveWords.isNotEmpty() &&
                 (isActive || distanceFromCurrent <= 3) && mainText.isNotEmpty()
             ) {
@@ -289,7 +295,7 @@ fun MetroLyricsLine(
             } else {
                 Text(
                     text = mainText,
-                    style = lyricStyle.copy(color = if (isActive && !entry.isBackground) expressiveAccent else baseLineColor),
+                    style = lyricStyle.copy(color = if (isActive) expressiveAccent else baseLineColor),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
