@@ -77,6 +77,10 @@ import coil3.request.crossfade
 import com.music.vivi.LocalPlayerAwareWindowInsets
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
+import com.music.vivi.constants.SwipeToSongKey
+import com.music.vivi.extensions.toMediaItem
+import com.music.vivi.ui.component.SwipeToSongBox
+import com.music.vivi.utils.rememberPreference
 import com.music.vivi.ui.component.ActiveBoxAlpha
 import com.music.vivi.ui.component.PlayingIndicatorBox
 import com.music.vivi.localmedia.LocalTrack
@@ -313,13 +317,24 @@ fun LocalMusicScreen(
                 )
                 is ListEntry.Song -> {
                     LaunchedEffect(entry.track.uri) { viewModel.requestArtwork(entry.track) }
-                    LocalTrackRow(
-                        track = entry.track,
-                        artworkUrl = artwork[entry.track.uri],
-                        isActive = entry.track.uri == currentMetadata?.id,
-                        isPlaying = isPlaying,
-                        onClick = { play(visibleTracks, entry.index) },
-                    )
+                    val swipeEnabled by rememberPreference(SwipeToSongKey, defaultValue = false)
+                    val row: @Composable () -> Unit = {
+                        LocalTrackRow(
+                            track = entry.track,
+                            artworkUrl = artwork[entry.track.uri],
+                            isActive = entry.track.uri == currentMetadata?.id,
+                            isPlaying = isPlaying,
+                            onClick = { play(visibleTracks, entry.index) },
+                        )
+                    }
+                    if (swipeEnabled) {
+                        SwipeToSongBox(
+                            mediaItem = entry.track.toMediaMetadata(artwork[entry.track.uri]).toMediaItem(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { row() }
+                    } else {
+                        row()
+                    }
                 }
             }
         }
