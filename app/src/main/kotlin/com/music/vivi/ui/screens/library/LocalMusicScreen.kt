@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.asPaddingValues
@@ -55,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -211,9 +213,18 @@ fun LocalMusicScreen(
         }
     }
 
+    // La barra de arriba es fija: la lista empieza justo debajo y se recorta ahí al hacer scroll.
+    val insets = LocalPlayerAwareWindowInsets.current.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = insets.calculateTopPadding()),
+        contentPadding = PaddingValues(
+            start = insets.calculateStartPadding(layoutDirection),
+            end = insets.calculateEndPadding(layoutDirection),
+            bottom = insets.calculateBottomPadding(),
+        ),
     ) {
         item(key = "header") {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

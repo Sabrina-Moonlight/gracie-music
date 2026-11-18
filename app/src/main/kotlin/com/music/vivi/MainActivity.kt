@@ -931,7 +931,8 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                         },
-                                        scrollBehavior = topAppBarScrollBehavior,
+                                        // En Descargas la barra se queda fija (sin esconderse ni reaparecer al hacer scroll).
+                                        scrollBehavior = if (gradientRoute == Screens.Local.route) null else topAppBarScrollBehavior,
                                         colors = TopAppBarDefaults.topAppBarColors(
                                             containerColor = if (hasTopGradient) Color.Transparent else pageBg,
                                             scrolledContainerColor = if (hasTopGradient) Color.Transparent else pageBg,

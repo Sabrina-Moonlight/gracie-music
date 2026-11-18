@@ -200,6 +200,7 @@ import com.music.vivi.utils.reportException
 import com.music.vivi.widget.vivimusicWidgetManager
 import com.music.vivi.widget.MusicWidgetReceiver
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -799,25 +800,45 @@ class MusicService :
             mediaMetadata to count
         }.collectLatest(scope) { (mediaMetadata, count) ->
             if (mediaMetadata == null) return@collectLatest
-            // Esperar a que termine un posible crossfade y leer el player DESPUÉS:
-            // durante el crossfade el player activo cambia.
-            delay(4000)
-            val activePlayer = player
-            if (activePlayer.currentMediaItem == null) return@collectLatest
-            val timeline = activePlayer.currentTimeline
-            var index = activePlayer.currentMediaItemIndex
-            val seen = mutableSetOf(index)
-            val upcoming = mutableListOf<MediaMetadata>()
-            repeat(count.coerceIn(1, MaxLyricsPreloadCount)) {
-                index = timeline.getNextWindowIndex(
-                    index,
-                    activePlayer.repeatMode,
-                    activePlayer.shuffleModeEnabled,
-                )
-                if (index == C.INDEX_UNSET || !seen.add(index)) return@repeat
-                activePlayer.getMediaItemAt(index).metadata?.let { upcoming.add(it) }
+            // Protección: la precarga es opcional, así que un fallo aquí nunca debe
+            // afectar al reproductor (final de cola, cola cambiando, red, etc.).
+            try {
+                // Esperar a que termine un posible crossfade y leer el player DESPUÉS:
+                // durante el crossfade el player activo cambia.
+                delay(4000)
+                val activePlayer = player
+                if (activePlayer.currentMediaItem == null) return@collectLatest
+                val timeline = activePlayer.currentTimeline
+                if (timeline.isEmpty) return@collectLatest
+                val itemCount = activePlayer.mediaItemCount
+                var index = activePlayer.currentMediaItemIndex
+                val seen = mutableSetOf(index)
+                val upcoming = mutableListOf<MediaMetadata>()
+                for (i in 0 until count.coerceIn(1, MaxLyricsPreloadCount)) {
+                    index = timeline.getNextWindowIndex(
+                        index,
+                        activePlayer.repeatMode,
+                        activePlayer.shuffleModeEnabled,
+                    )
+                    // Fin de la cola (o posición no válida): no seguir buscando.
+                    if (index == C.INDEX_UNSET || index < 0 || index >= itemCount) break
+                    if (!seen.add(index)) break
+                    activePlayer.getMediaItemAt(index).metadata?.let { upcoming.add(it) }
+                }
+                upcoming.forEach {
+                    try {
+                        preloadLyricsFor(it)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).w(e, "preloadLyrics: falló una canción, se ignora")
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "preloadLyrics: error ignorado")
             }
-            upcoming.forEach { preloadLyricsFor(it) }
         }
 
         dataStore.data
