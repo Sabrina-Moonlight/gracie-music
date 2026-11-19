@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Widget estilo notificación de Android: portada difuminada de fondo, barra con ondas y botones blancos -->
+<!-- Widget estilo notificación de Android (compacto, 4x1): portada de fondo, título y botones en una fila, barra con onda debajo -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
     android:layout_width="match_parent"
@@ -7,7 +7,6 @@
     android:background="@drawable/widget_background"
     android:theme="@style/Theme.Widget.vivimusic">
 
-    <!-- Fondo: portada difuminada y oscurecida -->
     <ImageView
         android:id="@+id/widget_n_bg"
         android:layout_width="match_parent"
@@ -21,44 +20,111 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center_vertical"
-        android:paddingStart="18dp"
-        android:paddingEnd="18dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="10dp"
         android:paddingTop="6dp"
         android:paddingBottom="6dp">
 
-        <TextView
-            android:id="@+id/widget_n_song_title"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/not_playing"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFFFF"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/widget_n_artist_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/tap_to_play"
-            android:textSize="14sp"
-            android:textColor="#B3FFFFFF"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="6dp">
+
+                <TextView
+                    android:id="@+id/widget_n_song_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/not_playing"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFFFF"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/widget_n_artist_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/tap_to_play"
+                    android:textSize="12sp"
+                    android:textColor="#B3FFFFFF"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/widget_n_like"
+                android:layout_width="34dp"
+                android:layout_height="38dp"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_widget_n_heart_off"
+                android:contentDescription="@string/like" />
+            <ImageButton
+                android:id="@+id/widget_n_prev"
+                android:layout_width="34dp"
+                android:layout_height="38dp"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_widget_n_prev"
+                android:contentDescription="@string/previous" />
+            <FrameLayout
+                android:id="@+id/widget_n_play_container"
+                android:layout_width="38dp"
+                android:layout_height="38dp">
+
+                <ImageView
+                    android:id="@+id/widget_n_play_pause"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_widget_n_play"
+                    android:contentDescription="@string/play_pause" />
+            </FrameLayout>
+
+            <ImageButton
+                android:id="@+id/widget_n_next"
+                android:layout_width="34dp"
+                android:layout_height="38dp"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_widget_n_next"
+                android:contentDescription="@string/next" />
+            <ImageButton
+                android:id="@+id/widget_n_repeat"
+                android:layout_width="34dp"
+                android:layout_height="38dp"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_widget_n_repeat_off"
+                android:contentDescription="@string/repeat" />
+        </LinearLayout>
 
         <!-- Barra de progreso (se dibuja como imagen con onda) -->
         <ImageView
             android:id="@+id/widget_n_progress"
             android:layout_width="match_parent"
             android:layout_height="18dp"
-            android:layout_marginTop="6dp"
+            android:layout_marginEnd="4dp"
             android:scaleType="fitXY"
             android:importantForAccessibility="no" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
             android:orientation="horizontal">
 
             <TextView
@@ -77,73 +143,6 @@
                 android:text="00:00"
                 android:textSize="11sp"
                 android:textColor="#B3FFFFFF" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <ImageButton
-                android:id="@+id/widget_n_like"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:background="@android:color/transparent"
-                android:src="@drawable/ic_widget_n_heart_off"
-                android:contentDescription="@string/like" />
-
-            <ImageButton
-                android:id="@+id/widget_n_prev"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:background="@android:color/transparent"
-                android:src="@drawable/ic_widget_n_prev"
-                android:contentDescription="@string/previous" />
-
-            <FrameLayout
-                android:id="@+id/widget_n_play_container"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1">
-
-                <ImageView
-                    android:id="@+id/widget_n_play_pause"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_widget_n_play"
-                    android:contentDescription="@string/play_pause" />
-            </FrameLayout>
-
-            <ImageButton
-                android:id="@+id/widget_n_next"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:background="@android:color/transparent"
-                android:src="@drawable/ic_widget_n_next"
-                android:contentDescription="@string/next" />
-
-            <ImageButton
-                android:id="@+id/widget_n_repeat"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:background="@android:color/transparent"
-                android:src="@drawable/ic_widget_n_repeat_off"
-                android:contentDescription="@string/repeat" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

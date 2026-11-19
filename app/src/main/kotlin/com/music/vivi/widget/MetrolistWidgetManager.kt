@@ -17,6 +17,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Bundle
+import android.os.SystemClock
 import android.widget.RemoteViews
 import androidx.media3.common.Player
 import coil3.ImageLoader
@@ -28,7 +29,13 @@ import com.music.vivi.MainActivity
 import com.music.vivi.R
 import com.music.vivi.db.MusicDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,6 +57,13 @@ class vivimusicWidgetManager @Inject constructor(
     private var cachedCircularAlbumArt: Bitmap? = null
     private var cachedNotificationBg: Bitmap? = null
     private var cachedNotificationBgSource: Bitmap? = null
+
+    // Animación de la onda de la barra (widget «Estilo notificación»)
+    private val waveScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var waveJob: Job? = null
+    @Volatile private var waveDuration: Long = 0L
+    @Volatile private var wavePosition: Long = 0L
+    @Volatile private var waveStamp: Long = 0L
 
     suspend fun updateWidgets(
         title: String,
@@ -110,6 +124,12 @@ class vivimusicWidgetManager @Inject constructor(
             notificationWidgetIds.forEach { widgetId ->
                 appWidgetManager.updateAppWidget(widgetId, notificationViews)
             }
+            waveDuration = duration
+            wavePosition = currentPosition
+            waveStamp = SystemClock.elapsedRealtime()
+            if (isPlaying && duration > 0) startWave() else stopWave()
+        } else {
+            stopWave()
         }
 
         // Update turntable widgets
@@ -384,7 +404,7 @@ class vivimusicWidgetManager @Inject constructor(
         val progress = if (duration > 0) {
             (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
         } else 0f
-        views.setImageViewBitmap(R.id.widget_n_progress, createWavyProgressBitmap(progress))
+        views.setImageViewBitmap(R.id.widget_n_progress, createWavyProgressBitmap(progress, if (isPlaying) currentWavePhase() else 0f))
         views.setTextViewText(R.id.widget_n_time_current, formatWidgetTime(currentPosition))
         views.setTextViewText(R.id.widget_n_time_total, formatWidgetTime(duration))
 
@@ -425,18 +445,25 @@ class vivimusicWidgetManager @Inject constructor(
         val base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(base)
         if (albumArt != null) {
-            // Difuminado barato: bajar a muy poca resolución y volver a subir con filtro
-            val tiny = Bitmap.createScaledBitmap(albumArt, 12, 12, true)
-            val smooth = Bitmap.createScaledBitmap(tiny, 48, 48, true)
-            // Recorte central con la proporción del widget (2:1)
-            val srcH = 24
-            val src = android.graphics.Rect(0, (48 - srcH) / 2, 48, (48 - srcH) / 2 + srcH)
+            // Franja central de la portada (proporción 2:1), con desenfoque suave
+            val bandH = (albumArt.width / 2).coerceAtMost(albumArt.height).coerceAtLeast(1)
+            val top = ((albumArt.height - bandH) / 2).coerceAtLeast(0)
+            val band = Bitmap.createBitmap(albumArt, 0, top, albumArt.width, bandH)
+            val soft = Bitmap.createScaledBitmap(band, 100, 50, true)
             val paint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
-            canvas.drawBitmap(smooth, src, android.graphics.Rect(0, 0, w, h), paint)
-            // Capa oscura cálida para que el texto blanco se lea bien
-            canvas.drawColor(0x99261412.toInt())
-            tiny.recycle()
-            smooth.recycle()
+            canvas.drawBitmap(soft, null, android.graphics.Rect(0, 0, w, h), paint)
+            // Capa rojiza oscura: más clara arriba, más oscura abajo (como la notificación)
+            val shade = Paint().apply {
+                shader = android.graphics.LinearGradient(
+                    0f, 0f, 0f, h.toFloat(),
+                    intArrayOf(0x55401818.toInt(), 0x99301010.toInt(), 0xDD200808.toInt()),
+                    floatArrayOf(0f, 0.55f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shade)
+            if (band !== albumArt) band.recycle()
+            soft.recycle()
         } else {
             canvas.drawColor(0xFF3B2B26.toInt())
         }
@@ -455,18 +482,18 @@ class vivimusicWidgetManager @Inject constructor(
         return out
     }
 
-    /** Barra de progreso: parte recorrida con onda, resto liso y un círculo al final. */
-    private fun createWavyProgressBitmap(progress: Float): Bitmap {
+    /** Barra de progreso: barra gruesa redondeada con onda suave encima de la parte recorrida y círculo al final. */
+    private fun createWavyProgressBitmap(progress: Float, phase: Float = 0f): Bitmap {
         val w = 750
-        val h = 50
+        val h = 44
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        val thumbR = 20f
-        val cy = h / 2f
+        val thumbR = 16f
+        val cy = 27f
         val left = thumbR
         val right = w - thumbR
         val x = left + (right - left) * progress
-        val stroke = 11f
+        val stroke = 12f
 
         val track = Paint().apply {
             isAntiAlias = true
@@ -475,33 +502,76 @@ class vivimusicWidgetManager @Inject constructor(
             strokeWidth = stroke
             color = 0x40FFFFFF
         }
-        canvas.drawLine(x, cy, right, cy, track)
+        canvas.drawLine(left, cy, right, cy, track)
 
         if (x > left) {
+            // Onda suave y translúcida sobre el borde de arriba de la barra
+            val wave = android.graphics.Path()
+            wave.moveTo(left, cy)
+            var px = left
+            while (px < x) {
+                px = minOf(px + 4f, x)
+                val damp = minOf(1f, (px - left) / 60f)
+                val bump = (1f + kotlin.math.sin((px - left) / 95f * 2f * Math.PI.toFloat() - 1.5f - phase)) / 2f
+                wave.lineTo(px, cy - stroke / 2f - 10f * damp * bump)
+            }
+            wave.lineTo(x, cy)
+            wave.close()
+            val wavePaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL; color = 0x66F8B4AE }
+            canvas.drawPath(wave, wavePaint)
+
             val fill = Paint().apply {
                 isAntiAlias = true
                 style = Paint.Style.STROKE
                 strokeCap = Paint.Cap.ROUND
-                strokeJoin = Paint.Join.ROUND
                 strokeWidth = stroke
                 color = 0xFFF8B4AE.toInt()
             }
-            val amp = 5f
-            val period = 90f
-            val path = android.graphics.Path()
-            var px = left
-            path.moveTo(px, cy)
-            while (px < x) {
-                px = minOf(px + 4f, x)
-                val damp = minOf(1f, (px - left) / 40f) // arranca recto en el inicio
-                path.lineTo(px, cy + amp * damp * kotlin.math.sin((px - left) / period * 2f * Math.PI.toFloat()))
-            }
-            canvas.drawPath(path, fill)
+            canvas.drawLine(left, cy, x, cy, fill)
         }
 
         val thumb = Paint().apply { isAntiAlias = true; color = 0xFFFFD9D5.toInt() }
         canvas.drawCircle(x, cy, thumbR, thumb)
         return bmp
+    }
+
+    /** Fase de la onda según el reloj: una vuelta completa cada 1,6 s, siempre en el mismo sentido. */
+    private fun currentWavePhase(): Float {
+        val t = SystemClock.uptimeMillis() % 1600L
+        return t / 1600f * 2f * Math.PI.toFloat()
+    }
+
+    /** Redibuja solo la barra unas 16 veces por segundo mientras suena la música, para que la onda fluya. */
+    private fun startWave() {
+        if (waveJob?.isActive == true) return
+        waveJob = waveScope.launch {
+            val manager = AppWidgetManager.getInstance(context)
+            val component = ComponentName(context, NotificationWidgetReceiver::class.java)
+            while (isActive) {
+                try {
+                    val ids = manager.getAppWidgetIds(component)
+                    if (ids.isEmpty()) break
+                    val dur = waveDuration
+                    val pos = (wavePosition + (SystemClock.elapsedRealtime() - waveStamp))
+                        .coerceIn(0L, dur.coerceAtLeast(0L))
+                    val progress = if (dur > 0) pos.toFloat() / dur.toFloat() else 0f
+                    val partial = RemoteViews(context.packageName, R.layout.widget_notification)
+                    partial.setImageViewBitmap(
+                        R.id.widget_n_progress,
+                        createWavyProgressBitmap(progress, currentWavePhase())
+                    )
+                    manager.partiallyUpdateAppWidget(ids, partial)
+                } catch (e: Exception) {
+                    // Widget quitado o error puntual: se intenta de nuevo en el siguiente ciclo
+                }
+                delay(60)
+            }
+        }
+    }
+
+    private fun stopWave() {
+        waveJob?.cancel()
+        waveJob = null
     }
 
     private fun formatWidgetTime(ms: Long): String {
