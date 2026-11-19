@@ -48,6 +48,8 @@ class vivimusicWidgetManager @Inject constructor(
     private var cachedArtworkUri: String? = null
     private var cachedAlbumArt: Bitmap? = null
     private var cachedCircularAlbumArt: Bitmap? = null
+    private var cachedNotificationBg: Bitmap? = null
+    private var cachedNotificationBgSource: Bitmap? = null
 
     suspend fun updateWidgets(
         title: String,
@@ -103,7 +105,7 @@ class vivimusicWidgetManager @Inject constructor(
         )
         if (notificationWidgetIds.isNotEmpty()) {
             val notificationViews = createNotificationRemoteViews(
-                title, artist, albumArt, isPlaying, isLiked, repeatMode
+                title, artist, albumArt, isPlaying, isLiked, repeatMode, duration, currentPosition
             )
             notificationWidgetIds.forEach { widgetId ->
                 appWidgetManager.updateAppWidget(widgetId, notificationViews)
@@ -368,16 +370,23 @@ class vivimusicWidgetManager @Inject constructor(
         albumArt: Bitmap?,
         isPlaying: Boolean,
         isLiked: Boolean,
-        repeatMode: Int
+        repeatMode: Int,
+        duration: Long,
+        currentPosition: Long
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_notification)
 
         views.setTextViewText(R.id.widget_n_song_title, title)
         views.setTextViewText(R.id.widget_n_artist_name, artist)
-        views.setImageViewBitmap(
-            R.id.widget_n_album_art,
-            if (albumArt != null) getRoundedCornerBitmap(albumArt, 48f) else getRoundedDefaultIcon(48f)
-        )
+        views.setImageViewBitmap(R.id.widget_n_bg, getNotificationBackground(albumArt))
+
+        // Barra con onda + tiempos
+        val progress = if (duration > 0) {
+            (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+        } else 0f
+        views.setImageViewBitmap(R.id.widget_n_progress, createWavyProgressBitmap(progress))
+        views.setTextViewText(R.id.widget_n_time_current, formatWidgetTime(currentPosition))
+        views.setTextViewText(R.id.widget_n_time_total, formatWidgetTime(duration))
 
         views.setImageViewResource(
             R.id.widget_n_play_pause,
@@ -393,10 +402,10 @@ class vivimusicWidgetManager @Inject constructor(
         )
         views.setImageViewResource(
             R.id.widget_n_like,
-            if (isLiked) R.drawable.ic_widget_heart_nav else R.drawable.ic_widget_heart_outline_nav
+            if (isLiked) R.drawable.ic_widget_n_heart_on else R.drawable.ic_widget_n_heart_off
         )
 
-        views.setOnClickPendingIntent(R.id.widget_n_album_art, getOpenAppIntent())
+        views.setOnClickPendingIntent(R.id.widget_n_open_area, getOpenAppIntent())
         views.setOnClickPendingIntent(R.id.widget_n_play_container, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_PLAY_PAUSE, 6))
         views.setOnClickPendingIntent(R.id.widget_n_prev, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_PREVIOUS, 7))
         views.setOnClickPendingIntent(R.id.widget_n_next, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_NEXT, 8))
@@ -404,6 +413,100 @@ class vivimusicWidgetManager @Inject constructor(
         views.setOnClickPendingIntent(R.id.widget_n_like, getNotificationIntent(NotificationWidgetReceiver.ACTION_N_LIKE, 10))
 
         return views
+    }
+
+    /** Portada difuminada y oscurecida con esquinas redondeadas (se guarda para no repetir el trabajo). */
+    private fun getNotificationBackground(albumArt: Bitmap?): Bitmap {
+        val cached = cachedNotificationBg
+        if (cached != null && cachedNotificationBgSource === albumArt) return cached
+
+        val w = 600
+        val h = 300
+        val base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(base)
+        if (albumArt != null) {
+            // Difuminado barato: bajar a muy poca resolución y volver a subir con filtro
+            val tiny = Bitmap.createScaledBitmap(albumArt, 12, 12, true)
+            val smooth = Bitmap.createScaledBitmap(tiny, 48, 48, true)
+            // Recorte central con la proporción del widget (2:1)
+            val srcH = 24
+            val src = android.graphics.Rect(0, (48 - srcH) / 2, 48, (48 - srcH) / 2 + srcH)
+            val paint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
+            canvas.drawBitmap(smooth, src, android.graphics.Rect(0, 0, w, h), paint)
+            // Capa oscura cálida para que el texto blanco se lea bien
+            canvas.drawColor(0x99261412.toInt())
+            tiny.recycle()
+            smooth.recycle()
+        } else {
+            canvas.drawColor(0xFF3B2B26.toInt())
+        }
+
+        // Esquinas redondeadas
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val paint = Paint().apply {
+            isAntiAlias = true
+            shader = BitmapShader(base, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        }
+        Canvas(out).drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 56f, 56f, paint)
+        base.recycle()
+
+        cachedNotificationBg = out
+        cachedNotificationBgSource = albumArt
+        return out
+    }
+
+    /** Barra de progreso: parte recorrida con onda, resto liso y un círculo al final. */
+    private fun createWavyProgressBitmap(progress: Float): Bitmap {
+        val w = 750
+        val h = 50
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val thumbR = 20f
+        val cy = h / 2f
+        val left = thumbR
+        val right = w - thumbR
+        val x = left + (right - left) * progress
+        val stroke = 11f
+
+        val track = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeWidth = stroke
+            color = 0x40FFFFFF
+        }
+        canvas.drawLine(x, cy, right, cy, track)
+
+        if (x > left) {
+            val fill = Paint().apply {
+                isAntiAlias = true
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                strokeWidth = stroke
+                color = 0xFFF8B4AE.toInt()
+            }
+            val amp = 5f
+            val period = 90f
+            val path = android.graphics.Path()
+            var px = left
+            path.moveTo(px, cy)
+            while (px < x) {
+                px = minOf(px + 4f, x)
+                val damp = minOf(1f, (px - left) / 40f) // arranca recto en el inicio
+                path.lineTo(px, cy + amp * damp * kotlin.math.sin((px - left) / period * 2f * Math.PI.toFloat()))
+            }
+            canvas.drawPath(path, fill)
+        }
+
+        val thumb = Paint().apply { isAntiAlias = true; color = 0xFFFFD9D5.toInt() }
+        canvas.drawCircle(x, cy, thumbR, thumb)
+        return bmp
+    }
+
+    private fun formatWidgetTime(ms: Long): String {
+        val total = (ms.coerceAtLeast(0L) / 1000L).toInt()
+        return String.format(java.util.Locale.US, "%02d:%02d", total / 60, total % 60)
     }
 
     private fun getNotificationIntent(action: String, requestCode: Int): PendingIntent {
