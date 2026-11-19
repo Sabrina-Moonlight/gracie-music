@@ -85,7 +85,7 @@ class vivimusicWidgetManager @Inject constructor(
             albumArt = cachedAlbumArt
             circularAlbumArt = cachedCircularAlbumArt
         } else {
-            albumArt = artworkUri?.let { loadAlbumArt(it, 300) }
+            albumArt = artworkUri?.let { loadAlbumArt(it, 600) }
             circularAlbumArt = albumArt?.let { getCircularBitmap(it) }
             // Update cache
             cachedArtworkUri = artworkUri
@@ -445,9 +445,7 @@ class vivimusicWidgetManager @Inject constructor(
         val base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(base)
         if (albumArt != null) {
-            // Se recorta la portada con la proporción del widget y se desenfoca en pequeño
-            val sw = 240
-            val sh = 100
+            // Se recorta la portada con la proporción del widget y se dibuja nítida (como la notificación)
             val ratio = w.toFloat() / h.toFloat()
             var cropW = albumArt.width
             var cropH = (cropW / ratio).toInt()
@@ -455,15 +453,13 @@ class vivimusicWidgetManager @Inject constructor(
             cropW = cropW.coerceAtLeast(1); cropH = cropH.coerceAtLeast(1)
             val cx = ((albumArt.width - cropW) / 2).coerceAtLeast(0)
             val cy = ((albumArt.height - cropH) / 2).coerceAtLeast(0)
-            val crop = Bitmap.createBitmap(albumArt, cx, cy, cropW, cropH)
-            val small = Bitmap.createScaledBitmap(crop, sw, sh, true)
-            val px = IntArray(sw * sh)
-            small.getPixels(px, 0, sw, 0, 0, sw, sh)
-            var cur = px
-            repeat(3) { cur = boxBlur(cur, sw, sh, 7) }
-            small.setPixels(cur, 0, sw, 0, 0, sw, sh)
             val paint = Paint().apply { isFilterBitmap = true; isAntiAlias = true; isDither = true }
-            canvas.drawBitmap(small, null, android.graphics.Rect(0, 0, w, h), paint)
+            canvas.drawBitmap(
+                albumArt,
+                android.graphics.Rect(cx, cy, cx + cropW, cy + cropH),
+                android.graphics.Rect(0, 0, w, h),
+                paint
+            )
             // Capa rojiza oscura: más clara arriba, más oscura abajo (como la notificación)
             val shade = Paint().apply {
                 isDither = true
@@ -475,8 +471,6 @@ class vivimusicWidgetManager @Inject constructor(
                 )
             }
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shade)
-            if (crop !== albumArt) crop.recycle()
-            small.recycle()
         } else {
             canvas.drawColor(0xFF3B2B26.toInt())
         }

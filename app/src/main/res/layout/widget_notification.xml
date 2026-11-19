@@ -45,7 +45,8 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <View
+        <!-- Separador: en widgets no se permite <View>, por eso es un FrameLayout vacío -->
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
