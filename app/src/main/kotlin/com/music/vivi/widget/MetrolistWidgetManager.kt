@@ -435,25 +435,38 @@ class vivimusicWidgetManager @Inject constructor(
         return views
     }
 
-    /** Portada difuminada y oscurecida con esquinas redondeadas (se guarda para no repetir el trabajo). */
+    /** Portada bien difuminada (desenfoque real, sin pixeles) y oscurecida, con esquinas redondeadas. Se guarda para no repetir el trabajo. */
     private fun getNotificationBackground(albumArt: Bitmap?): Bitmap {
         val cached = cachedNotificationBg
         if (cached != null && cachedNotificationBgSource === albumArt) return cached
 
-        val w = 600
-        val h = 300
+        val w = 960
+        val h = 400
         val base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(base)
         if (albumArt != null) {
-            // Franja central de la portada (proporción 2:1), con desenfoque suave
-            val bandH = (albumArt.width / 2).coerceAtMost(albumArt.height).coerceAtLeast(1)
-            val top = ((albumArt.height - bandH) / 2).coerceAtLeast(0)
-            val band = Bitmap.createBitmap(albumArt, 0, top, albumArt.width, bandH)
-            val soft = Bitmap.createScaledBitmap(band, 100, 50, true)
-            val paint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
-            canvas.drawBitmap(soft, null, android.graphics.Rect(0, 0, w, h), paint)
+            // Se recorta la portada con la proporción del widget y se desenfoca en pequeño
+            val sw = 240
+            val sh = 100
+            val ratio = w.toFloat() / h.toFloat()
+            var cropW = albumArt.width
+            var cropH = (cropW / ratio).toInt()
+            if (cropH > albumArt.height) { cropH = albumArt.height; cropW = (cropH * ratio).toInt() }
+            cropW = cropW.coerceAtLeast(1); cropH = cropH.coerceAtLeast(1)
+            val cx = ((albumArt.width - cropW) / 2).coerceAtLeast(0)
+            val cy = ((albumArt.height - cropH) / 2).coerceAtLeast(0)
+            val crop = Bitmap.createBitmap(albumArt, cx, cy, cropW, cropH)
+            val small = Bitmap.createScaledBitmap(crop, sw, sh, true)
+            val px = IntArray(sw * sh)
+            small.getPixels(px, 0, sw, 0, 0, sw, sh)
+            var cur = px
+            repeat(3) { cur = boxBlur(cur, sw, sh, 7) }
+            small.setPixels(cur, 0, sw, 0, 0, sw, sh)
+            val paint = Paint().apply { isFilterBitmap = true; isAntiAlias = true; isDither = true }
+            canvas.drawBitmap(small, null, android.graphics.Rect(0, 0, w, h), paint)
             // Capa rojiza oscura: más clara arriba, más oscura abajo (como la notificación)
             val shade = Paint().apply {
+                isDither = true
                 shader = android.graphics.LinearGradient(
                     0f, 0f, 0f, h.toFloat(),
                     intArrayOf(0x55401818.toInt(), 0x99301010.toInt(), 0xDD200808.toInt()),
@@ -462,8 +475,8 @@ class vivimusicWidgetManager @Inject constructor(
                 )
             }
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shade)
-            if (band !== albumArt) band.recycle()
-            soft.recycle()
+            if (crop !== albumArt) crop.recycle()
+            small.recycle()
         } else {
             canvas.drawColor(0xFF3B2B26.toInt())
         }
@@ -472,9 +485,10 @@ class vivimusicWidgetManager @Inject constructor(
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val paint = Paint().apply {
             isAntiAlias = true
+            isFilterBitmap = true
             shader = BitmapShader(base, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         }
-        Canvas(out).drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 56f, 56f, paint)
+        Canvas(out).drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 64f, 64f, paint)
         base.recycle()
 
         cachedNotificationBg = out
@@ -482,14 +496,43 @@ class vivimusicWidgetManager @Inject constructor(
         return out
     }
 
+    /** Desenfoque de caja (horizontal y vertical) sobre píxeles ARGB opacos. */
+    private fun boxBlur(src: IntArray, w: Int, h: Int, r: Int): IntArray {
+        val tmp = IntArray(src.size)
+        val out = IntArray(src.size)
+        for (y in 0 until h) blurLine(src, tmp, y * w, 1, w, r)
+        for (x in 0 until w) blurLine(tmp, out, x, w, h, r)
+        return out
+    }
+
+    private fun blurLine(inp: IntArray, out: IntArray, start: Int, step: Int, n: Int, r: Int) {
+        val div = 2 * r + 1
+        var sr = 0
+        var sg = 0
+        var sb = 0
+        for (i in -r..r) {
+            val p = inp[start + i.coerceIn(0, n - 1) * step]
+            sr += (p shr 16) and 255; sg += (p shr 8) and 255; sb += p and 255
+        }
+        for (i in 0 until n) {
+            out[start + i * step] = 0xFF000000.toInt() or ((sr / div) shl 16) or ((sg / div) shl 8) or (sb / div)
+            val add = inp[start + (i + r + 1).coerceAtMost(n - 1) * step]
+            val rem = inp[start + (i - r).coerceAtLeast(0) * step]
+            sr += ((add shr 16) and 255) - ((rem shr 16) and 255)
+            sg += ((add shr 8) and 255) - ((rem shr 8) and 255)
+            sb += (add and 255) - (rem and 255)
+        }
+    }
+
     /** Barra de progreso: barra gruesa redondeada con onda suave encima de la parte recorrida y círculo al final. */
     private fun createWavyProgressBitmap(progress: Float, phase: Float = 0f): Bitmap {
-        val w = 750
-        val h = 44
+        // Proporción 14:1; el ImageView usa fitCenter, así que el círculo no se estira
+        val w = 560
+        val h = 40
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         val thumbR = 16f
-        val cy = 27f
+        val cy = 24f
         val left = thumbR
         val right = w - thumbR
         val x = left + (right - left) * progress
@@ -505,20 +548,29 @@ class vivimusicWidgetManager @Inject constructor(
         canvas.drawLine(left, cy, right, cy, track)
 
         if (x > left) {
-            // Onda suave y translúcida sobre el borde de arriba de la barra
-            val wave = android.graphics.Path()
-            wave.moveTo(left, cy)
-            var px = left
-            while (px < x) {
-                px = minOf(px + 4f, x)
-                val damp = minOf(1f, (px - left) / 60f)
-                val bump = (1f + kotlin.math.sin((px - left) / 95f * 2f * Math.PI.toFloat() - 1.5f - phase)) / 2f
-                wave.lineTo(px, cy - stroke / 2f - 10f * damp * bump)
+            // 3 olas translúcidas, cada una con su largo, altura, velocidad y sentido (así no van sincronizadas)
+            // Datos: largo de onda, altura, vueltas por ciclo (negativo = al revés), desfase, color
+            val waves = arrayOf(
+                floatArrayOf(95f, 10f, 1f, 0f),
+                floatArrayOf(62f, 7f, -2f, 2.1f),
+                floatArrayOf(140f, 8f, 3f, 4.2f)
+            )
+            val waveColors = intArrayOf(0x66F8B4AE, 0x55FFD9D5, 0x44F8B4AE)
+            for ((i, cfg) in waves.withIndex()) {
+                val wave = android.graphics.Path()
+                wave.moveTo(left, cy)
+                var px = left
+                while (px < x) {
+                    px = minOf(px + 4f, x)
+                    val damp = minOf(1f, (px - left) / 60f)
+                    val bump = (1f + kotlin.math.sin((px - left) / cfg[0] * 2f * Math.PI.toFloat() - cfg[3] - phase * cfg[2])) / 2f
+                    wave.lineTo(px, cy - stroke / 2f - cfg[1] * damp * bump)
+                }
+                wave.lineTo(x, cy)
+                wave.close()
+                val wavePaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL; color = waveColors[i] }
+                canvas.drawPath(wave, wavePaint)
             }
-            wave.lineTo(x, cy)
-            wave.close()
-            val wavePaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL; color = 0x66F8B4AE }
-            canvas.drawPath(wave, wavePaint)
 
             val fill = Paint().apply {
                 isAntiAlias = true
