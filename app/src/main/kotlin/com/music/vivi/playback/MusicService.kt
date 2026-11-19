@@ -452,7 +452,7 @@ class MusicService :
     private var retryJob: Job? = null
     private var retryCount = 0
     private var silenceSkipJob: Job? = null
-    /** Background job that pre-resolves the next track's stream URL into [songUrlCache]. */
+    /** Background job that pre-resolves the next/previous tracks' stream URLs into [songUrlCache]. */
     private var prefetchJob: Job? = null
 
     private data class CachedStream(
@@ -492,7 +492,7 @@ class MusicService :
     }
 
     // URL cache for stream URLs - class-level so it can be invalidated on errors
-    private val songUrlCache = HashMap<String, CachedStream>()
+    private val songUrlCache = java.util.concurrent.ConcurrentHashMap<String, CachedStream>()
 
     // Flag to bypass cache when quality changes - forces fresh stream fetch
     private val bypassCacheForQualityChange = mutableSetOf<String>()
@@ -2558,63 +2558,80 @@ class MusicService :
         // Cancel any in-flight prefetch from the previous song
         prefetchJob?.cancel()
 
-        val nextIndex = player.nextMediaItemIndex
-        if (nextIndex == C.INDEX_UNSET) return  // no next track (end of queue / repeat-one)
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return
 
-        val nextMediaId = player.getMediaItemAt(nextIndex).mediaId
-
-        // Nothing to do — URL is already cached and hasn't expired
-        val cachedEntry = songUrlCache[nextMediaId]
-        if (cachedEntry != null && cachedEntry.expiresAtMs > System.currentTimeMillis()) return
+        // Siguiente, anterior y la que sigue a la siguiente: así saltar hacia atrás
+        // o adelante dos veces seguidas tampoco espera a resolver el enlace.
+        val next = player.nextMediaItemIndex
+        val previous = player.previousMediaItemIndex
+        val afterNext =
+            if (next != C.INDEX_UNSET) {
+                timeline.getNextWindowIndex(next, player.repeatMode, player.shuffleModeEnabled)
+            } else {
+                C.INDEX_UNSET
+            }
+        val now = System.currentTimeMillis()
+        val ids = listOf(next, previous, afterNext)
+            .filter { it != C.INDEX_UNSET && it != player.currentMediaItemIndex }
+            .distinct()
+            .map { player.getMediaItemAt(it).mediaId }
+            .filter { id -> !isLocalMediaId(id) && (songUrlCache[id]?.expiresAtMs ?: 0L) <= now }
+        if (ids.isEmpty()) return
 
         prefetchJob = scope.launch(Dispatchers.IO + SilentHandler) {
-            Timber.tag(TAG).d("[Prefetch] Resolving stream URL for next track: $nextMediaId")
-            val result = runCatching {
-                YTPlayerUtils.playerResponseForPlayback(
-                    videoId = nextMediaId,
-                    audioQuality = audioQuality,
-                    connectivityManager = connectivityManager,
-                    context = this@MusicService,
-                )
-            }
-            result.getOrNull()?.getOrNull()?.let { playbackData ->
-                // Only write to cache if the job wasn't cancelled while we were resolving
-                if (isActive) {
-                    songUrlCache[nextMediaId] =
-                        CachedStream(
-                            url = playbackData.streamUrl,
-                            expiresAtMs = System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L),
-                            requestHeaders = playbackData.streamHeaders,
-                            clientName = playbackData.streamClient,
-                            requireBoundedRange = playbackData.requireBoundedRange,
-                            rangeChunkSizeBytes = playbackData.rangeChunkSizeBytes,
-                            useRangeChunks = playbackData.useRangeChunks,
-                        )
-                    Timber.tag(TAG).d("[Prefetch] Cached stream URL for $nextMediaId (expires in ${playbackData.streamExpiresInSeconds}s)")
+            ids.forEach { id -> launch { prefetchStream(id) } }
+        }
+    }
 
-                    playbackData.format?.let { format ->
-                        val loudnessDb = playbackData.audioConfig?.loudnessDb
-                        val perceptualLoudnessDb = playbackData.audioConfig?.perceptualLoudnessDb
-                        database.query {
-                            upsert(
-                                FormatEntity(
-                                    id = nextMediaId,
-                                    itag = format.itag,
-                                    mimeType = format.mimeType.split(";")[0],
-                                    codecs = format.mimeType.split("codecs=").getOrNull(1)?.removeSurrounding("\"") ?: "mp3",
-                                    bitrate = format.bitrate,
-                                    sampleRate = format.audioSampleRate,
-                                    contentLength = format.contentLength ?: 0L,
-                                    loudnessDb = loudnessDb,
-                                    perceptualLoudnessDb = perceptualLoudnessDb,
-                                    playbackUrl = playbackData.playbackTracking?.videostatsPlaybackUrl?.baseUrl
-                                )
+    /** Resuelve y guarda en [songUrlCache] el enlace de una canción (sin descargar audio). */
+    private suspend fun CoroutineScope.prefetchStream(mediaId: String) {
+        Timber.tag(TAG).d("[Prefetch] Resolving stream URL for next track: $mediaId")
+        val result = runCatching {
+            YTPlayerUtils.playerResponseForPlayback(
+                videoId = mediaId,
+                audioQuality = audioQuality,
+                connectivityManager = connectivityManager,
+                context = this@MusicService,
+            )
+        }
+        result.getOrNull()?.getOrNull()?.let { playbackData ->
+            // Only write to cache if the job wasn't cancelled while we were resolving
+            if (isActive) {
+                songUrlCache[mediaId] =
+                    CachedStream(
+                        url = playbackData.streamUrl,
+                        expiresAtMs = System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L),
+                        requestHeaders = playbackData.streamHeaders,
+                        clientName = playbackData.streamClient,
+                        requireBoundedRange = playbackData.requireBoundedRange,
+                        rangeChunkSizeBytes = playbackData.rangeChunkSizeBytes,
+                        useRangeChunks = playbackData.useRangeChunks,
+                    )
+                Timber.tag(TAG).d("[Prefetch] Cached stream URL for $mediaId (expires in ${playbackData.streamExpiresInSeconds}s)")
+
+                playbackData.format?.let { format ->
+                    val loudnessDb = playbackData.audioConfig?.loudnessDb
+                    val perceptualLoudnessDb = playbackData.audioConfig?.perceptualLoudnessDb
+                    database.query {
+                        upsert(
+                            FormatEntity(
+                                id = mediaId,
+                                itag = format.itag,
+                                mimeType = format.mimeType.split(";")[0],
+                                codecs = format.mimeType.split("codecs=").getOrNull(1)?.removeSurrounding("\"") ?: "mp3",
+                                bitrate = format.bitrate,
+                                sampleRate = format.audioSampleRate,
+                                contentLength = format.contentLength ?: 0L,
+                                loudnessDb = loudnessDb,
+                                perceptualLoudnessDb = perceptualLoudnessDb,
+                                playbackUrl = playbackData.playbackTracking?.videostatsPlaybackUrl?.baseUrl
                             )
-                        }
+                        )
                     }
                 }
-            } ?: Timber.tag(TAG).d("[Prefetch] Could not resolve stream URL for $nextMediaId — will resolve on demand")
-        }
+            }
+        } ?: Timber.tag(TAG).d("[Prefetch] Could not resolve stream URL for $mediaId — will resolve on demand")
     }
 
     override fun onPlaybackStateChanged(

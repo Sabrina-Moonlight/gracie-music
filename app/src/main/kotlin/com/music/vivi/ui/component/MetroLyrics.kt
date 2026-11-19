@@ -162,7 +162,7 @@ fun MetroLyricsLine(
 
     // Plus lighter: las líneas apagadas son más tenues porque la mezcla las aclara.
     val unlitAlpha = if (isPlusLighter) 0.2f else 0.3f
-    val focusedAlpha = if (entry.isBackground) 0.5f else unlitAlpha
+    val focusedAlpha = unlitAlpha
     val activeAlpha = 1f
     
     val targetAlpha = when {

@@ -681,10 +681,14 @@ fun PlayerV2(
                                             showWithAppleMusic = true,
                                             modifier = Modifier
                                                 .size(64.dp)
-                                                .sharedBounds(
-                                                    sharedContentState = rememberSharedContentState("coverArt"),
-                                                    animatedVisibilityScope = this@AnimatedContent,
-                                                    boundsTransform = boundsTransform
+                                                // Con fondo Apple Music la carátula pequeña aparece sin viajar desde el centro
+                                                .then(
+                                                    if (playerBackground == PlayerBackgroundStyle.APPLE_MUSIC) Modifier
+                                                    else Modifier.sharedBounds(
+                                                        sharedContentState = rememberSharedContentState("coverArt"),
+                                                        animatedVisibilityScope = this@AnimatedContent,
+                                                        boundsTransform = boundsTransform
+                                                    )
                                                 )
                                                 .clickable { playerState = PlayerInternalState.COVER }
                                         )

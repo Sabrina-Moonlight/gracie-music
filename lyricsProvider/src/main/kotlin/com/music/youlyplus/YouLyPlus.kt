@@ -83,7 +83,8 @@ object YouLyPlus {
             }
             repeat(jobs.size) {
                 val (server, lrc) = answers.receive()
-                if (!lrc.isNullOrBlank()) {
+                // Una letra con todos los tiempos en 00:00 no sirve: se sigue con los demás servidores.
+                if (!lrc.isNullOrBlank() && lrc.hasRealTiming()) {
                     lastGoodServer.set(server)
                     jobs.forEach { it.cancel() }
                     return@coroutineScope lrc
@@ -91,7 +92,7 @@ object YouLyPlus {
             }
             null
         }
-        found ?: throw IllegalStateException("YouLyPlus: ningún servidor tiene esta letra")
+        found ?: throw IllegalStateException("YouLyPlus: ningún servidor tiene esta letra sincronizada")
     }
 
     /** Entrega cada letra distinta según va llegando de los servidores. */
@@ -125,8 +126,26 @@ object YouLyPlus {
         // esperaba a que la primera fallara y el límite de tiempo la cortaba antes de empezar.
         val preferred = async(Dispatchers.IO) { request(server, q, SOURCES) }
         val plain = async(Dispatchers.IO) { request(server, q, null) }
-        (preferred.await() ?: plain.await())?.toLrc()
+        val first = preferred.await()?.toLrc()
+        if (first != null && first.hasRealTiming()) {
+            plain.cancel()
+            first
+        } else {
+            val second = plain.await()?.toLrc()
+            if (second != null && second.hasRealTiming()) second else first ?: second
+        }
     }
+
+    /** True si la letra tiene al menos dos tiempos de línea distintos (no todo en 00:00). */
+    private fun String.hasRealTiming(): Boolean {
+        val starts = LINE_START.findAll(this).map {
+            val (m, sec, frac) = it.destructured
+            m.toLong() * 60_000L + sec.toLong() * 1000L + (frac.padEnd(3, '0').take(3).toLongOrNull() ?: 0L)
+        }.toSet()
+        return starts.size >= 2
+    }
+
+    private val LINE_START = Regex("""^\[(\d+):(\d{2})(?:[.:](\d+))?]""", RegexOption.MULTILINE)
 
     private suspend fun request(server: String, q: Query, sources: String?): LyricsResponse? =
         runCatching {
