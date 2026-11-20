@@ -291,6 +291,7 @@ fun AppearanceSettings(
     val (lyricsRealTiming, onLyricsRealTimingChange) = rememberPreference(com.music.vivi.constants.LyricsActiveByRealTimingKey, defaultValue = true)
     val (lyricsProgressiveBlur, onLyricsProgressiveBlurChange) = rememberPreference(com.music.vivi.constants.LyricsProgressiveBlurKey, defaultValue = false)
     val (lyricsPlusLighter, onLyricsPlusLighterChange) = rememberPreference(com.music.vivi.constants.LyricsPlusLighterKey, defaultValue = false)
+    val (lyricsAutoSyllables, onLyricsAutoSyllablesChange) = rememberPreference(com.music.vivi.constants.LyricsAutoSyllablesKey, defaultValue = true)
     val (swipeLyrics, onSwipeLyricsChange) = rememberPreference(SwipeLyricsKey, defaultValue = false)
     val (enableLyricsThumbnailPlayPause, onEnableLyricsThumbnailPlayPauseChange) = rememberPreference(EnableLyricsThumbnailPlayPauseKey, defaultValue = false)
 
@@ -1702,6 +1703,27 @@ fun AppearanceSettings(
                         )
                     },
                     onClick = { onLyricsRealTimingChange(!lyricsRealTiming) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
+                    title = { Text(stringResource(R.string.lyrics_auto_syllables)) },
+                    description = { Text(stringResource(R.string.lyrics_auto_syllables_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = lyricsAutoSyllables,
+                            onCheckedChange = onLyricsAutoSyllablesChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (lyricsAutoSyllables) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onLyricsAutoSyllablesChange(!lyricsAutoSyllables) }
                 ),
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
     Material3SettingsItem(

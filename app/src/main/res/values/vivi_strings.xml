@@ -1223,4 +1223,6 @@
     <string name="lyrics_progressive_blur_desc">Gradually blur lines toward the edges while keeping the active line clear (Android 13+)</string>
     <string name="lyrics_plus_lighter">Plus lighter</string>
     <string name="lyrics_plus_lighter_desc">Brighten lyrics with plus-lighter blending over the player background</string>
+    <string name="lyrics_auto_syllables">Split words into syllables</string>
+    <string name="lyrics_auto_syllables_desc">Lights up lyrics syllable by syllable when the song only has word timing (English and Spanish)</string>
 </resources>

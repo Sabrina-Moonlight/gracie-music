@@ -34,6 +34,7 @@ import com.music.vivi.R
 import com.music.vivi.db.entities.LyricsEntity
 import com.music.vivi.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.music.vivi.lyrics.LyricsEntry
+import com.music.vivi.lyrics.LyricsSyllables
 import com.music.vivi.lyrics.LyricsUtils
 import com.music.vivi.models.MediaMetadata
 import com.music.vivi.ui.component.MetroLyricsLine
@@ -220,6 +221,7 @@ fun LyricsV2(
     val scrollLyrics by rememberPreference(LyricsScrollKey, true)
     val lyricsByRealTiming by rememberPreference(com.music.vivi.constants.LyricsActiveByRealTimingKey, true)
     val lyricsProgressiveBlur by rememberPreference(com.music.vivi.constants.LyricsProgressiveBlurKey, false)
+    val lyricsAutoSyllables by rememberPreference(com.music.vivi.constants.LyricsAutoSyllablesKey, true)
     val lyricsPlusLighterPref by rememberPreference(com.music.vivi.constants.LyricsPlusLighterKey, false)
     
     val romanizeJapaneseLyrics by rememberPreference(LyricsRomanizeJapaneseKey, true)
@@ -319,9 +321,10 @@ fun LyricsV2(
             }
 
             else -> {
-                val lines = remember(lyrics, coroutineScope) {
+                val lines = remember(lyrics, coroutineScope, lyricsAutoSyllables) {
                   try {
                     if (lyrics.startsWith("[")) {
+                        LyricsSyllables.enabled = lyricsAutoSyllables
                         val parsedLines = LyricsUtils.parseLyrics(lyrics)
 
                         val isRussianLyrics = romanizeRussianLyrics && !romanizeCyrillicByLine && LyricsUtils.isRussian(lyrics)

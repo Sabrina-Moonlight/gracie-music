@@ -62,6 +62,7 @@ class vivimusicWidgetManager @Inject constructor(
     private val waveScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var waveJob: Job? = null
     @Volatile private var waveDuration: Long = 0L
+    @Volatile private var waveAccent: Int = 0xFFF8B4AE.toInt()
     @Volatile private var wavePosition: Long = 0L
     @Volatile private var waveStamp: Long = 0L
 
@@ -399,6 +400,8 @@ class vivimusicWidgetManager @Inject constructor(
         views.setTextViewText(R.id.widget_n_song_title, title)
         views.setTextViewText(R.id.widget_n_artist_name, artist)
         views.setImageViewBitmap(R.id.widget_n_bg, getNotificationBackground(albumArt))
+        waveAccent = accentFromArt(albumArt)
+        views.setTextViewText(R.id.widget_n_device, currentOutputName())
 
         // Barra con onda + tiempos
         val progress = if (duration > 0) {
@@ -518,19 +521,71 @@ class vivimusicWidgetManager @Inject constructor(
         }
     }
 
-    /** Barra de progreso: barra gruesa redondeada con onda suave encima de la parte recorrida y círculo al final. */
+    /** Nombre de los auriculares / bocina bluetooth conectados; si no hay, el modelo del teléfono. */
+    private fun currentOutputName(): String {
+        return try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            // Tipos externos: cable (3, 4), bluetooth A2DP (8), USB (22), audífono médico (23), BLE (26, 27)
+            val external = setOf(3, 4, 8, 22, 23, 26, 27)
+            val name = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+                .firstOrNull { it.type in external }
+                ?.productName?.toString()
+            if (name.isNullOrBlank()) android.os.Build.MODEL else name
+        } catch (e: Exception) {
+            android.os.Build.MODEL
+        }
+    }
+
+    /** Color de acento sacado de la portada (tono pastel, como el de la notificación). */
+    private fun accentFromArt(art: Bitmap?): Int {
+        if (art == null) return 0xFFF8B4AE.toInt()
+        return try {
+            val small = Bitmap.createScaledBitmap(art, 24, 24, true)
+            var r = 0.0; var g = 0.0; var bl = 0.0; var wSum = 0.0
+            val hsv = FloatArray(3)
+            for (y in 0 until 24) for (x in 0 until 24) {
+                val c = small.getPixel(x, y)
+                android.graphics.Color.colorToHSV(c, hsv)
+                val wgt = 0.15 + hsv[1] * hsv[2]
+                r += android.graphics.Color.red(c) * wgt
+                g += android.graphics.Color.green(c) * wgt
+                bl += android.graphics.Color.blue(c) * wgt
+                wSum += wgt
+            }
+            if (small !== art) small.recycle()
+            val avg = android.graphics.Color.rgb((r / wSum).toInt(), (g / wSum).toInt(), (bl / wSum).toInt())
+            android.graphics.Color.colorToHSV(avg, hsv)
+            hsv[1] = 0.34f
+            hsv[2] = 0.96f
+            android.graphics.Color.HSVToColor(hsv)
+        } catch (e: Exception) {
+            0xFFF8B4AE.toInt()
+        }
+    }
+
+    /**
+     * Barra de progreso como la de la notificación: barra gruesa del color de la portada, círculo chico
+     * con borde fino, y encima de la parte recorrida 2 olas anchas y translúcidas del mismo color
+     * (donde se cruzan se ven más claras). Van en sentidos opuestos y con largos distintos.
+     */
     private fun createWavyProgressBitmap(progress: Float, phase: Float = 0f): Bitmap {
-        // Proporción 14:1; el ImageView usa fitCenter, así que el círculo no se estira
+        // Proporción 12,2:1; el ImageView usa fitCenter, así que el círculo no se estira
         val w = 560
-        val h = 40
+        val h = 46
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        val thumbR = 16f
-        val cy = 24f
+        val thumbR = 13f
+        val cy = 32f
         val left = thumbR
         val right = w - thumbR
         val x = left + (right - left) * progress
-        val stroke = 12f
+        val stroke = 13f
+        val accent = waveAccent
+        // Círculo: el color de la barra mezclado con blanco
+        fun mix(c: Int, t: Float): Int {
+            val r = android.graphics.Color.red(c); val g = android.graphics.Color.green(c); val b = android.graphics.Color.blue(c)
+            return android.graphics.Color.rgb((r + (255 - r) * t).toInt(), (g + (255 - g) * t).toInt(), (b + (255 - b) * t).toInt())
+        }
 
         val track = Paint().apply {
             isAntiAlias = true
@@ -542,28 +597,30 @@ class vivimusicWidgetManager @Inject constructor(
         canvas.drawLine(left, cy, right, cy, track)
 
         if (x > left) {
-            // 3 olas translúcidas, cada una con su largo, altura, velocidad y sentido (así no van sincronizadas)
-            // Datos: largo de onda, altura, vueltas por ciclo (negativo = al revés), desfase, color
+            val twoPi = 2f * Math.PI.toFloat()
+            // Cada ola: largo de onda, altura, vueltas por ciclo (negativo = al revés), desfase,
+            // largo y desfase de la variación de altura (unas partes más altas, otras más bajas)
             val waves = arrayOf(
-                floatArrayOf(95f, 10f, 1f, 0f),
-                floatArrayOf(62f, 7f, -2f, 2.1f),
-                floatArrayOf(140f, 8f, 3f, 4.2f)
+                floatArrayOf(105f, 15f, 1f, 0f, 230f, 0.5f),
+                floatArrayOf(95f, 13f, -1f, 1f, 200f, 2.2f)
             )
-            val waveColors = intArrayOf(0x66F8B4AE, 0x55FFD9D5, 0x44F8B4AE)
-            for ((i, cfg) in waves.withIndex()) {
+            val waveColor = (accent and 0x00FFFFFF) or (0xA0 shl 24)
+            val top = cy - stroke / 2f
+            for (cfg in waves) {
                 val wave = android.graphics.Path()
                 wave.moveTo(left, cy)
                 var px = left
                 while (px < x) {
-                    px = minOf(px + 4f, x)
-                    val damp = minOf(1f, (px - left) / 60f)
-                    val bump = (1f + kotlin.math.sin((px - left) / cfg[0] * 2f * Math.PI.toFloat() - cfg[3] - phase * cfg[2])) / 2f
-                    wave.lineTo(px, cy - stroke / 2f - cfg[1] * damp * bump)
+                    px = minOf(px + 2f, x)
+                    // Sube suave al inicio y baja suave cerca del círculo
+                    val edge = minOf(1f, (px - left) / 45f) * minOf(1f, (x - px) / 36f)
+                    val env = 0.7f + 0.3f * (1f + kotlin.math.sin((px - left) / cfg[4] * twoPi + cfg[5])) / 2f
+                    val bump = (1f + kotlin.math.sin((px - left) / cfg[0] * twoPi - cfg[3] - phase * cfg[2])) / 2f
+                    wave.lineTo(px, top + 1f - cfg[1] * edge.coerceAtLeast(0f) * env * bump)
                 }
                 wave.lineTo(x, cy)
                 wave.close()
-                val wavePaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL; color = waveColors[i] }
-                canvas.drawPath(wave, wavePaint)
+                canvas.drawPath(wave, Paint().apply { isAntiAlias = true; style = Paint.Style.FILL; color = waveColor })
             }
 
             val fill = Paint().apply {
@@ -571,13 +628,15 @@ class vivimusicWidgetManager @Inject constructor(
                 style = Paint.Style.STROKE
                 strokeCap = Paint.Cap.ROUND
                 strokeWidth = stroke
-                color = 0xFFF8B4AE.toInt()
+                color = accent
             }
             canvas.drawLine(left, cy, x, cy, fill)
         }
 
-        val thumb = Paint().apply { isAntiAlias = true; color = 0xFFFFD9D5.toInt() }
-        canvas.drawCircle(x, cy, thumbR, thumb)
+        canvas.drawCircle(x, cy, thumbR, Paint().apply { isAntiAlias = true; color = mix(accent, 0.55f) })
+        canvas.drawCircle(x, cy, thumbR - 0.75f, Paint().apply {
+            isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = 1.5f; color = 0x46000000
+        })
         return bmp
     }
 

@@ -561,6 +561,7 @@ val LyricsStandardBlurKey = booleanPreferencesKey("lyricsStandardBlur")
 val LyricsActiveByRealTimingKey = booleanPreferencesKey("lyricsActiveByRealTiming")
 val LyricsProgressiveBlurKey = booleanPreferencesKey("lyricsProgressiveBlur")
 val LyricsPlusLighterKey = booleanPreferencesKey("lyricsPlusLighter")
+val LyricsAutoSyllablesKey = booleanPreferencesKey("lyricsAutoSyllables")
 
 val LyricsAnimationStyleKey = stringPreferencesKey("lyricsAnimationStyle")
 val LyricsTextSizeKey = floatPreferencesKey("lyricsTextSize")

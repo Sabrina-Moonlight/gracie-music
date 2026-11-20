@@ -421,11 +421,13 @@ object LyricsUtils {
             RICH_SYNC_WORD_REGEX.containsMatchIn(line)
         }
         
-        return if (isRichSync) {
+        val parsed = if (isRichSync) {
             parseRichSyncLyrics(lines)
         } else {
             parseStandardLyrics(lines)
         }
+        // Parte en sílabas las palabras que solo traen tiempo por palabra
+        return LyricsSyllables.apply(parsed)
     }
     
     /**

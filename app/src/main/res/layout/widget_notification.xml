@@ -1,11 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Widget estilo notificación de Android (4x2): portada de fondo, texto arriba, barra con onda en medio, botones abajo -->
+<!-- Widget estilo notificación (4x2). Posiciones medidas sobre la notificación real:
+     fila de arriba (dispositivo + Media output), título, artista, barra con olas, tiempos,
+     5 botones agrupados al centro (cada uno ocupa 1/8 del ancho) y puntitos de página. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingTop="18dp"
+    android:paddingBottom="18dp"
+    android:theme="@style/Theme.Widget.vivimusic">
+
+  <!-- Margen arriba y abajo: así queda igual de alto que el widget de reloj de Samsung -->
+  <FrameLayout
     android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background"
-    android:theme="@style/Theme.Widget.vivimusic">
+    android:background="@drawable/widget_background">
 
     <ImageView
         android:id="@+id/widget_n_bg"
@@ -19,15 +28,57 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="6dp">
+        android:paddingTop="6dp">
+
+        <!-- Fila de arriba: icono + nombre del dispositivo, y botón Media output a la derecha -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="28dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_widget_n_output"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/widget_n_device"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:textSize="13sp"
+                android:textColor="#FFFFFFFF"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_n_output"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:gravity="center"
+                android:background="@drawable/widget_n_pill"
+                android:text="Media output"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFFFF"
+                android:maxLines="1" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/widget_n_song_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="28dp"
+            android:includeFontPadding="false"
             android:text="@string/not_playing"
             android:textSize="18sp"
             android:textStyle="bold"
@@ -39,8 +90,11 @@
             android:id="@+id/widget_n_artist_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="28dp"
+            android:includeFontPadding="false"
             android:text="@string/tap_to_play"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:textColor="#B3FFFFFF"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -56,12 +110,16 @@
             android:id="@+id/widget_n_progress"
             android:layout_width="match_parent"
             android:layout_height="28dp"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="28dp"
             android:scaleType="fitCenter"
             android:importantForAccessibility="no" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="28dp"
             android:orientation="horizontal">
 
             <TextView
@@ -69,6 +127,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:includeFontPadding="false"
                 android:text="00:00"
                 android:textSize="11sp"
                 android:textColor="#B3FFFFFF" />
@@ -77,23 +136,29 @@
                 android:id="@+id/widget_n_time_total"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:includeFontPadding="false"
                 android:text="00:00"
                 android:textSize="11sp"
                 android:textColor="#B3FFFFFF" />
         </LinearLayout>
 
+        <!-- Botones agrupados al centro: 3 + (5 x 2) + 3 partes, o sea cada botón ocupa 1/8 del ancho -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="36dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="3" />
             <ImageButton
                 android:id="@+id/widget_n_like"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:padding="8dp"
+                android:layout_height="36dp"
+                android:layout_weight="2"
+                android:padding="6dp"
                 android:scaleType="fitCenter"
                 android:background="@android:color/transparent"
                 android:src="@drawable/ic_widget_n_heart_off"
@@ -101,9 +166,9 @@
             <ImageButton
                 android:id="@+id/widget_n_prev"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:padding="8dp"
+                android:layout_height="36dp"
+                android:layout_weight="2"
+                android:padding="6dp"
                 android:scaleType="fitCenter"
                 android:background="@android:color/transparent"
                 android:src="@drawable/ic_widget_n_prev"
@@ -111,24 +176,23 @@
             <FrameLayout
                 android:id="@+id/widget_n_play_container"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1">
+                android:layout_height="36dp"
+                android:layout_weight="2">
 
                 <ImageView
                     android:id="@+id/widget_n_play_pause"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_widget_n_play"
                     android:contentDescription="@string/play_pause" />
             </FrameLayout>
-
             <ImageButton
                 android:id="@+id/widget_n_next"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:padding="8dp"
+                android:layout_height="36dp"
+                android:layout_weight="2"
+                android:padding="6dp"
                 android:scaleType="fitCenter"
                 android:background="@android:color/transparent"
                 android:src="@drawable/ic_widget_n_next"
@@ -136,13 +200,26 @@
             <ImageButton
                 android:id="@+id/widget_n_repeat"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:padding="8dp"
+                android:layout_height="36dp"
+                android:layout_weight="2"
+                android:padding="6dp"
                 android:scaleType="fitCenter"
                 android:background="@android:color/transparent"
                 android:src="@drawable/ic_widget_n_repeat_off"
                 android:contentDescription="@string/repeat" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="3" />
         </LinearLayout>
+
+        <!-- Puntitos de página -->
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="9dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_widget_n_dots"
+            android:importantForAccessibility="no" />
     </LinearLayout>
+  </FrameLayout>
 </FrameLayout>
