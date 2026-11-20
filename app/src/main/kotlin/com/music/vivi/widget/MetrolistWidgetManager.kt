@@ -401,7 +401,6 @@ class vivimusicWidgetManager @Inject constructor(
         views.setTextViewText(R.id.widget_n_artist_name, artist)
         views.setImageViewBitmap(R.id.widget_n_bg, getNotificationBackground(albumArt))
         waveAccent = accentFromArt(albumArt)
-        views.setTextViewText(R.id.widget_n_device, currentOutputName())
 
         // Barra con onda + tiempos
         val progress = if (duration > 0) {
@@ -463,12 +462,18 @@ class vivimusicWidgetManager @Inject constructor(
                 android.graphics.Rect(0, 0, w, h),
                 paint
             )
-            // Capa rojiza oscura: más clara arriba, más oscura abajo (como la notificación)
+            // Capa oscura con el tono de la portada: más clara arriba, más oscura abajo (como la notificación)
+            val hsvShade = FloatArray(3)
+            android.graphics.Color.colorToHSV(accentFromArt(albumArt), hsvShade)
+            fun shadeColor(alpha: Int, v: Float): Int {
+                val c = floatArrayOf(hsvShade[0], 0.6f, v)
+                return (alpha shl 24) or (android.graphics.Color.HSVToColor(c) and 0x00FFFFFF)
+            }
             val shade = Paint().apply {
                 isDither = true
                 shader = android.graphics.LinearGradient(
                     0f, 0f, 0f, h.toFloat(),
-                    intArrayOf(0x55401818.toInt(), 0x99301010.toInt(), 0xDD200808.toInt()),
+                    intArrayOf(shadeColor(0x55, 0.25f), shadeColor(0x99, 0.19f), shadeColor(0xDD, 0.125f)),
                     floatArrayOf(0f, 0.55f, 1f),
                     Shader.TileMode.CLAMP
                 )
@@ -518,21 +523,6 @@ class vivimusicWidgetManager @Inject constructor(
             sr += ((add shr 16) and 255) - ((rem shr 16) and 255)
             sg += ((add shr 8) and 255) - ((rem shr 8) and 255)
             sb += (add and 255) - (rem and 255)
-        }
-    }
-
-    /** Nombre de los auriculares / bocina bluetooth conectados; si no hay, el modelo del teléfono. */
-    private fun currentOutputName(): String {
-        return try {
-            val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-            // Tipos externos: cable (3, 4), bluetooth A2DP (8), USB (22), audífono médico (23), BLE (26, 27)
-            val external = setOf(3, 4, 8, 22, 23, 26, 27)
-            val name = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-                .firstOrNull { it.type in external }
-                ?.productName?.toString()
-            if (name.isNullOrBlank()) android.os.Build.MODEL else name
-        } catch (e: Exception) {
-            android.os.Build.MODEL
         }
     }
 

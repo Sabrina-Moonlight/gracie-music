@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.runtime.remember
 import androidx.compose.ui.text.style.TextAlign
 import com.music.vivi.lyrics.WordTimestamp
 
@@ -34,10 +35,12 @@ fun WordLevelLyrics(
     prewarmMasks: Boolean = isActiveLine,
     useFixedTone: Boolean = true,
 ) {
+    // Después de una raya larga ("Satān—Welcome") la palabra siguiente empieza en la línea de abajo
+    val lineText = remember(mainText) { mainText.replace(Regex("—(?=\\p{L})"), "—\n") }
     when (animationStyle) {
         LyricsAnimationStyle.APPLE -> {
             AppleWordAnimation(
-                mainText = mainText,
+                mainText = lineText,
                 words = words,
                 isActiveLine = isActiveLine,
                 positionProvider = positionProvider,
@@ -59,7 +62,7 @@ fun WordLevelLyrics(
 
         LyricsAnimationStyle.BRACCATO -> {
             BraccatoWordAnimation(
-                mainText = mainText,
+                mainText = lineText,
                 words = words,
                 isActiveLine = isActiveLine,
                 positionProvider = positionProvider,
@@ -82,7 +85,7 @@ fun WordLevelLyrics(
         LyricsAnimationStyle.EXPRESSIVE -> {
             ExpressiveWordAnimation(
                 useFixedTone = useFixedTone,
-                mainText = mainText,
+                mainText = lineText,
                 words = words,
                 isActiveLine = isActiveLine,
                 positionProvider = positionProvider,
@@ -103,7 +106,7 @@ fun WordLevelLyrics(
 
         LyricsAnimationStyle.SIMPLE -> {
             SimpleWordAnimation(
-                mainText = mainText,
+                mainText = lineText,
                 words = words,
                 isActiveLine = isActiveLine,
                 positionProvider = positionProvider,

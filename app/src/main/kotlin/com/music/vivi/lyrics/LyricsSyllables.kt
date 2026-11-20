@@ -142,11 +142,17 @@ object LyricsSyllables {
         }
         val totalWeight = weights.sum().toDouble()
 
+        // Palabra muy alargada ("rumbleeee"): las primeras sílabas duran lo normal y la última
+        // se lleva el resto, porque el cantante dice la palabra y sostiene el final.
+        val natural = totalWeight * NATURAL_SECONDS_PER_LETTER
+        val held = duration > natural * HELD_FACTOR
+
         val result = ArrayList<WordTimestamp>(weights.size)
         var t = word.startTime
         for (k in 0 until bounds.size - 1) {
             val isLastPiece = k == bounds.size - 2
-            val pieceEnd = if (isLastPiece) word.endTime else t + duration * weights[k] / totalWeight
+            val share = if (held) natural * weights[k] / totalWeight else duration * weights[k] / totalWeight
+            val pieceEnd = if (isLastPiece) word.endTime else t + share
             result.add(
                 word.copy(
                     text = text.substring(bounds[k], bounds[k + 1]),
@@ -159,6 +165,9 @@ object LyricsSyllables {
         }
         return result
     }
+
+    private const val NATURAL_SECONDS_PER_LETTER = 0.07
+    private const val HELD_FACTOR = 1.0
 
     private fun isAllowedChar(c: Char): Boolean =
         c in 'a'..'z' || c in 'A'..'Z' || c in "áéíóúüñÁÉÍÓÚÜÑ" || c == '\'' || c == '’'
@@ -184,7 +193,17 @@ object LyricsSyllables {
         val n = core.length
         val w = String(CharArray(n) { core[it].lowercaseChar() }).replace('’', '\'')
 
-        // Terminación "ing" / "in'" como sílaba aparte (walk-ing, run-ning, goin' -> go-in')
+        // Excepciones escritas a mano (palabras compuestas y casos raros)
+        EXCEPTIONS[w]?.let { spec ->
+            val cutsEx = ArrayList<Int>()
+            var pos = 0
+            for (ch in spec) {
+                if (ch == '-') cutsEx.add(pos) else pos++
+            }
+            if (pos == n) return cutsEx.filter { it in 1 until n }
+        }
+
+        // Terminación "ing" / "in'" como sílaba aparte (walk-ing, run-ning, no-thing, be-co-ming)
         if (!es) {
             val m = ING_REGEX.matchEntire(w)
             if (m != null) {
@@ -194,6 +213,16 @@ object LyricsSyllables {
                     stem[stem.length - 1].isLetter() && stem[stem.length - 1] !in "aeiouylsz"
                 ) {
                     cut = stem.length - 1
+                } else {
+                    // Una sola consonante (o th/sh/ch...) tras la última vocal: se pasa a "ing"
+                    var t = stem.length
+                    while (t > 0 && stem[t - 1] !in EN_VOWELS) t--
+                    val tail = stem.substring(t)
+                    if (t > 0 && tail.isNotEmpty() && tail !in CODA_UNITS &&
+                        (tail.length == 1 || tail in EN_DIGRAPHS)
+                    ) {
+                        cut = t
+                    }
                 }
                 val inner = syllableCuts(core.substring(0, cut), false)
                 return (inner + cut).filter { it in 1 until n }.distinct().sorted()
@@ -323,6 +352,20 @@ object LyricsSyllables {
     }
 
     private fun isOnset(first: String, second: String): Boolean = (first + second) in ONSET_PAIRS
+
+    /** Cortes a mano: palabra en minúscula -> sílabas separadas por guiones. Se pueden añadir más. */
+    private val EXCEPTIONS = mapOf(
+        "lifetime" to "life-time", "lifetimes" to "life-times", "lifelong" to "life-long",
+        "lifeline" to "life-line", "something" to "some-thing", "sometimes" to "some-times",
+        "someone" to "some-one", "somewhere" to "some-where", "somehow" to "some-how",
+        "someday" to "some-day", "everything" to "ev-ery-thing", "every" to "ev-ery",
+        "everyone" to "ev-ery-one", "whatever" to "what-ev-er", "however" to "how-ev-er",
+        "forever" to "for-ev-er", "lonely" to "lone-ly", "lovely" to "love-ly",
+        "homeless" to "home-less", "careless" to "care-less", "useless" to "use-less",
+        "hopeless" to "hope-less", "endless" to "end-less", "nobody" to "no-bod-y", "eternity" to "e-ter-ni-ty", "eternal" to "e-ter-nal",
+        "saeculorum" to "sae-cu-lo-rum", "saecula" to "sae-cu-la", "satanás" to "sa-ta-nás",
+        "satan" to "sa-tan", "archangelo" to "arch-an-ge-lo",
+    )
 
     private val ING_REGEX = Regex("^(.*[aeiouy].*?)(ing|in')$")
 }
