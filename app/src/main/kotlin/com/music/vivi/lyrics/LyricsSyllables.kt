@@ -442,15 +442,15 @@ object LyricsSyllables {
 
     /** Cortes a mano: solo lo que no tiene regla. Palabra en minúscula -> sílabas separadas por guiones. */
     private val EXCEPTIONS = mapOf(
-        "ever" to "ev-er", "never" to "nev-er", "every" to "ev-ery", "archangelo" to "arch-an-ge-lo",
+        "ever" to "ev-er", "every" to "ev-ery", "archangelo" to "arch-an-ge-lo",
     )
 
     private val COMPOUND_HEADS = listOf(
-        "life", "for", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire",
+        "week", "life", "for", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire",
     )
     private val COMPOUND_TAILS = setOf(
         "one", "body", "thing", "where", "more", "time", "times", "day", "ever", "how", "way",
-        "fly", "what", "work", "works", "long", "line", "lines",
+        "fly", "what", "work", "works", "long", "line", "lines", "end", "ends", "days", "night", "nights", "ly",
     )
 
     private val SUFFIXES = listOf("less", "ness", "ment", "ful", "ache")

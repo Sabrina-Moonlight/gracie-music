@@ -1300,6 +1300,8 @@ internal data class ActiveSylInfo(
     val index: Int,
     val lineIdx: Int,
     val isLastOfLine: Boolean,
+    // Última sílaba de una palabra (le sigue un espacio): su brillo debe completarse al terminar
+    val isLastOfWord: Boolean = false,
 )
 
 internal data class AlignedSyllable(
@@ -1727,7 +1729,15 @@ internal fun rememberActiveSylInfoState(
                 } else {
                     false
                 }
-            ActiveSylInfo(idx, lineIdx, lastOfLine)
+            val lastOfWord =
+                idx != -1 && idx < alignedSyllables.lastIndex &&
+                    run {
+                        val nextStart = alignedSyllables[idx + 1].startOffset
+                        nextStart in 1..formattedMainText.length &&
+                            nextStart - 1 >= alignedSyllables[idx].startOffset &&
+                            formattedMainText[nextStart - 1].isWhitespace()
+                    }
+            ActiveSylInfo(idx, lineIdx, lastOfLine, lastOfWord)
         }
     }
 
@@ -1812,7 +1822,7 @@ internal fun rememberWiperPosition(
                     val prog = activeSylProgressState?.value ?: 0f
                     animState.finishStartX = x
                     animState.finishStartLineIdx = info?.lineIdx?.coerceAtLeast(0) ?: 0
-                    animState.finishStartShiftProgress = if (info?.isLastOfLine == true) prog else 0f
+                    animState.finishStartShiftProgress = if (info?.isLastOfLine == true || info?.isLastOfWord == true) prog else 0f
                     x
                 } else {
                     val animX = animState.globalX.value

@@ -807,7 +807,8 @@ internal fun AppleWordAnimation(
                 } else {
                     activeInfo?.lineIdx ?: -1
                 }
-            val isActiveSylLastOfLine = if (isFinishing) true else (activeInfo?.isLastOfLine ?: false)
+            val isActiveSylLastOfLine =
+                if (isFinishing) true else (activeInfo?.let { it.isLastOfLine || it.isLastOfWord } ?: false)
             val maskCache = if (showActiveWipe || heavyGrowing) maskCacheStore else null
             val activeSylProgress =
                 if (isFinishing) {
