@@ -200,6 +200,26 @@ object LyricsSyllables {
             if (pos == n) return cutsEx.filter { it in 1 until n }
         }
 
+        // Palabras compuestas: any-one, when-ev-er, fire-fly, some-what
+        if (!es) {
+            for (h in COMPOUND_HEADS) {
+                if (w.startsWith(h) && w.substring(h.length) in COMPOUND_TAILS) {
+                    val head = if (h.length >= 4) syllableCuts(core.substring(0, h.length), false) else emptyList()
+                    val tail = syllableCuts(core.substring(h.length), false).map { it + h.length }
+                    return (head + h.length + tail).filter { it in 1 until n }.distinct().sorted()
+                }
+            }
+        }
+
+        // "-ly" tras "e" muda: love-ly, lone-ly, like-ly, en-tire-ly
+        if (!es && w.endsWith("ly") && n >= 6) {
+            val st = n - 2
+            if (w[st - 1] == 'e' && w[st - 2] !in EN_VOWELS && w.substring(0, st - 1).any { it in EN_VOWELS }) {
+                val inner = syllableCuts(core.substring(0, st), false)
+                return (inner + st).filter { it in 1 until n }.distinct().sorted()
+            }
+        }
+
         // Terminación "ing" / "in'" como sílaba aparte (walk-ing, run-ning, no-thing, be-co-ming)
         if (!es) {
             val m = ING_REGEX.matchEntire(w)
@@ -210,6 +230,9 @@ object LyricsSyllables {
                     stem[stem.length - 1].isLetter() && stem[stem.length - 1] !in "aeiouylsz"
                 ) {
                     cut = stem.length - 1
+                } else if (stem.length >= 2 && stem.endsWith("w") && stem[stem.length - 2] in "aeiou") {
+                    // draw-ing, show-ing, know-ing: la "w" se queda con la sílaba de antes
+                    cut = stem.length
                 } else {
                     // Una sola consonante (o th/sh/ch...) tras la última vocal: se pasa a "ing"
                     var t = stem.length
@@ -239,6 +262,21 @@ object LyricsSyllables {
             }
         }
 
+        // Prefijos que se leen aparte: with-out, with-in, de-stroy, de-scribe
+        if (!es) {
+            val pre = when {
+                WITH_PREFIX_REGEX.containsMatchIn(w) -> 4
+                DE_PREFIX_REGEX.containsMatchIn(w) -> 2
+                CRE_PREFIX_REGEX.containsMatchIn(w) -> 3
+                REACT_REGEX.containsMatchIn(w) -> 2
+                else -> 0
+            }
+            if (pre > 0 && n > pre + 1) {
+                val rest = syllableCuts(core.substring(pre), false).map { it + pre }
+                return (listOf(pre) + rest).filter { it in 1 until n }.distinct().sorted()
+            }
+        }
+
         // Qué letras son vocal
         val isVowel = BooleanArray(n)
         for (i in 0 until n) {
@@ -254,6 +292,8 @@ object LyricsSyllables {
                 }
             } else {
                 isVowel[i] = c in EN_VOWELS
+                // "ow"/"aw"/"ew" tras consonante suena como una sola vocal: pow-er, flow-er
+                if (c == 'w' && i >= 2 && w[i - 1] in "aeo" && w[i - 2] !in EN_VOWELS) isVowel[i] = true
                 if (c == 'y' && i == 0 && n > 1 && w[1] in "aeiou") isVowel[i] = false
                 if (c == 'u' && i > 0 && w[i - 1] == 'q') isVowel[i] = false
             }
@@ -268,9 +308,23 @@ object LyricsSyllables {
                 while (j < n && isVowel[j]) {
                     // En español, dos vocales fuertes seguidas van en sílabas distintas
                     if (es && w[j - 1] in ES_STRONG && w[j] in ES_STRONG) break
+                    // Tras esa "w" empieza otra sílaba: pow-er
+                    if (!es && w[j - 1] == 'w' && w[j] != 'w') break
                     j++
                 }
-                groups.add(intArrayOf(i, j))
+                if (es || j - i < 2) {
+                    groups.add(intArrayOf(i, j))
+                } else {
+                    // Vocales juntas que suenan separadas: cre-ate, i-de-a, po-et, cru-el, ra-di-o
+                    var st = i
+                    for (k in i until j - 1) {
+                        if (isHiatus(w, k, n)) {
+                            groups.add(intArrayOf(st, k + 1))
+                            st = k + 1
+                        }
+                    }
+                    groups.add(intArrayOf(st, j))
+                }
                 i = j
             } else {
                 i++
@@ -352,6 +406,11 @@ object LyricsSyllables {
                 )
                 continue
             }
+            // "high-er", "bright-er": tras "igh" (y "ight") se corta
+            if (!es && cluster.startsWith("gh") && w[a - 1] == 'i') {
+                cuts.add(if (cluster.startsWith("ght")) a + 3 else a + 2)
+                continue
+            }
             if (units.size >= 2 && isOnset(units[units.size - 2], units[units.size - 1])) {
                 cuts.add(b - units[units.size - 1].length - units[units.size - 2].length)
             } else {
@@ -361,23 +420,44 @@ object LyricsSyllables {
         return cuts.filter { it in 1 until n }.distinct().sorted()
     }
 
+    /** ¿Las dos vocales de la posición k suenan en sílabas distintas? (solo inglés) */
+    private fun isHiatus(w: String, k: Int, n: Int): Boolean {
+        val pair = w.substring(k, k + 2)
+        val prev = if (k > 0) w[k - 1] else ' '
+        val next = if (k + 2 < n) w[k + 2] else ' '
+        return when (pair) {
+            "ia" -> k > 0 && prev !in "ctgsxh"
+            "io" -> k > 0 && prev !in "ctsxghn" && !(prev == 'l' && k >= 3)
+            "eo" -> k > 0 && prev !in "gc" && !(k == 1 && w[0] in "pj")
+            "ao" -> true
+            "ea" -> k + 2 == n && w.substring(0, k).any { it in EN_VOWELS }
+            "oe" -> next == 't' || next == 'm'
+            "ue", "ua" -> next == 'l'
+            "ie" -> next == 't' && k > 0
+            else -> false
+        }
+    }
+
     private fun isOnset(first: String, second: String): Boolean = (first + second) in ONSET_PAIRS
 
-    /** Cortes a mano: palabra en minúscula -> sílabas separadas por guiones. Se pueden añadir más. */
+    /** Cortes a mano: solo lo que no tiene regla. Palabra en minúscula -> sílabas separadas por guiones. */
     private val EXCEPTIONS = mapOf(
-        "lifetime" to "life-time", "lifetimes" to "life-times", "lifelong" to "life-long",
-        "lifeline" to "life-line", "something" to "some-thing", "sometimes" to "some-times",
-        "someone" to "some-one", "somewhere" to "some-where", "somehow" to "some-how",
-        "someday" to "some-day", "everything" to "ev-ery-thing", "every" to "ev-ery",
-        "everyone" to "ev-ery-one", "whatever" to "what-ev-er", "however" to "how-ev-er",
-        "forever" to "for-ev-er", "lonely" to "lone-ly", "lovely" to "love-ly",
-        "homeless" to "home-less", "careless" to "care-less", "useless" to "use-less",
-        "hopeless" to "hope-less", "endless" to "end-less", "nobody" to "no-bod-y", "eternity" to "e-ter-ni-ty", "eternal" to "e-ter-nal",
-        "saeculorum" to "sae-cu-lo-rum", "saecula" to "sae-cu-la", "satanás" to "sa-ta-nás",
-        "satan" to "sa-tan", "archangelo" to "arch-an-ge-lo",
+        "ever" to "ev-er", "never" to "nev-er", "every" to "ev-ery", "archangelo" to "arch-an-ge-lo",
+    )
+
+    private val COMPOUND_HEADS = listOf(
+        "life", "for", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire",
+    )
+    private val COMPOUND_TAILS = setOf(
+        "one", "body", "thing", "where", "more", "time", "times", "day", "ever", "how", "way",
+        "fly", "what", "work", "works", "long", "line", "lines",
     )
 
     private val SUFFIXES = listOf("less", "ness", "ment", "ful", "ache")
 
     private val ING_REGEX = Regex("^(.*[aeiouy].*?)(ing|in')$")
+    private val WITH_PREFIX_REGEX = Regex("^with(out|in|draw|hold|stand)")
+    private val DE_PREFIX_REGEX = Regex("^de(str|scr|spr)")
+    private val CRE_PREFIX_REGEX = Regex("^(cre(ate|ation|ative|ating|ated|ator)|scien)")
+    private val REACT_REGEX = Regex("^reac(t|tion|tions|ted)$")
 }
