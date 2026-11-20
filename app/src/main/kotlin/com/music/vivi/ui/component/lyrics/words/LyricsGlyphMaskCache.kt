@@ -293,6 +293,7 @@ internal fun computeWipe(
     activeSylProgress: Float,
     gradientWidth: Float,
     out: WipeResult,
+    instantWholeWord: Boolean = false,
 ) {
     val halfGradientWidth = gradientWidth / 2f
 
@@ -316,6 +317,12 @@ internal fun computeWipe(
             vc.lineIdx > activeLineIdx -> -gradientWidth * 2f
             else -> rawLocalX + brushShift
         }
+
+    // Palabra de una sola sílaba: se prende entera de golpe, sin recorrerla
+    if (instantWholeWord && vc.isWholeWord) {
+        out.mode = if (localX >= localStart) WIPE_PAST else WIPE_UNLIT
+        return
+    }
 
     if (localX >= localEnd + halfGradientWidth) {
         out.mode = WIPE_PAST

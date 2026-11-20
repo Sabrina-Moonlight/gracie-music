@@ -1144,6 +1144,7 @@ internal fun DrawScope.drawWipeText(
     unlitColor: Color,
     wipe: WipeResult,
     shadow: Shadow = LyricsClearShadow,
+    instantWholeWord: Boolean = false,
 ) {
     computeWipe(
         vc = vc,
@@ -1159,6 +1160,7 @@ internal fun DrawScope.drawWipeText(
         activeSylProgress = activeSylProgress,
         gradientWidth = gradientWidth,
         out = wipe,
+        instantWholeWord = instantWholeWord,
     )
     when (wipe.mode) {
         WIPE_PAST -> {
@@ -1269,6 +1271,8 @@ internal class VisualCluster(
     var charDelayMs: Long = 0L,
     var syllableIndex: Int = -1,
     var lastSyllableIndex: Int = syllableIndex,
+    /** Palabra entera de una sola sílaba (class, buy): el estilo Apple la prende de golpe. */
+    var isWholeWord: Boolean = false,
 )
 
 internal class ClusterMeta(
@@ -1639,6 +1643,13 @@ internal fun buildVisualClusters(
             )
             idx = j + 1
         }
+    }
+    for (vc in list) {
+        val si = vc.syllableIndex
+        if (si < 0 || si >= alignedSyllables.size || vc.lastSyllableIndex != si) continue
+        val startsWord = si == 0 || alignedSyllables[si - 1].syllable.hasTrailingSpace
+        val endsWord = si == alignedSyllables.lastIndex || alignedSyllables[si].syllable.hasTrailingSpace
+        vc.isWholeWord = startsWord && endsWord
     }
     return list
 }

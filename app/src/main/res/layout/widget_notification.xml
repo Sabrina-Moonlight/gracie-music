@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Widget estilo notificación (4x2). Posiciones medidas sobre la notificación real:
      título, artista, barra con olas, tiempos,
-     5 botones agrupados al centro (cada uno ocupa 1/8 del ancho) y puntitos de página. -->
+     5 botones agrupados al centro (cada uno ocupa 1/8 del ancho). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -103,18 +103,18 @@
         <!-- Botones agrupados al centro: 3 + (5 x 2) + 3 partes, o sea cada botón ocupa 1/8 del ancho -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="36dp"
+            android:layout_height="44dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
             <FrameLayout
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="3" />
             <ImageButton
                 android:id="@+id/widget_n_like"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="2"
                 android:padding="6dp"
                 android:scaleType="fitCenter"
@@ -124,7 +124,7 @@
             <ImageButton
                 android:id="@+id/widget_n_prev"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="2"
                 android:padding="6dp"
                 android:scaleType="fitCenter"
@@ -134,7 +134,7 @@
             <FrameLayout
                 android:id="@+id/widget_n_play_container"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="2">
 
                 <ImageView
@@ -148,7 +148,7 @@
             <ImageButton
                 android:id="@+id/widget_n_next"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="2"
                 android:padding="6dp"
                 android:scaleType="fitCenter"
@@ -158,7 +158,7 @@
             <ImageButton
                 android:id="@+id/widget_n_repeat"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="2"
                 android:padding="6dp"
                 android:scaleType="fitCenter"
@@ -167,17 +167,10 @@
                 android:contentDescription="@string/repeat" />
             <FrameLayout
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="3" />
         </LinearLayout>
 
-        <!-- Puntitos de página -->
-        <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="9dp"
-            android:scaleType="center"
-            android:src="@drawable/ic_widget_n_dots"
-            android:importantForAccessibility="no" />
     </LinearLayout>
   </FrameLayout>
 </FrameLayout>

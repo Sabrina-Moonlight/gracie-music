@@ -1420,6 +1420,7 @@ private fun OgRtlExpressiveWordAnimation(
                         unlitColor = clusterUnlitColor,
                         wipe = wipeScratch,
                         shadow = LyricsClearShadow,
+                        instantWholeWord = true,
                     )
                 }
             }

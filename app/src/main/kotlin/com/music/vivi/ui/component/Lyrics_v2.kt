@@ -654,7 +654,8 @@ fun LyricsV2(
                     label = "lyricContentAlpha"
                 )
 
-                LaunchedEffect(showLyrics, lyrics, mergedLyricsList.size) {
+                // Se repite al cambiar la lista (no solo su tamaño): si no, tras cambiar el interruptor de sílabas la letra queda transparente
+                LaunchedEffect(showLyrics, lyrics, mergedLyricsList) {
                     if (showLyrics && mergedLyricsList.isNotEmpty()) {
                         isInitialLayout = true
                         snapshotFlow {

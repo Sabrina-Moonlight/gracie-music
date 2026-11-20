@@ -79,7 +79,7 @@ internal fun AppleWordAnimation(
     val currentPositionProvider by rememberUpdatedState(positionProvider)
     val density = LocalDensity.current
     val fontSizePx = remember(lyricStyle) { with(density) { lyricStyle.fontSize.toPx() } }
-    val gradientWidth = fontSizePx * 1f
+    val gradientWidth = fontSizePx * 0.6f
     val elevationAmount = fontSizePx * 0.05f
     val extraPaddingPx = minOf(fontSizePx * 0.4f, with(density) { LYRICS_LINE_HORIZONTAL_PADDING.toPx() })
 
@@ -991,6 +991,7 @@ internal fun AppleWordAnimation(
                                     unlitColor = unlitColor,
                                     wipe = wipeScratch,
                                     shadow = LyricsClearShadow,
+                                    instantWholeWord = true,
                                 )
                             }
                         }
@@ -1023,6 +1024,7 @@ internal fun AppleWordAnimation(
                                 unlitColor = unlitColor,
                                 wipe = wipeScratch,
                                 shadow = LyricsClearShadow,
+                                instantWholeWord = true,
                             )
                         }
                     }
@@ -1055,6 +1057,7 @@ internal fun AppleWordAnimation(
                                 activeSylProgress = activeSylProgress,
                                 gradientWidth = gradientWidth,
                                 out = wipeScratch,
+                                instantWholeWord = true,
                             )
                             when (wipeScratch.mode) {
                                 WIPE_PAST -> {
