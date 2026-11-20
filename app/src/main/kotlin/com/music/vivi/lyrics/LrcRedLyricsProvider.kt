@@ -199,7 +199,7 @@ object LrcRedLyricsProvider : LyricsProvider {
     ): Result<String> = runCatching {
         fetchFromApi(title, artist, duration, album)?.let { return@runCatching it }
 
-        val cleanTitle = cleanVideoTitle(title)
+        val cleanTitle = cleanVideoTitle(TitleVersionTag.strip(title))
         if (cleanTitle != title || duration > 0) {
             fetchFromApi(cleanTitle, artist, 0, album)?.let { return@runCatching it }
         }
@@ -244,7 +244,7 @@ object LrcRedLyricsProvider : LyricsProvider {
 
     private fun cleanBaseTitle(str: String?): String {
         if (str.isNullOrBlank()) return ""
-        var s = str.lowercase()
+        var s = TitleVersionTag.strip(str).lowercase()
         s = s.replace(BRACKETED_FEAT, "")
         s = s.replace(TRAILING_FEAT, "")
         s = s.replace(BRACKETED_MEDIA_TAGS, "")

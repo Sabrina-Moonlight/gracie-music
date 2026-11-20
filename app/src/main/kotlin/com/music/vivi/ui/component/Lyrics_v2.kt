@@ -534,7 +534,7 @@ fun LyricsV2(
                 val initialPos = remember { positionProvider() }
                 val initialActiveLine = remember(lines, initialPos, lyricsOffset) {
                     if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset, lyricsByRealTiming).maxOrNull() ?: 0
+                        LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset, lyricsByRealTiming).let { set -> set.filter { lines.getOrNull(it)?.isBackground == false }.maxOrNull() ?: set.maxOrNull() } ?: 0
                     } else 0
                 }
                 var currentPlaybackPosition by remember { mutableLongStateOf(initialPos) }
@@ -689,7 +689,7 @@ fun LyricsV2(
                     isAutoScrollEnabled = scrollLyrics
                     val pos = positionProvider()
                     val active = if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset, lyricsByRealTiming).maxOrNull()
+                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset, lyricsByRealTiming).let { set -> set.filter { lines.getOrNull(it)?.isBackground == false }.maxOrNull() ?: set.maxOrNull() }
                             // Hueco sin nada sonando: partir de la última línea ya cantada, no del inicio.
                             ?: lines.indices.lastOrNull {
                                 !lines[it].isBackground && lines[it].time <= pos + lyricsOffset

@@ -51,6 +51,18 @@ object BiniLyricsProvider : LyricsProvider {
         artist: String,
         duration: Int,
         album: String?,
+    ): Result<String> {
+        val first = fetchLyrics(title, artist, duration)
+        if (first.isSuccess) return first
+        // "(Taylor's Version)" y similares: se vuelve a buscar sin la etiqueta
+        val stripped = TitleVersionTag.strip(title)
+        return if (stripped.isNotBlank() && stripped != title) fetchLyrics(stripped, artist, duration) else first
+    }
+
+    private suspend fun fetchLyrics(
+        title: String,
+        artist: String,
+        duration: Int,
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val url = "$BASE_URL/getLyrics".toHttpUrlOrNull()?.newBuilder()

@@ -142,16 +142,14 @@ object LyricsSyllables {
         }
         val totalWeight = weights.sum().toDouble()
 
-        // Palabra muy alargada ("rumbleeee"): las primeras sílabas duran lo normal y la última
-        // se lleva el resto, porque el cantante dice la palabra y sostiene el final.
-        val natural = totalWeight * NATURAL_SECONDS_PER_LETTER
-        val held = duration > natural * HELD_FACTOR
-
+        // Palabra alargada ("rumbleeee"): cada sílaba de antes dura como mucho MAX_SECONDS_PER_LETTER
+        // por letra y la última se lleva el resto, porque el cantante sostiene el final.
+        // Es un tope suave: en palabras normales no cambia nada (reparto por tamaño).
         val result = ArrayList<WordTimestamp>(weights.size)
         var t = word.startTime
         for (k in 0 until bounds.size - 1) {
             val isLastPiece = k == bounds.size - 2
-            val share = if (held) natural * weights[k] / totalWeight else duration * weights[k] / totalWeight
+            val share = minOf(duration * weights[k] / totalWeight, weights[k] * MAX_SECONDS_PER_LETTER)
             val pieceEnd = if (isLastPiece) word.endTime else t + share
             result.add(
                 word.copy(
@@ -166,8 +164,7 @@ object LyricsSyllables {
         return result
     }
 
-    private const val NATURAL_SECONDS_PER_LETTER = 0.07
-    private const val HELD_FACTOR = 1.0
+    private const val MAX_SECONDS_PER_LETTER = 0.12
 
     private fun isAllowedChar(c: Char): Boolean =
         c in 'a'..'z' || c in 'A'..'Z' || c in "áéíóúüñÁÉÍÓÚÜÑ" || c == '\'' || c == '’'
@@ -226,6 +223,19 @@ object LyricsSyllables {
                 }
                 val inner = syllableCuts(core.substring(0, cut), false)
                 return (inner + cut).filter { it in 1 until n }.distinct().sorted()
+            }
+        }
+
+        // Terminaciones que se leen aparte (time-less, dark-ness, care-ful, heart-ache, pay-ment)
+        if (!es) {
+            for (suf in SUFFIXES) {
+                if (w.length - suf.length >= 2 && w.endsWith(suf)) {
+                    val stemLen = w.length - suf.length
+                    if (w.substring(0, stemLen).any { it in EN_VOWELS }) {
+                        val inner = syllableCuts(core.substring(0, stemLen), false)
+                        return (inner + stemLen).filter { it in 1 until n }.distinct().sorted()
+                    }
+                }
             }
         }
 
@@ -366,6 +376,8 @@ object LyricsSyllables {
         "saeculorum" to "sae-cu-lo-rum", "saecula" to "sae-cu-la", "satanás" to "sa-ta-nás",
         "satan" to "sa-tan", "archangelo" to "arch-an-ge-lo",
     )
+
+    private val SUFFIXES = listOf("less", "ness", "ment", "ful", "ache")
 
     private val ING_REGEX = Regex("^(.*[aeiouy].*?)(ing|in')$")
 }
