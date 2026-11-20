@@ -24,7 +24,7 @@ Ella tiene pocos tokens por conversación. Lo peor que puede pasar es que te que
 
 ### Lista de pendientes (to-do)
 - Se entrega como **archivo suelto en el chat**, en cada entrega. **Nunca dentro del ZIP.**
-- Nombre: `gracie-APP-lista-descripcion.md`, con el mismo `APP` y la misma `descripcion` que el ZIP de esa entrega, o sea, lo que se está haciendo (por ejemplo `gracie-music-lista-widget-notificacion.md`). Sin `vNN`. Así cada app y cada trabajo tiene su propia lista. Si ella ya usa un archivo de plan, como `PLAN_GRACIE.md`, actualiza ese.
+- Nombre: `gracie-APP-vNN-lista-descripcion.md`, con el mismo `APP`, la misma `descripcion` y el mismo `vNN` (dos dígitos) que el ZIP de esa entrega. Por ejemplo, si el ZIP es `gracie-music-v03-feat-widget-notificacion.zip`, la lista es `gracie-music-v03-lista-widget-notificacion.md`. El número va **justo después de `APP`**, igual que en el ZIP. Así cada entrega trae su lista con su versión y no se pisan. Si ella ya usa un archivo de plan, como `PLAN_GRACIE.md`, actualiza ese.
 - Contenido, corto y fácil de pegar en un chat nuevo:
   - **Hecho:** lo ya entregado, con el nombre del ZIP.
   - **Pendiente:** lo que falta, en el orden en que lo harás.
@@ -44,7 +44,7 @@ Ella tiene pocos tokens por conversación. Lo peor que puede pasar es que te que
 - Ya conoce lo básico de GitHub (subir archivos, ejecutar workflows, fusionar pull requests). No se lo expliques. Si debe hacer algo nuevo a mano, dale los pasos exactos, uno por uno.
 - Tú modificas el código y las aplicaciones. Tienes **permiso total** para leer, crear, modificar y borrar archivos del proyecto (menos estos archivos de reglas). No preguntes "¿puedo hacer X?": hazlo y explica después.
 - Ella es la tester: sube, compila, prueba y te cuenta. No tienes acceso a su GitHub. Nunca digas "no puedo compilar ni probar": entrega y espera su resultado.
-- Cada chat empieza sin memoria. Este archivo y la lista (`gracie-APP-lista-descripcion.md`) son la memoria.
+- Cada chat empieza sin memoria. Este archivo y la lista (`gracie-APP-vNN-lista-descripcion.md`) son la memoria.
 
 ## El proyecto
 Trabaja con el código del proyecto que tienes delante. No supongas carpetas, nombres, paquetes ni librerías: compruébalos en el código. Si algo no está, dilo.
@@ -77,7 +77,7 @@ Si en un mismo chat haces varias entregas, un ZIP por entrega, numerados en orde
 
 **Fuera del ZIP (archivos sueltos en el chat):**
 - Todo lo de `.github/` (workflows): dile la ruta exacta para que lo edite a mano en GitHub.
-- La lista (`gracie-APP-lista-descripcion.md`) o plan, en cada entrega.
+- La lista (`gracie-APP-vNN-lista-descripcion.md`) o plan, en cada entrega.
 
 **En el chat:** una línea por archivo con lo que cambió y una línea de qué probar. Nada más.
 
@@ -96,7 +96,7 @@ Corta y directa, sin relleno ni halagos: qué hiciste, qué subir, qué probar, 
 - ¿Hice solo una parte, pequeña, y no todo a la vez?
 - ¿Toqué solo lo pedido (o todo lo necesario si era arreglar)?
 - ¿El ZIP cumple la sección «Entrega» y tiene progreso?
-- ¿Va la lista con nombre `gracie-APP-lista-descripcion.md` suelto, actualizado, sin que ella lo pidiera?
+- ¿Va la lista con nombre `gracie-APP-vNN-lista-descripcion.md` suelto, actualizado, sin que ella lo pidiera?
 - ¿No toqué `claude.md` ni `grok.md`?
 
 Si incumpliste algo, dilo en una línea y corrígelo.
