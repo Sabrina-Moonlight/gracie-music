@@ -301,7 +301,12 @@ object LyricsSyllables {
 
     private val EN_DIGRAPHS = listOf("tch", "sh", "ch", "th", "ph", "wh", "ck", "ng", "gh", "qu")
     private val ES_DIGRAPHS = listOf("ch", "ll", "rr", "qu", "gu")
-    private val CODA_UNITS = setOf("ck", "ng", "tch")
+    private val CODA_UNITS = setOf("ck", "ng", "tch", "x")
+    /** Palabras con "-nger" donde la "g" se queda con la sílaba de antes (long-er, sing-er). */
+    private val KEEP_NG = setOf(
+        "longest", "strongest", "youngest", "longer", "stronger", "younger", "singer", "singers", "ringer",
+        "bringer", "hanger", "hangers", "banger", "slinger", "stinger", "swinger",
+    )
     private val ONSET_PAIRS = setOf(
         "cl", "cr", "pl", "pr", "bl", "br", "tr", "dr", "gl", "gr", "fl", "fr", "kl", "kr", "tw", "sw",
         "thr", "shr",
@@ -342,13 +347,24 @@ object LyricsSyllables {
             }
         }
 
+        // "-yer" tras a/o/u: play-er, buy-er, lay-er (no pray-er: se canta de las dos formas)
+        if (!es && n >= 5 && w.endsWith("yer") && w[n - 4] in "aou" && w != "prayer") {
+            val inner = syllableCuts(core.substring(0, n - 2), false)
+            return (inner + (n - 2)).filter { it in 1 until n }.distinct().sorted()
+        }
+
         // Terminación "ing" / "in'" como sílaba aparte (walk-ing, run-ning, no-thing, be-co-ming)
         if (!es) {
             val m = ING_REGEX.matchEntire(w)
             if (m != null) {
                 val stem = m.groupValues[1]
                 var cut = stem.length
-                if (stem.length >= 2 && stem[stem.length - 1] == stem[stem.length - 2] &&
+                if (stem.length >= 3 && stem.endsWith("l") && stem[stem.length - 2] in "bcdfgkpt" &&
+                    stem.substring(0, stem.length - 2).any { it in EN_VOWELS }
+                ) {
+                    // crum-bling, strug-gling, whis-tling: consonante + "l" se van con "ing"
+                    cut = stem.length - 2
+                } else if (stem.length >= 2 && stem[stem.length - 1] == stem[stem.length - 2] &&
                     stem[stem.length - 1].isLetter() && stem[stem.length - 1] !in "aeiouylsz"
                 ) {
                     cut = stem.length - 1
@@ -468,7 +484,8 @@ object LyricsSyllables {
             // "-es" mudo: makes, loves, clothes, breathes (pero kis-ses, wan-ces, wish-es, watch-es)
             val last = groups[groups.size - 1]
             if (last[1] == n - 1 && last[0] == n - 2 && n >= 3 && !isVowel[n - 3] &&
-                w[n - 3] !in "sxzcg" && (!w.endsWith("hes") || w.endsWith("thes"))
+                w[n - 3] !in "sxzcg" && (!w.endsWith("hes") || w.endsWith("thes")) &&
+                !(w[n - 3] == 'l' && n >= 4 && w[n - 4] !in EN_VOWELS && w[n - 4] != 'l')
             ) {
                 groups.removeAt(groups.size - 1)
             }
@@ -476,7 +493,9 @@ object LyricsSyllables {
         if (!es && groups.size > 1 && w.endsWith("ed") && w !in ED_SOUNDED) {
             // "-ed" mudo: walked (pero wan-ted)
             val last = groups[groups.size - 1]
-            if (last[1] == n - 1 && last[0] == n - 2 && n >= 3 && !isVowel[n - 3] && w[n - 3] !in "td") {
+            if (last[1] == n - 1 && last[0] == n - 2 && n >= 3 && !isVowel[n - 3] && w[n - 3] !in "td" &&
+                !(w[n - 3] == 'l' && n >= 4 && w[n - 4] !in EN_VOWELS && w[n - 4] != 'l')
+            ) {
                 groups.removeAt(groups.size - 1)
             }
         }
@@ -522,12 +541,24 @@ object LyricsSyllables {
                 continue
             }
             // "pock-et", "sing-er": ck / ng pegadas a la sílaba de antes
+            // "an-gry", "fin-ger", "dan-ger", "lan-guage": la "g" va con la sílaba que sigue
+            if (!es && units.size == 1 && units[0] == "ng" && w !in KEEP_NG) {
+                cuts.add(b - 1)
+                continue
+            }
             if (!es && units.size == 1 && units[0] in CODA_UNITS) {
                 cuts.add(b)
                 continue
             }
+            // "sin-gle", "an-gry", "con-gre-ga-tion"
+            if (!es && units.size == 2 && units[0] == "ng" && (units[1] == "l" || units[1] == "r")) {
+                cuts.add(b - 2)
+                continue
+            }
             val isLastGroup = gi + 1 == groups.size - 1
-            val finalLe = !es && isLastGroup && w.endsWith("le") && groups[groups.size - 1][0] == n - 1
+            val lastG = groups[groups.size - 1]
+            val finalLe = !es && isLastGroup &&
+                ((w.endsWith("le") && lastG[0] == n - 1) || (w.endsWith("les") && lastG[0] == n - 2 && lastG[1] == n - 1))
             if (finalLe) {
                 // "ta-ble", "lit-tle", "sim-ple": la consonante de antes de "le" va con "le"
                 val beforeL = if (units.size >= 2) units[units.size - 2] else ""
@@ -588,18 +619,19 @@ object LyricsSyllables {
 
     /** Cortes a mano: solo lo que no tiene regla. Palabra en minúscula -> sílabas separadas por guiones. */
     private val EXCEPTIONS = mapOf(
-        "ever" to "ev-er", "every" to "ev-ery",
+        "ever" to "ev-er", "every" to "ev-ery", "crooked" to "crook-ed", "beware" to "be-ware",
+        "lightning" to "light-ning",
     )
 
     private val COMPOUND_HEADS = listOf(
-        "week", "life", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire",
+        "week", "life", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire", "drive",
     )
     private val COMPOUND_TAILS = setOf(
         "one", "body", "thing", "where", "more", "time", "times", "day", "ever", "how", "way",
         "fly", "what", "work", "works", "long", "line", "lines", "end", "ends", "days", "night", "nights", "ly",
     )
 
-    private val SUFFIXES = listOf("less", "ness", "ment", "ful", "ache")
+    private val SUFFIXES = listOf("less", "ness", "ment", "ful", "ache", "some", "room")
 
     private val ING_REGEX = Regex("^(.*[aeiouy].*?)(ing|in')$")
     private val WITH_PREFIX_REGEX = Regex("^with(out|in|draw|hold|stand)")
