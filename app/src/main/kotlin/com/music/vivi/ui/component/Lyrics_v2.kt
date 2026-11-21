@@ -136,6 +136,32 @@ private fun String.isInstrumentalPlaceholder(): Boolean {
     return trimmed.isEmpty() || INSTRUMENTAL_REGEX.matches(trimmed)
 }
 
+/**
+ * Línea que debe mostrar la pantalla en un instante. Si hay una línea sonando, la principal de
+ * mayor número. En un hueco sin cantar: la más cercana entre la anterior ya terminada y la
+ * siguiente por cantar. Nunca devuelve la 0 solo por estar en un hueco.
+ */
+private fun lineForPosition(lines: List<LyricsEntry>, effectivePos: Long, byRealTiming: Boolean): Int {
+    if (lines.isEmpty()) return 0
+    val active = LyricsUtils.findActiveLineIndices(lines, effectivePos, byRealTiming)
+    val activeMain = active.filter { lines.getOrNull(it)?.isBackground == false }.maxOrNull() ?: active.maxOrNull()
+    if (activeMain != null) return activeMain
+    val before = lines.indices.lastOrNull { !lines[it].isBackground && lines[it].time <= effectivePos } ?: -1
+    val next = (0 until lines.size).firstOrNull { i ->
+        val l = lines[i]
+        l.time > effectivePos && !l.isBackground && l.text.isNotBlank() && !l.text.isInstrumentalPlaceholder()
+    }
+    return when {
+        before == -1 -> next ?: 0
+        next == null -> before
+        else -> {
+            val b = lines[before]
+            val beforeEnd = b.words?.lastOrNull()?.let { (it.endTime * 1000).toLong() } ?: b.time
+            if (effectivePos - beforeEnd <= lines[next].time - effectivePos) before else next
+        }
+    }
+}
+
 sealed class LyricsListItemV2 {
     data class Line(val index: Int, val entry: LyricsEntry) : LyricsListItemV2()
     data class Indicator(
@@ -533,9 +559,7 @@ fun LyricsV2(
 
                 val initialPos = remember { positionProvider() }
                 val initialActiveLine = remember(lines, initialPos, lyricsOffset) {
-                    if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, initialPos + lyricsOffset, lyricsByRealTiming).let { set -> set.filter { lines.getOrNull(it)?.isBackground == false }.maxOrNull() ?: set.maxOrNull() } ?: 0
-                    } else 0
+                    lineForPosition(lines, initialPos + lyricsOffset, lyricsByRealTiming)
                 }
                 var currentPlaybackPosition by remember { mutableLongStateOf(initialPos) }
                 var currentLineIndex by remember { mutableIntStateOf(initialActiveLine) }
@@ -689,13 +713,7 @@ fun LyricsV2(
                 LaunchedEffect(lyrics, lines) {
                     isAutoScrollEnabled = scrollLyrics
                     val pos = positionProvider()
-                    val active = if (lines.isNotEmpty()) {
-                        LyricsUtils.findActiveLineIndices(lines, pos + lyricsOffset, lyricsByRealTiming).let { set -> set.filter { lines.getOrNull(it)?.isBackground == false }.maxOrNull() ?: set.maxOrNull() }
-                            // Hueco sin nada sonando: partir de la última línea ya cantada, no del inicio.
-                            ?: lines.indices.lastOrNull {
-                                !lines[it].isBackground && lines[it].time <= pos + lyricsOffset
-                            } ?: 0
-                    } else 0
+                    val active = lineForPosition(lines, pos + lyricsOffset, lyricsByRealTiming)
                     scrollTargetIndex = active
                     currentLineIndex = active
                     deferredCurrentLineIndex = active
@@ -715,6 +733,22 @@ fun LyricsV2(
                     var lastPlaybackPosition = lastPlayerPos
                     val hasWordTimings = lines.any { !it.words.isNullOrEmpty() }
 
+                    // Puerta de audio: tras un salto (barra soltada, anterior/siguiente, cambio de
+                    // posición) la letra se queda en el punto elegido y NO avanza hasta que el audio
+                    // suene de verdad. Así no corre sola mientras la canción carga.
+                    val statePlayer = playerConnection.player
+                    var gateActive = statePlayer.playWhenReady &&
+                        statePlayer.playbackState != androidx.media3.common.Player.STATE_READY
+                    var gateFromSlider = false
+                    var gateTarget = lastPlayerPos
+                    var gateRef = lastPlayerPos
+                    var gateSince = lastUpdateTime
+                    var prevSliderPos: Long? = null
+                    var obsPos = lastPlayerPos
+                    var obsTime = lastUpdateTime
+                    var obsPlaying = statePlayer.isPlaying
+                    var obsMediaId = statePlayer.currentMediaItem?.mediaId
+
                     while (isActive) {
                         withFrameNanos { _ -> }
                         val now = System.currentTimeMillis()
@@ -731,6 +765,10 @@ fun LyricsV2(
                                 awaitingSeekSince = 0L
                                 lastPlayerPos = p.currentPosition
                                 lastUpdateTime = now
+                                obsPos = p.currentPosition
+                                obsTime = now
+                                obsPlaying = p.isPlaying
+                                obsMediaId = p.currentMediaItem?.mediaId
                             } else {
                                 activeLineIndices = emptySet()
                                 continue
@@ -740,8 +778,54 @@ fun LyricsV2(
                         val sliderPos = sliderPositionProvider()
                         isSeeking = sliderPos != null
 
+                        val gp = playerConnection.player
+                        val gpPos = gp.currentPosition
+                        val gpMediaId = gp.currentMediaItem?.mediaId
+                        // Barra soltada: ir al punto elegido al instante y esperar el audio.
+                        if (prevSliderPos != null && sliderPos == null) {
+                            gateActive = true
+                            gateFromSlider = true
+                            gateTarget = prevSliderPos!!
+                            gateRef = gpPos
+                            gateSince = now
+                        }
+                        prevSliderPos = sliderPos
+                        // Otro salto (anterior/siguiente, notificación, etc.).
+                        if (!gateActive && sliderPos == null) {
+                            val expected = obsPos + (if (obsPlaying) now - obsTime else 0L)
+                            if (gpMediaId != obsMediaId || kotlin.math.abs(gpPos - expected) > 1500L) {
+                                gateActive = true
+                                gateFromSlider = false
+                                gateTarget = gpPos
+                                gateRef = gpPos
+                                gateSince = now
+                            }
+                        }
+                        obsPos = gpPos
+                        obsTime = now
+                        obsPlaying = gp.isPlaying
+                        obsMediaId = gpMediaId
+                        if (gateActive) {
+                            val ready = gp.playbackState == androidx.media3.common.Player.STATE_READY
+                            if (!gp.isPlaying || !ready || gpPos < gateRef || gpPos - gateRef > 1200L) {
+                                // Sigue cargando o hubo otro salto: volver a medir desde aquí.
+                                gateRef = gpPos
+                                if (!gateFromSlider) gateTarget = gpPos
+                            }
+                            val soundAdvancing = gp.isPlaying && ready && gpPos - gateRef >= 150L
+                            val pausedAndSettled = !gp.playWhenReady &&
+                                (!gateFromSlider || kotlin.math.abs(gpPos - gateTarget) < 600L || now - gateSince > 1000L)
+                            if (soundAdvancing || pausedAndSettled || now - gateSince > 4000L) {
+                                gateActive = false
+                                lastPlayerPos = gpPos
+                                lastUpdateTime = now
+                            }
+                        }
+
                         val position = if (isSeeking) {
                             sliderPos!!
+                        } else if (gateActive) {
+                            gateTarget
                         } else {
                             val providerPos = positionProvider()
                             val playerPos = playerConnection.player.currentPosition
@@ -803,22 +887,23 @@ fun LyricsV2(
                             .maxOrNull() ?: (scrollActiveIndices.maxOrNull() ?: -1)
 
                         // Detect seek backwards or slider scrub
-                        val isBackwardSeek = position < lastPlaybackPosition - 1500L
+                        // Cualquier salto (atrás o adelante, anterior/siguiente, volver de segundo plano).
+                        val isBackwardSeek = kotlin.math.abs(position - lastPlaybackPosition) > 1500L
                         if (isSeeking || isBackwardSeek) {
                             lastMainMaxSeen = scrollMax
                             if (scrollMax != -1) {
                                 scrollTargetIndex = scrollMax
                                 deferredCurrentLineIndex = scrollMax
                             } else {
-                                // Nada suena en ese punto (p. ej. al repetir la canción, antes de la
-                                // primera voz, o un salto a un hueco): se vuelve a la línea anterior
-                                // a ese instante, o al estado inicial si aún no empezó la letra.
+                                // Nada suena en ese punto (hueco sin cantar): se va a la línea más
+                                // cercana, la anterior ya terminada o la siguiente por cantar.
+                                val near = lineForPosition(lines, effectivePosition, lyricsByRealTiming)
                                 val before = lines.indices.lastOrNull {
                                     !lines[it].isBackground && lines[it].time <= effectivePosition
                                 } ?: -1
                                 lastMainMaxSeen = before
-                                scrollTargetIndex = before
-                                deferredCurrentLineIndex = before
+                                scrollTargetIndex = near
+                                deferredCurrentLineIndex = near
                                 previousScrollActiveIndices = emptySet()
                             }
                         }
@@ -1008,6 +1093,10 @@ fun LyricsV2(
 
                     val scrollClampMax = (topPad - anchorY - firstPos).coerceAtLeast(0f)
                     val scrollClampMin = (maxHeightPx - botPad - anchorY - lastPos).coerceAtMost(0f)
+                    // El gesto (pointerInput(Unit)) se crea una sola vez: sin esto se quedaba con los
+                    // límites del primer cálculo (0 al abrir) y no dejaba subir a las líneas anteriores.
+                    val clampMinNow by rememberUpdatedState(scrollClampMin)
+                    val clampMaxNow by rememberUpdatedState(scrollClampMax)
 
 
                     LaunchedEffect(scrollClampMin, scrollClampMax) {
@@ -1065,16 +1154,16 @@ fun LyricsV2(
                                             velocityTracker.addPosition(change.uptimeMillis, change.position)
 
                                             val newOffset = userManualOffset + dragAmount
-                                            if (newOffset in scrollClampMin..scrollClampMax) {
+                                            if (newOffset in clampMinNow..clampMaxNow) {
                                                 userManualOffset = newOffset
                                                 dragConsumed = true
                                                 change.consume()
                                             } else {
-                                                val overscroll = if (newOffset < scrollClampMin) newOffset - scrollClampMin else newOffset - scrollClampMax
+                                                val overscroll = if (newOffset < clampMinNow) newOffset - clampMinNow else newOffset - clampMaxNow
                                                 val friction = 0.35f / (1f + kotlin.math.abs(overscroll) / 300f)
                                                 userManualOffset = (userManualOffset + dragAmount * friction).coerceIn(
-                                                    scrollClampMin - 150f,
-                                                    scrollClampMax + 150f
+                                                    clampMinNow - 150f,
+                                                    clampMaxNow + 150f
                                                 )
                                                 change.consume()
                                             }
@@ -1103,10 +1192,10 @@ fun LyricsV2(
                                                     initialVelocity = velocity
                                                 )
                                                 animState.animateDecay(decayAnimSpec) {
-                                                    if (!isAutoScrollEnabled && value in scrollClampMin..scrollClampMax) {
+                                                    if (!isAutoScrollEnabled && value in clampMinNow..clampMaxNow) {
                                                         userManualOffset = value
                                                     } else if (!isAutoScrollEnabled) {
-                                                        val target = value.coerceIn(scrollClampMin, scrollClampMax)
+                                                        val target = value.coerceIn(clampMinNow, clampMaxNow)
                                                         cancelAnimation()
                                                         launch {
                                                             Animatable(userManualOffset).animateTo(
@@ -1125,8 +1214,8 @@ fun LyricsV2(
                                                 }
                                             }
                                         } else {
-                                            if (userManualOffset < scrollClampMin || userManualOffset > scrollClampMax) {
-                                                val target = userManualOffset.coerceIn(scrollClampMin, scrollClampMax)
+                                            if (userManualOffset < clampMinNow || userManualOffset > clampMaxNow) {
+                                                val target = userManualOffset.coerceIn(clampMinNow, clampMaxNow)
                                                 flingJob = launch {
                                                     androidx.compose.animation.core.Animatable(userManualOffset).animateTo(
                                                         targetValue = target,

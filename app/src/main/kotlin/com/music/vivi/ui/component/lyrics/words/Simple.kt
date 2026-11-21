@@ -296,7 +296,7 @@ internal fun SimpleWordAnimation(
                 } else {
                     activeInfo?.lineIdx ?: -1
                 }
-            val isActiveSylLastOfLine = if (isFinishing) true else (activeInfo?.isLastOfLine ?: false)
+            val isActiveSylLastOfLine = if (isFinishing) true else (activeInfo?.let { it.isLastOfLine || it.isLastOfWord } ?: false)
             val activeSylProgress =
                 if (isFinishing) {
                     finishingSylProgress(curGX, wipeLineIdx, lineStarts, lineWidths, animState)
@@ -346,6 +346,7 @@ internal fun SimpleWordAnimation(
                         unlitColor = unlitColor,
                         wipe = wipeScratch,
                         shadow = clearShadow,
+                        instantWholeWord = true,
                     )
                 }
             }

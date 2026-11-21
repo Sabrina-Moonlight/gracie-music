@@ -318,19 +318,45 @@ internal fun ExpressiveWordAnimation(
         remember(effectiveWords) {
             LongArray(effectiveWords.size) { (effectiveWords[it].endTime * 1000).toLong() }
         }
-    val effWordImpactBase =
+    // Sílabas de una misma palabra (sin espacio entre ellas) comparten el brillo: se enciende y se
+    // apaga junto con la palabra entera, con el mismo apagado suave que una palabra sin partir.
+    val effWordGlow =
         remember(effectiveWords) {
-            FloatArray(effectiveWords.size) { wIdx ->
-                val word = effectiveWords[wIdx]
-                val dur = ((word.endTime - word.startTime) * 1000.0).toFloat()
-                val wordLenText = word.text.length.coerceAtLeast(1)
-                val impactRatio = dur / wordLenText
-                (
-                    ((impactRatio - 100f) / 250f).coerceIn(0f, 1f) * 0.6f +
-                        ((dur - 300f) / 1500f).coerceIn(0f, 1f) * 0.4f
-                ).coerceIn(0f, 1f)
+            val n = effectiveWords.size
+            val impactArr = FloatArray(n)
+            val endArr = LongArray(n) { (effectiveWords[it].endTime * 1000).toLong() }
+            fun impactOf(durMs: Float, len: Int): Float {
+                val ratio = durMs / len.coerceAtLeast(1)
+                return (
+                    ((ratio - 100f) / 250f).coerceIn(0f, 1f) * 0.6f +
+                        ((durMs - 300f) / 1500f).coerceIn(0f, 1f) * 0.4f
+                    ).coerceIn(0f, 1f)
             }
+            var i = 0
+            while (i < n) {
+                var j = i
+                while (j < n - 1 && !effectiveWords[j].hasTrailingSpace && !effectiveWords[j].text.contains('-')) j++
+                if (j > i && !effectiveWords[j].text.contains('-')) {
+                    val gDur = ((effectiveWords[j].endTime - effectiveWords[i].startTime) * 1000.0).toFloat()
+                    var gLen = 0
+                    for (k in i..j) gLen += effectiveWords[k].text.length
+                    val impact = impactOf(gDur, gLen)
+                    val gEnd = (effectiveWords[j].endTime * 1000).toLong()
+                    for (k in i..j) {
+                        impactArr[k] = impact
+                        endArr[k] = gEnd
+                    }
+                } else {
+                    val w = effectiveWords[i]
+                    impactArr[i] = impactOf(((w.endTime - w.startTime) * 1000.0).toFloat(), w.text.length)
+                    j = i
+                }
+                i = j + 1
+            }
+            impactArr to endArr
         }
+    val effWordImpactBase = effWordGlow.first
+    val effWordGlowEndMs = effWordGlow.second
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val widthPx = constraints.maxWidth
@@ -742,8 +768,18 @@ internal fun ExpressiveWordAnimation(
                         else -> SolidColor(expressiveAccent.copy(alpha = baseAlpha))
                     }
 
-                if (!isSung && factor > 0.001f) {
-                    val fadeFactor = (factor * 5f).coerceIn(0f, 1f) * ((1f - factor) * 8f).coerceIn(0f, 1f)
+                val glowEndMs = effWordGlowEndMs[wIdx]
+                val glowAnimEndMs = wStartMs + lyricsWordAnimationDurationMs(glowEndMs - wStartMs)
+                val glowFactor =
+                    if (smoothPosition > glowAnimEndMs) {
+                        1f
+                    } else if (smoothPosition >= wStartMs) {
+                        lyricsWordAnimationProgress(smoothPosition, wStartMs, glowAnimEndMs)
+                    } else {
+                        0f
+                    }
+                if (glowFactor < 1f && glowFactor > 0.001f) {
+                    val fadeFactor = (glowFactor * 5f).coerceIn(0f, 1f) * ((1f - glowFactor) * 8f).coerceIn(0f, 1f)
                     val impactFactor = effWordImpactBase[wIdx] * fadeFactor
                     wordGlowAlphas[wIdx] = if (impactFactor > 0.01f) (impactFactor * 0.6f).coerceIn(0f, 0.6f) else 0f
                 } else {

@@ -27,6 +27,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -76,6 +79,67 @@ constructor(
     private val helperScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val activeFetches = mutableMapOf<String, Deferred<LyricsWithProvider>>()
     private val fetchesMutex = Mutex()
+
+    private val _cacheClearCount = MutableStateFlow(0)
+
+    /** Sube cada vez que se borra el caché de letras; la precarga lo escucha para volver a buscar. */
+    val cacheClearCount: StateFlow<Int> = _cacheClearCount.asStateFlow()
+
+    /** Vacía el caché en memoria y olvida las búsquedas en curso, para que se busque de nuevo. */
+    suspend fun clearCache() {
+        cache.evictAll()
+        fetchesMutex.withLock { activeFetches.clear() }
+        _cacheClearCount.value = _cacheClearCount.value + 1
+    }
+
+    /**
+     * Para la precarga en segundo plano: prueba los proveedores UNO A UNO, en el orden que la
+     * persona configuró, y se queda con la primera letra que encuentre. No compara ni elige por
+     * tipo de sincronía ni por quién conteste antes (eso lo hace [getLyrics]).
+     */
+    suspend fun getLyricsInProviderOrder(mediaMetadata: MediaMetadata): LyricsWithProvider {
+        cache.get(mediaMetadata.id)?.firstOrNull()?.let {
+            return LyricsWithProvider(it.lyrics, it.providerName)
+        }
+        val isNetworkAvailable = try {
+            networkConnectivity.isCurrentlyConnected()
+        } catch (e: Exception) {
+            true
+        }
+        if (!isNetworkAvailable) return LyricsWithProvider(LYRICS_NOT_FOUND, "Unknown")
+
+        for (provider in resolveLyricsProviders()) {
+            val needsVideoId = provider === YouTubeLyricsProvider ||
+                provider === YouTubeSubtitleLyricsProvider
+            if (!provider.isEnabled(context) || (needsVideoId && mediaMetadata.id.isLocalMediaId())) continue
+            val found = try {
+                withTimeoutOrNull(
+                    if (provider === YouLyPlusLyricsProvider) YOULYPLUS_FETCH_TIMEOUT_MS
+                    else PROVIDER_FETCH_TIMEOUT_MS
+                ) {
+                    provider.getLyrics(
+                        mediaMetadata.id,
+                        mediaMetadata.title,
+                        mediaMetadata.artists.joinToString { it.name },
+                        mediaMetadata.duration,
+                        mediaMetadata.album?.title,
+                    ).onFailure { reportException(it) }
+                        .getOrNull()
+                        ?.takeIf { it.isNotBlank() && it != LYRICS_NOT_FOUND }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                reportException(e)
+                null
+            }
+            if (found != null) {
+                cache.put(mediaMetadata.id, listOf(LyricsResult(provider.name, found)))
+                return LyricsWithProvider(found, provider.name)
+            }
+        }
+        return LyricsWithProvider(LYRICS_NOT_FOUND, "Unknown")
+    }
 
     suspend fun getLyrics(mediaMetadata: MediaMetadata): LyricsWithProvider {
         // No cancelamos currentLyricsJob aquí: ese trabajo es la búsqueda manual de letras,

@@ -209,6 +209,14 @@ fun StorageSettings(
             onConfirm = {
                 coroutineScope.launch(Dispatchers.IO) {
                     database.query { clearAllLyrics() }
+                    try {
+                        dagger.hilt.android.EntryPointAccessors.fromApplication(
+                            context.applicationContext,
+                            com.music.vivi.di.LyricsHelperEntryPoint::class.java
+                        ).lyricsHelper().clearCache()
+                    } catch (e: Exception) {
+                        // Si falla, la base de datos ya quedó vacía.
+                    }
                 }
                 clearLyricsCacheDialog = false
             },

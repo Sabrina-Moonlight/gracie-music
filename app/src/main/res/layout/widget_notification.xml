@@ -28,7 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:paddingTop="16dp">
+        android:paddingTop="22dp">
 
         <TextView
             android:id="@+id/widget_n_song_title"

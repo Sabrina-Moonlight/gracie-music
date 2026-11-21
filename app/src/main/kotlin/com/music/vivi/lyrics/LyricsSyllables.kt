@@ -89,9 +89,27 @@ object LyricsSyllables {
     private fun splitWords(words: List<WordTimestamp>, songLang: Lang): List<WordTimestamp> {
         var changed = false
         val out = ArrayList<WordTimestamp>(words.size + 4)
-        for ((i, word) in words.withIndex()) {
+        var i = 0
+        while (i < words.size) {
+            val word = words[i]
+            val startsWord = i == 0 || words[i - 1].hasTrailingSpace
+            if (startsWord && !word.hasTrailingSpace && i < words.lastIndex) {
+                // Palabra que el proveedor ya trae partida en trozos (nev|er, timel|ess)
+                var j = i
+                while (j < words.lastIndex && !words[j].hasTrailingSpace) j++
+                val group = words.subList(i, j + 1)
+                val fixed = recutProviderPieces(group, songLang)
+                if (fixed != null) {
+                    changed = true
+                    out.addAll(fixed)
+                } else {
+                    out.addAll(group)
+                }
+                i = j + 1
+                continue
+            }
             val isLast = i == words.lastIndex
-            val whole = (i == 0 || words[i - 1].hasTrailingSpace) && (isLast || word.hasTrailingSpace)
+            val whole = startsWord && (isLast || word.hasTrailingSpace)
             val pieces = if (whole && !word.isLineTimed) splitOne(word, songLang) else null
             if (pieces == null) {
                 out.add(word)
@@ -99,9 +117,105 @@ object LyricsSyllables {
                 changed = true
                 out.addAll(pieces)
             }
+            i++
         }
         return if (changed) out else words
     }
+
+    /**
+     * Palabra que el proveedor ya partió: si trae las mismas sílabas que nuestras reglas pero con el
+     * corte en otro sitio (nev-er -> ne-ver, timel-ess -> time-less), se mueve el corte y se
+     * conservan los tiempos del proveedor. Si el número de sílabas no coincide, no se toca.
+     */
+    private fun recutProviderPieces(pieces: List<WordTimestamp>, songLang: Lang): List<WordTimestamp>? {
+        val first = pieces[0]
+        if (pieces.any { it.isLineTimed || it.isBackground != first.isBackground }) return null
+        val text = pieces.joinToString("") { it.text }
+        var start = 0
+        while (start < text.length && !text[start].isLetter()) start++
+        var end = text.length
+        while (end > start && !text[end - 1].isLetter()) end--
+        if (end - start < 4) return null
+        val core = text.substring(start, end)
+        if (!core.all { isAllowedChar(it) }) return null
+        // Letra alargada (loooove): el proveedor sabe mejor dónde cae cada trozo
+        if (MELISMA_REGEX.containsMatchIn(core)) return null
+
+        val lang = if (core.any { it in "áéíóúüñÁÉÍÓÚÜÑ" }) Lang.ES else songLang
+        val cuts = syllableCuts(core, lang == Lang.ES)
+        if (cuts.isEmpty()) return null
+
+        val bounds = ArrayList<Int>()
+        bounds.add(0)
+        for (c in cuts) bounds.add(start + c)
+        bounds.add(text.length)
+
+        // Distinto número de sílabas (con-sider-ation -> con-si-de-ra-tion): el proveedor pone el
+        // tiempo, la app pone los cortes.
+        if (cuts.size + 1 != pieces.size) return retimeProviderPieces(pieces, text, bounds)
+
+        var same = true
+        var pos = 0
+        for (k in 0 until pieces.size - 1) {
+            pos += pieces[k].text.length
+            if (pos != bounds[k + 1]) same = false
+        }
+        if (same) return null
+        return pieces.mapIndexed { k, p -> p.copy(text = text.substring(bounds[k], bounds[k + 1])) }
+    }
+
+    private const val MIN_SYLLABLE_SECONDS = 0.04
+
+    /**
+     * Los trozos del proveedor son puntos de tiempo: cada uno cubre un rango de letras entre su
+     * inicio y el inicio del siguiente (el último, hasta su fin). Cada sílaba de la app toma su
+     * inicio y su fin con una línea recta por letras sobre esos rangos. El inicio de la primera y
+     * el fin de la última no cambian. Ninguna sílaba dura menos de [MIN_SYLLABLE_SECONDS]; si la
+     * palabra es tan corta que no cabe, se deja el corte del proveedor (null).
+     */
+    private fun retimeProviderPieces(
+        pieces: List<WordTimestamp>,
+        text: String,
+        bounds: List<Int>,
+    ): List<WordTimestamp>? {
+        val n = bounds.size - 1
+        val last = pieces.last()
+        val total = last.endTime - pieces[0].startTime
+        if (n < 2 || total <= 0.0 || total < n * MIN_SYLLABLE_SECONDS) return null
+
+        val pb = IntArray(pieces.size + 1)
+        for (k in pieces.indices) pb[k + 1] = pb[k] + pieces[k].text.length
+        if (pb[pieces.size] != text.length) return null
+        val pt = DoubleArray(pieces.size + 1) { if (it < pieces.size) pieces[it].startTime else last.endTime }
+        for (k in 0 until pieces.size) if (pt[k + 1] < pt[k]) return null
+
+        fun timeAt(pos: Int): Double {
+            var k = 0
+            while (k < pieces.size - 1 && pos >= pb[k + 1]) k++
+            val len = pb[k + 1] - pb[k]
+            val f = if (len > 0) ((pos - pb[k]).toDouble() / len).coerceIn(0.0, 1.0) else 0.0
+            return pt[k] + f * (pt[k + 1] - pt[k])
+        }
+
+        val b = DoubleArray(n + 1)
+        b[0] = pieces[0].startTime
+        b[n] = last.endTime
+        for (j in 1 until n) b[j] = timeAt(bounds[j])
+        // Piso de duración: primero hacia delante, luego hacia atrás (los extremos no se mueven).
+        for (j in 1 until n) b[j] = maxOf(b[j], b[j - 1] + MIN_SYLLABLE_SECONDS)
+        for (j in n - 1 downTo 1) b[j] = minOf(b[j], b[j + 1] - MIN_SYLLABLE_SECONDS)
+
+        return List(n) { j ->
+            pieces[0].copy(
+                text = text.substring(bounds[j], bounds[j + 1]),
+                startTime = b[j],
+                endTime = b[j + 1],
+                hasTrailingSpace = if (j == n - 1) last.hasTrailingSpace else false,
+            )
+        }
+    }
+
+    private val MELISMA_REGEX = Regex("(.)\\1\\1", RegexOption.IGNORE_CASE)
 
     /** Devuelve las sílabas de la palabra con su tiempo, o null si no hay que partirla. */
     private fun splitOne(word: WordTimestamp, songLang: Lang): List<WordTimestamp>? {
@@ -238,7 +352,10 @@ object LyricsSyllables {
                     var t = stem.length
                     while (t > 0 && stem[t - 1] !in EN_VOWELS) t--
                     val tail = stem.substring(t)
-                    if (t > 0 && tail.isNotEmpty() && tail !in CODA_UNITS &&
+                    // Dos vocales seguidas antes de la consonante (dream-ing, feel-ing, wait-ing):
+                    // la consonante se queda con su sílaba.
+                    val vowelRun = t >= 2 && stem[t - 2] in EN_VOWELS
+                    if (t > 0 && tail.isNotEmpty() && !vowelRun && tail !in CODA_UNITS &&
                         (tail.length == 1 || tail in EN_DIGRAPHS)
                     ) {
                         cut = t
@@ -442,11 +559,11 @@ object LyricsSyllables {
 
     /** Cortes a mano: solo lo que no tiene regla. Palabra en minúscula -> sílabas separadas por guiones. */
     private val EXCEPTIONS = mapOf(
-        "ever" to "ev-er", "every" to "ev-ery", "archangelo" to "arch-an-ge-lo",
+        "ever" to "ev-er", "every" to "ev-ery",
     )
 
     private val COMPOUND_HEADS = listOf(
-        "week", "life", "for", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire",
+        "week", "life", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire",
     )
     private val COMPOUND_TAILS = setOf(
         "one", "body", "thing", "where", "more", "time", "times", "day", "ever", "how", "way",

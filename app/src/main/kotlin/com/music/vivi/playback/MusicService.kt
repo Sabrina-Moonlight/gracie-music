@@ -355,7 +355,8 @@ class MusicService :
         if (metadata.title.isBlank() || metadata.artists.isEmpty()) return
         val existing = database.lyrics(metadata.id).first()
         if (existing != null && existing.lyrics != LyricsEntity.LYRICS_NOT_FOUND) return
-        val result = lyricsHelper.getLyrics(metadata)
+        // Precarga: sigue el orden de proveedores configurado, uno a uno.
+        val result = lyricsHelper.getLyricsInProviderOrder(metadata)
         if (result.lyrics.isBlank() || result.lyrics == LyricsEntity.LYRICS_NOT_FOUND) return
         database.query {
             insertLyricsIfAbsent(LyricsEntity(metadata.id, result.lyrics, result.provider))
@@ -796,7 +797,9 @@ class MusicService :
         combine(
             currentMediaMetadata.distinctUntilChangedBy { it?.id },
             dataStore.data.map { it[LyricsPreloadCountKey] ?: DefaultLyricsPreloadCount }.distinctUntilChanged(),
-        ) { mediaMetadata, count ->
+            // Al borrar el caché de letras se vuelve a precargar la cola sin cambiar de canción.
+            lyricsHelper.cacheClearCount,
+        ) { mediaMetadata, count, _ ->
             mediaMetadata to count
         }.collectLatest(scope) { (mediaMetadata, count) ->
             if (mediaMetadata == null) return@collectLatest
@@ -1196,7 +1199,9 @@ class MusicService :
                     .setBufferDurationsMs(
                         /* minBufferMs = */ 60_000,
                         /* maxBufferMs = */ 60_000,
-                        /* bufferForPlaybackMs = */ 2_500,
+                        // 1 s basta para empezar a sonar (antes 2,5 s): al ir a la canción anterior,
+                        // que no estaba preparada, el audio tarda menos en salir.
+                        /* bufferForPlaybackMs = */ 1_000,
                         /* bufferForPlaybackAfterRebufferMs = */ 5_000,
                     )
                     .setTargetBufferBytes(16 * 1024 * 1024)
@@ -3458,7 +3463,12 @@ class MusicService :
             val shouldBypassCache = bypassCacheForQualityChange.contains(mediaId)
 
             if (!shouldBypassCache) {
-                val contentLength = runBlocking(Dispatchers.IO) {
+                // Primero el tamaño guardado en la propia caché (en memoria): evita esperar a la
+                // base de datos al abrir una canción descargada. Si no está, se pregunta a la base.
+                val cachedLength = androidx.media3.datasource.cache.ContentMetadata
+                    .getContentLength(downloadCache.getContentMetadata(mediaId))
+                    .takeIf { it > 0L }
+                val contentLength = cachedLength ?: runBlocking(Dispatchers.IO) {
                     database.song(mediaId).first()?.format?.contentLength
                 }
                 val requiredLength = when {
