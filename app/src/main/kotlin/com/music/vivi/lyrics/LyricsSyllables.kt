@@ -143,7 +143,15 @@ object LyricsSyllables {
 
         val lang = if (core.any { it in "áéíóúüñÁÉÍÓÚÜÑ" }) Lang.ES else songLang
         val cuts = syllableCuts(core, lang == Lang.ES)
-        if (cuts.isEmpty()) return null
+        if (cuts.isEmpty()) {
+            // Una sola sílaba para la app (ton|gue -> tongue): se juntan los trozos del proveedor
+            if (pieces.size > 1 && lang != Lang.ES && isSilentGue(core.lowercase())) {
+                return listOf(
+                    first.copy(text = text, endTime = pieces.last().endTime, hasTrailingSpace = pieces.last().hasTrailingSpace),
+                )
+            }
+            return null
+        }
 
         val bounds = ArrayList<Int>()
         bounds.add(0)
@@ -457,18 +465,27 @@ object LyricsSyllables {
             }
         }
         if (!es && groups.size > 1 && w.endsWith("es")) {
-            // "-es" mudo: makes, loves (pero kis-ses, wan-ces)
+            // "-es" mudo: makes, loves, clothes, breathes (pero kis-ses, wan-ces, wish-es, watch-es)
             val last = groups[groups.size - 1]
             if (last[1] == n - 1 && last[0] == n - 2 && n >= 3 && !isVowel[n - 3] &&
-                w[n - 3] !in "sxzcg" && !w.endsWith("hes")
+                w[n - 3] !in "sxzcg" && (!w.endsWith("hes") || w.endsWith("thes"))
             ) {
                 groups.removeAt(groups.size - 1)
             }
         }
-        if (!es && groups.size > 1 && w.endsWith("ed")) {
+        if (!es && groups.size > 1 && w.endsWith("ed") && w !in ED_SOUNDED) {
             // "-ed" mudo: walked (pero wan-ted)
             val last = groups[groups.size - 1]
             if (last[1] == n - 1 && last[0] == n - 2 && n >= 3 && !isVowel[n - 3] && w[n - 3] !in "td") {
+                groups.removeAt(groups.size - 1)
+            }
+        }
+        // "-gue" / "-gues" con "ue" muda: tongue, league, plague, vogue, fatigue, tongues
+        if (!es && groups.size > 1 && isSilentGue(w)) {
+            val last = groups[groups.size - 1]
+            if (last[0] >= 1 && w[last[0] - 1] == 'g' && last[1] - last[0] == 2 &&
+                (last[1] == n || (last[1] == n - 1 && w[n - 1] == 's'))
+            ) {
                 groups.removeAt(groups.size - 1)
             }
         }
@@ -554,6 +571,18 @@ object LyricsSyllables {
             else -> false
         }
     }
+
+    /** Palabra que acaba en "-gue(s)" con "ue" muda (no argue, segue). */
+    private fun isSilentGue(w: String): Boolean =
+        (w.endsWith("gue") || w.endsWith("gues")) && w !in NOISY_GUE && !w.endsWith("argue") && !w.endsWith("argues")
+
+    /** Palabras donde el "-ed" final sí suena como sílaba (crook-ed, sa-cred): no tienen regla. */
+    private val ED_SOUNDED = setOf(
+        "crooked", "naked", "wicked", "rugged", "ragged", "jagged", "wretched", "beloved",
+        "sacred", "hundred", "kindred", "hatred",
+    )
+
+    private val NOISY_GUE = setOf("ague", "segue", "segues")
 
     private fun isOnset(first: String, second: String): Boolean = (first + second) in ONSET_PAIRS
 

@@ -1199,9 +1199,9 @@ class MusicService :
                     .setBufferDurationsMs(
                         /* minBufferMs = */ 60_000,
                         /* maxBufferMs = */ 60_000,
-                        // 1 s basta para empezar a sonar (antes 2,5 s): al ir a la canción anterior,
-                        // que no estaba preparada, el audio tarda menos en salir.
-                        /* bufferForPlaybackMs = */ 1_000,
+                        // 0: suena en cuanto hay audio listo (antes 2,5 s y luego 1 s). Tras un corte
+                        // de red sigue esperando 5 s (bufferForPlaybackAfterRebufferMs).
+                        /* bufferForPlaybackMs = */ 0,
                         /* bufferForPlaybackAfterRebufferMs = */ 5_000,
                     )
                     .setTargetBufferBytes(16 * 1024 * 1024)
