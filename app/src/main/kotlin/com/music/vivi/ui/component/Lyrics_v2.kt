@@ -248,6 +248,9 @@ fun LyricsV2(
     val lyricsByRealTiming by rememberPreference(com.music.vivi.constants.LyricsActiveByRealTimingKey, true)
     val lyricsProgressiveBlur by rememberPreference(com.music.vivi.constants.LyricsProgressiveBlurKey, false)
     val lyricsAutoSyllables by rememberPreference(com.music.vivi.constants.LyricsAutoSyllablesKey, true)
+    val noSyllableSongs by rememberPreference(com.music.vivi.constants.LyricsNoSyllableSongsKey, emptySet<String>())
+    // Apagado en esta canción desde el menú de tres puntos de la letra.
+    val syllablesOffForSong = mediaMetadata?.id?.let { it in noSyllableSongs } ?: false
     val lyricsPlusLighterPref by rememberPreference(com.music.vivi.constants.LyricsPlusLighterKey, false)
     
     val romanizeJapaneseLyrics by rememberPreference(LyricsRomanizeJapaneseKey, true)
@@ -347,10 +350,10 @@ fun LyricsV2(
             }
 
             else -> {
-                val lines = remember(lyrics, coroutineScope, lyricsAutoSyllables) {
+                val lines = remember(lyrics, coroutineScope, lyricsAutoSyllables, syllablesOffForSong) {
                   try {
                     if (lyrics.startsWith("[")) {
-                        LyricsSyllables.enabled = lyricsAutoSyllables
+                        LyricsSyllables.enabled = lyricsAutoSyllables && !syllablesOffForSong
                         val parsedLines = LyricsUtils.parseLyrics(lyrics)
 
                         val isRussianLyrics = romanizeRussianLyrics && !romanizeCyrillicByLine && LyricsUtils.isRussian(lyrics)

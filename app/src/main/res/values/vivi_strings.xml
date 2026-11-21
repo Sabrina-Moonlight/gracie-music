@@ -1225,4 +1225,5 @@
     <string name="lyrics_plus_lighter_desc">Brighten lyrics with plus-lighter blending over the player background</string>
     <string name="lyrics_auto_syllables">Split words into syllables</string>
     <string name="lyrics_auto_syllables_desc">Lights up lyrics syllable by syllable when the song only has word timing (English and Spanish)</string>
+    <string name="lyrics_syllables_this_song">Syllables in this song</string>
 </resources>

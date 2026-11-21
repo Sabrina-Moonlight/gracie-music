@@ -74,6 +74,7 @@ import com.music.vivi.ui.component.NewActionGrid
 import com.music.vivi.ui.component.TextFieldDialog
 import com.music.vivi.viewmodels.LyricsMenuViewModel
 import com.music.vivi.constants.DefaultLyricsOffsetMs
+import com.music.vivi.constants.LyricsNoSyllableSongsKey
 import com.music.vivi.constants.LyricsKeepControlsKey
 import com.music.vivi.utils.rememberPreference
 import androidx.compose.runtime.collectAsState
@@ -349,6 +350,16 @@ fun LyricsMenu(
 
     var lyricsOffset by rememberSaveable { mutableIntStateOf((songProvider()?.lyricsOffset ?: 0) + DefaultLyricsOffsetMs) }
 
+    // Sílaba por sílaba en esta canción: se apaga guardando su id en una lista de ajustes.
+    var noSyllableSongs by rememberPreference(LyricsNoSyllableSongsKey, emptySet<String>())
+    val syllablesOn = songProvider()?.id?.let { it !in noSyllableSongs } ?: true
+    val setSyllablesOn = { on: Boolean ->
+        songProvider()?.id?.let { id ->
+            noSyllableSongs = if (on) noSyllableSongs - id else noSyllableSongs + id
+        }
+        Unit
+    }
+
     // Sync isChecked with song changes
     LaunchedEffect(songProvider()) {
         isChecked = songProvider()?.romanizeLyrics ?: true
@@ -507,6 +518,34 @@ fun LyricsMenu(
                                         Icon(
                                             painter = painterResource(
                                                 id = if (isChecked) R.drawable.check else R.drawable.close
+                                            ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    )
+
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.lyrics_syllables_this_song)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.sync),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = { setSyllablesOn(!syllablesOn) },
+                            trailingContent = {
+                                Switch(
+                                    checked = syllablesOn,
+                                    onCheckedChange = { setSyllablesOn(it) },
+                                    thumbContent = {
+                                        Icon(
+                                            painter = painterResource(
+                                                id = if (syllablesOn) R.drawable.check else R.drawable.close
                                             ),
                                             contentDescription = null,
                                             modifier = Modifier.size(SwitchDefaults.IconSize)

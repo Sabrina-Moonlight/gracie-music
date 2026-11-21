@@ -562,6 +562,8 @@ val LyricsActiveByRealTimingKey = booleanPreferencesKey("lyricsActiveByRealTimin
 val LyricsProgressiveBlurKey = booleanPreferencesKey("lyricsProgressiveBlur")
 val LyricsPlusLighterKey = booleanPreferencesKey("lyricsPlusLighter")
 val LyricsAutoSyllablesKey = booleanPreferencesKey("lyricsAutoSyllables")
+/** Ids de canciones en las que ella apagó el sílaba por sílaba (menú de tres puntos de la letra). */
+val LyricsNoSyllableSongsKey = stringSetPreferencesKey("lyricsNoSyllableSongs")
 
 val LyricsAnimationStyleKey = stringPreferencesKey("lyricsAnimationStyle")
 val LyricsTextSizeKey = floatPreferencesKey("lyricsTextSize")

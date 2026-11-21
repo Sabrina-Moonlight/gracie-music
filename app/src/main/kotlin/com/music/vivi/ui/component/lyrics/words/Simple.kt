@@ -346,7 +346,6 @@ internal fun SimpleWordAnimation(
                         unlitColor = unlitColor,
                         wipe = wipeScratch,
                         shadow = clearShadow,
-                        instantWholeWord = true,
                     )
                 }
             }

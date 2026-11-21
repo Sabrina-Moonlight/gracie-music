@@ -136,7 +136,8 @@ object LyricsSyllables {
         var end = text.length
         while (end > start && !text[end - 1].isLetter()) end--
         if (end - start < 4) return null
-        val core = text.substring(start, end)
+        // Vocales con raya (Satānās, Ghost, latín): para calcular los cortes valen como la letra normal
+        val core = foldMacrons(text.substring(start, end))
         if (!core.all { isAllowedChar(it) }) return null
         // Letra alargada (loooove): el proveedor sabe mejor dónde cae cada trozo
         if (MELISMA_REGEX.containsMatchIn(core)) return null
@@ -243,7 +244,8 @@ object LyricsSyllables {
             end++
         }
         if (end - start < 4) return null
-        val core = text.substring(start, end)
+        // Vocales con raya (Satānās, Ghost, latín): para calcular los cortes valen como la letra normal
+        val core = foldMacrons(text.substring(start, end))
         if (!core.all { isAllowedChar(it) }) return null
 
         val lang = if (core.any { it in "áéíóúüñÁÉÍÓÚÜÑ" }) Lang.ES else songLang
@@ -262,31 +264,77 @@ object LyricsSyllables {
             val to = minOf(bounds[k + 1], end)
             weights.add(maxOf(1, to - from))
         }
-        val totalWeight = weights.sum().toDouble()
+        // Reparto del tiempo: manda la vocal (lo que se canta), las consonantes pesan poco y la
+        // última sílaba dura un poco más. `weights` (letras) solo sirve para el tope de abajo.
+        val n = weights.size
+        val timing = DoubleArray(n) { k ->
+            timingWeight(text.substring(maxOf(bounds[k], start), minOf(bounds[k + 1], end)), k == n - 1)
+        }
+        val totalTiming = timing.sum()
 
         // Palabra alargada ("rumbleeee"): cada sílaba de antes dura como mucho MAX_SECONDS_PER_LETTER
         // por letra y la última se lleva el resto, porque el cantante sostiene el final.
-        // Es un tope suave: en palabras normales no cambia nada (reparto por tamaño).
-        val result = ArrayList<WordTimestamp>(weights.size)
-        var t = word.startTime
-        for (k in 0 until bounds.size - 1) {
-            val isLastPiece = k == bounds.size - 2
-            val share = minOf(duration * weights[k] / totalWeight, weights[k] * MAX_SECONDS_PER_LETTER)
-            val pieceEnd = if (isLastPiece) word.endTime else t + share
-            result.add(
-                word.copy(
-                    text = text.substring(bounds[k], bounds[k + 1]),
-                    startTime = t,
-                    endTime = pieceEnd,
-                    hasTrailingSpace = if (isLastPiece) word.hasTrailingSpace else false,
-                ),
-            )
-            t = pieceEnd
+        // Es un tope suave: en palabras normales no cambia nada.
+        val b = DoubleArray(n + 1)
+        b[0] = word.startTime
+        b[n] = word.endTime
+        for (k in 0 until n - 1) {
+            val share = minOf(duration * timing[k] / totalTiming, weights[k] * MAX_SECONDS_PER_LETTER)
+            b[k + 1] = b[k] + share
         }
-        return result
+        // Piso de duración (solo si la palabra es lo bastante larga): ninguna sílaba tan corta que
+        // la pasada se vea como un parpadeo. Primero hacia delante, luego hacia atrás.
+        if (duration >= n * MIN_SYLLABLE_SECONDS) {
+            for (j in 1 until n) b[j] = maxOf(b[j], b[j - 1] + MIN_SYLLABLE_SECONDS)
+            for (j in n - 1 downTo 1) b[j] = minOf(b[j], b[j + 1] - MIN_SYLLABLE_SECONDS)
+        }
+
+        return List(n) { k ->
+            word.copy(
+                text = text.substring(bounds[k], bounds[k + 1]),
+                startTime = b[k],
+                endTime = b[k + 1],
+                hasTrailingSpace = if (k == n - 1) word.hasTrailingSpace else false,
+            )
+        }
+    }
+
+    /** Peso de tiempo de una sílaba: 1 por la vocal + un poco por consonantes y vocales extra. */
+    private fun timingWeight(piece: String, isLast: Boolean): Double {
+        val letters = piece.filter { it.isLetter() }
+        if (letters.isEmpty()) return 1.0
+        val vowels = letters.count { it.lowercaseChar() in "aeiouyáéíóúüāēīōū" }
+        val consonants = letters.length - vowels
+        var w = 1.0 + 0.2 * minOf(consonants, 3) + 0.3 * minOf(maxOf(vowels - 1, 0), 2)
+        if (isLast) w *= 1.2
+        return w
     }
 
     private const val MAX_SECONDS_PER_LETTER = 0.12
+
+    /** ā ē ī ō ū -> a e i o u (misma longitud, así los cortes valen para el texto original). */
+    private fun foldMacrons(s: String): String {
+        if (s.none { it in "āēīōūĀĒĪŌŪ" }) return s
+        return buildString(s.length) {
+            for (c in s) {
+                append(
+                    when (c) {
+                        'ā' -> 'a'
+                        'ē' -> 'e'
+                        'ī' -> 'i'
+                        'ō' -> 'o'
+                        'ū' -> 'u'
+                        'Ā' -> 'A'
+                        'Ē' -> 'E'
+                        'Ī' -> 'I'
+                        'Ō' -> 'O'
+                        'Ū' -> 'U'
+                        else -> c
+                    },
+                )
+            }
+        }
+    }
 
     private fun isAllowedChar(c: Char): Boolean =
         c in 'a'..'z' || c in 'A'..'Z' || c in "áéíóúüñÁÉÍÓÚÜÑ" || c == '\'' || c == '’'

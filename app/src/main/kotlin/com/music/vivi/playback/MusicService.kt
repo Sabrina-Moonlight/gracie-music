@@ -358,9 +358,15 @@ class MusicService :
         // Precarga: sigue el orden de proveedores configurado, uno a uno.
         val result = lyricsHelper.getLyricsInProviderOrder(metadata)
         if (result.lyrics.isBlank() || result.lyrics == LyricsEntity.LYRICS_NOT_FOUND) return
-        database.query {
-            insertLyricsIfAbsent(LyricsEntity(metadata.id, result.lyrics, result.provider))
-        }
+        saveLyricsIfMissing(metadata.id, result.lyrics, result.provider)
+    }
+
+    /** Guarda la letra solo si no hay una buena guardada; una "no encontrada" sí se reemplaza. */
+    private suspend fun saveLyricsIfMissing(id: String, lyrics: String, provider: String) {
+        if (lyrics.isBlank() || lyrics == LyricsEntity.LYRICS_NOT_FOUND) return
+        val existing = database.lyrics(id).first()
+        if (existing != null && existing.lyrics != LyricsEntity.LYRICS_NOT_FOUND) return
+        database.query { upsert(LyricsEntity(id, lyrics, provider)) }
     }
 
     fun toggleMute() {
@@ -771,23 +777,23 @@ class MusicService :
         combine(
             currentMediaMetadata.distinctUntilChangedBy { it?.id },
             dataStore.data.map { it[ShowLyricsKey] ?: false }.distinctUntilChanged(),
-        ) { mediaMetadata, showLyrics ->
+            // Al borrar el caché de letras se vuelve a buscar la de la canción actual.
+            lyricsHelper.cacheClearCount,
+        ) { mediaMetadata, showLyrics, _ ->
             mediaMetadata to showLyrics
         }.collectLatest(scope) { (mediaMetadata, showLyrics) ->
-            if (showLyrics && mediaMetadata != null && database.lyrics(mediaMetadata.id)
-                    .first() == null
-            ) {
-                val lyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
-                // No guardar "no encontrada": se reintenta la próxima vez.
-                if (lyricsWithProvider.lyrics != LyricsEntity.LYRICS_NOT_FOUND) {
-                    database.query {
-                        insertLyricsIfAbsent(
-                            LyricsEntity(
-                                id = mediaMetadata.id,
-                                lyrics = lyricsWithProvider.lyrics,
-                                provider = lyricsWithProvider.provider,
-                            ),
-                        )
+            if (showLyrics && mediaMetadata != null) {
+                val existing = database.lyrics(mediaMetadata.id).first()
+                // Sin letra, o guardada como "no encontrada": se busca de nuevo.
+                if (existing == null || existing.lyrics == LyricsEntity.LYRICS_NOT_FOUND) {
+                    try {
+                        // Sigue el orden de proveedores de la persona, uno a uno.
+                        val result = lyricsHelper.getLyricsInProviderOrder(mediaMetadata)
+                        saveLyricsIfMissing(mediaMetadata.id, result.lyrics, result.provider)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).w(e, "lyrics: falló la búsqueda en segundo plano")
                     }
                 }
             }

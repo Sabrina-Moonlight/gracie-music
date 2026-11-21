@@ -646,4 +646,5 @@
     <string name="lyrics_plus_lighter_desc">Aclara las letras con mezcla plus-lighter sobre el fondo del player</string>
     <string name="lyrics_auto_syllables">Dividir palabras en sílabas</string>
     <string name="lyrics_auto_syllables_desc">Ilumina la letra sílaba por sílaba cuando la canción solo trae el tiempo por palabra (inglés y español)</string>
+    <string name="lyrics_syllables_this_song">Sílabas en esta canción</string>
 </resources>

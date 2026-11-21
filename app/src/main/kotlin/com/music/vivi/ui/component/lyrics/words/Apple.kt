@@ -992,7 +992,6 @@ internal fun AppleWordAnimation(
                                     unlitColor = unlitColor,
                                     wipe = wipeScratch,
                                     shadow = LyricsClearShadow,
-                                    instantWholeWord = true,
                                 )
                             }
                         }
@@ -1025,7 +1024,6 @@ internal fun AppleWordAnimation(
                                 unlitColor = unlitColor,
                                 wipe = wipeScratch,
                                 shadow = LyricsClearShadow,
-                                instantWholeWord = true,
                             )
                         }
                     }
@@ -1058,7 +1056,6 @@ internal fun AppleWordAnimation(
                                 activeSylProgress = activeSylProgress,
                                 gradientWidth = gradientWidth,
                                 out = wipeScratch,
-                                instantWholeWord = true,
                             )
                             when (wipeScratch.mode) {
                                 WIPE_PAST -> {
