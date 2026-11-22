@@ -1273,6 +1273,8 @@ internal class VisualCluster(
     var lastSyllableIndex: Int = syllableIndex,
     /** Palabra entera de una sola sílaba (class, buy): el estilo Apple la prende de golpe. */
     var isWholeWord: Boolean = false,
+    /** Índice de la última sílaba de la palabra de este grupo (para no apagarlo cuando ya se cantó). */
+    var wordEndSylIdx: Int = Int.MAX_VALUE,
 )
 
 internal class ClusterMeta(
@@ -1645,6 +1647,13 @@ internal fun buildVisualClusters(
             )
             idx = j + 1
         }
+    }
+    for (vc in list) {
+        val last = vc.lastSyllableIndex
+        if (last < 0 || last >= alignedSyllables.size) continue
+        var e = last
+        while (e < alignedSyllables.lastIndex && !alignedSyllables[e].syllable.hasTrailingSpace) e++
+        vc.wordEndSylIdx = e
     }
     for (vc in list) {
         val si = vc.syllableIndex

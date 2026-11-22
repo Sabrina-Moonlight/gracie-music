@@ -283,7 +283,7 @@ fun LyricsV2(
     val database = LocalDatabase.current
     val coroutineScope = rememberCoroutineScope()
     val currentSong by playerConnection.currentSong.collectAsState(initial = null)
-    val lyricsOffset = (currentSong?.song?.lyricsOffset ?: 0).toLong()
+    val lyricsOffset = ((currentSong?.song?.lyricsOffset ?: 0) + DefaultLyricsOffsetMs).toLong()
     val showRomanized = currentSong?.song?.romanizeLyrics ?: true
 
     // Keep screen on while lyrics are visible

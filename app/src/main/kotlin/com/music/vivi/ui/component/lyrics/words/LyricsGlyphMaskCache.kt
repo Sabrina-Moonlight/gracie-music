@@ -297,6 +297,13 @@ internal fun computeWipe(
 ) {
     val halfGradientWidth = gradientWidth / 2f
 
+    // Si la palabra ya terminó antes de la sílaba activa, queda encendida. Sin esto, al empezar
+    // la sílaba siguiente el degradado retrocedía y las últimas letras parpadeaban.
+    if (activeSylIdx >= 0 && vc.wordEndSylIdx < activeSylIdx) {
+        out.mode = WIPE_PAST
+        return
+    }
+
     val lastSylIdx = if (vc.lastSyllableIndex != -1) vc.lastSyllableIndex else vc.syllableIndex
     val isPartOfActiveSyl = vc.syllableIndex != -1 && activeSylIdx in vc.syllableIndex..lastSylIdx
     val effectiveLineIdx = if (isPartOfActiveSyl) vc.lineIdx else activeLineIdx

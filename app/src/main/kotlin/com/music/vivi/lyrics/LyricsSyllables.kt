@@ -230,7 +230,7 @@ object LyricsSyllables {
     private fun splitOne(word: WordTimestamp, songLang: Lang): List<WordTimestamp>? {
         val text = word.text
         val duration = word.endTime - word.startTime
-        if (text.length < 4 || duration <= 0.0) return null
+        if (text.length < 2 || duration <= 0.0) return null
 
         // Quitar signos de puntuación del principio y del final ("(love," -> "love")
         var start = 0
@@ -243,7 +243,8 @@ object LyricsSyllables {
         ) {
             end++
         }
-        if (end - start < 4) return null
+        // "TV" es la única palabra de menos de 4 letras que se parte (t-v)
+        if (end - start < 4 && !text.substring(start, end).equals("tv", ignoreCase = true)) return null
         // Vocales con raya (Satānās, Ghost, latín): para calcular los cortes valen como la letra normal
         val core = foldMacrons(text.substring(start, end))
         if (!core.all { isAllowedChar(it) }) return null
@@ -426,8 +427,10 @@ object LyricsSyllables {
                     val tail = stem.substring(t)
                     // Dos vocales seguidas antes de la consonante (dream-ing, feel-ing, wait-ing):
                     // la consonante se queda con su sílaba.
-                    val vowelRun = t >= 2 && stem[t - 2] in EN_VOWELS
-                    if (t > 0 && tail.isNotEmpty() && !vowelRun && tail !in CODA_UNITS &&
+                    // "th" suena con el "ing" aunque haya dos vocales (brea-thing, ba-thing, soo-thing);
+                    // "sh" se queda con su sílaba (crush-ing, wash-ing, push-ing).
+                    val vowelRun = t >= 2 && stem[t - 2] in EN_VOWELS && tail != "th"
+                    if (t > 0 && tail.isNotEmpty() && !vowelRun && tail !in CODA_UNITS && tail != "sh" &&
                         (tail.length == 1 || tail in EN_DIGRAPHS)
                     ) {
                         cut = t
@@ -668,7 +671,10 @@ object LyricsSyllables {
     /** Cortes a mano: solo lo que no tiene regla. Palabra en minúscula -> sílabas separadas por guiones. */
     private val EXCEPTIONS = mapOf(
         "ever" to "ev-er", "every" to "ev-ery", "crooked" to "crook-ed", "beware" to "be-ware",
-        "lightning" to "light-ning",
+        "lightning" to "light-ning", "diamond" to "dia-mond", "diamonds" to "dia-monds",
+        "gateway" to "gate-way", "gateways" to "gate-ways", "makeup" to "make-up",
+        "everybody" to "every-body", "everybody's" to "every-body's", "paranoia" to "pa-ra-no-ia",
+        "tv" to "t-v",
     )
 
     private val COMPOUND_HEADS = listOf(

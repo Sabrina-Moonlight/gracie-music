@@ -9,4 +9,4 @@ package com.music.vivi.constants
  * Offset base (en ms) con el que empieza cada canción. El valor que se guarda por canción es
  * solo la diferencia respecto a este valor, así las canciones ya guardadas parten de 0 ms.
  */
-const val DefaultLyricsOffsetMs = 0
+const val DefaultLyricsOffsetMs = 100
