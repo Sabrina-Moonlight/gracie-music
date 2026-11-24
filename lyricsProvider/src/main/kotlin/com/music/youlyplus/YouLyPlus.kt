@@ -35,7 +35,7 @@ object YouLyPlus {
     )
 
     /** Fuentes en orden de preferencia (Apple primero: letra limpia). */
-    private const val SOURCES = "apple,lyricsplus,musixmatch,spotify,musixmatch-word"
+    private const val SOURCES = "apple,lyricsplus,spotify"
 
     private val lastGoodServer = AtomicReference<String?>(null)
 

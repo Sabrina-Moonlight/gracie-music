@@ -33,6 +33,9 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import com.music.vivi.db.MusicDatabase
 import com.music.vivi.db.entities.FormatEntity
+import com.music.vivi.db.entities.LyricsEntity
+import com.music.vivi.lyrics.LyricsHelper
+import com.music.vivi.models.toMediaMetadata
 import com.music.vivi.db.entities.SongEntity
 import com.music.vivi.di.DownloadCache
 import com.music.vivi.di.PlayerCache
@@ -47,6 +50,7 @@ import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -68,6 +72,7 @@ constructor(
     val databaseProvider: DatabaseProvider,
     @DownloadCache val downloadCache: SimpleCache,
     @PlayerCache val playerCache: SimpleCache,
+    private val lyricsHelper: LyricsHelper,
 ) {
     private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
     private val audioQuality by enumPreference(context, AudioQualityKey, AudioQuality.AUTO)
@@ -272,6 +277,7 @@ constructor(
                             when (download.state) {
                                 Download.STATE_COMPLETED -> {
                                     database.updateDownloadedInfo(download.request.id, true, LocalDateTime.now())
+                                    downloadLyricsFor(download.request.id)
                                 }
                                 Download.STATE_FAILED,
                                 Download.STATE_STOPPED,
@@ -324,6 +330,24 @@ constructor(
 
     fun release() {
         scope.cancel()
+    }
+
+    /** Al terminar una descarga, busca y guarda su letra (orden de proveedores de los ajustes). */
+    private suspend fun downloadLyricsFor(songId: String) {
+        try {
+            val existing = database.lyrics(songId).first()
+            if (existing != null && existing.lyrics != LyricsEntity.LYRICS_NOT_FOUND) return
+            val song = database.getSongByIdBlocking(songId) ?: return
+            val metadata = song.toMediaMetadata()
+            if (metadata.title.isBlank() || metadata.artists.isEmpty()) return
+            val result = lyricsHelper.getLyricsInProviderOrder(metadata)
+            if (result.lyrics.isBlank() || result.lyrics == LyricsEntity.LYRICS_NOT_FOUND) return
+            database.query { upsert(LyricsEntity(songId, result.lyrics, result.provider)) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("DownloadDiagnostics").w(e, "No se pudo guardar la letra de $songId")
+        }
     }
 
     private fun Throwable?.isExpiredStreamError(): Boolean {

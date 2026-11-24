@@ -16,6 +16,8 @@ import com.music.innertube.models.filterVideoSongs
 import com.music.innertube.utils.YouTubeUrlParser
 import com.music.vivi.constants.HideExplicitKey
 import com.music.vivi.constants.HideVideoSongsKey
+import com.music.vivi.constants.PauseListenHistoryKey
+import com.music.vivi.constants.PauseSearchHistoryKey
 import com.music.vivi.db.MusicDatabase
 import com.music.vivi.db.entities.SearchHistory
 import com.music.vivi.utils.dataStore
@@ -91,8 +93,10 @@ constructor(
                     },
                 context.dataStore.data
                     .map { prefs ->
-                        val ids = prefs[com.music.vivi.constants.SearchListenHistoryKey]?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
-                        ids.take(9).mapNotNull { id ->
+                        val pauseListen = prefs[PauseListenHistoryKey] ?: false
+                        val pauseSearch = prefs[PauseSearchHistoryKey] ?: false
+                        val ids = if (pauseListen) emptyList() else prefs[com.music.vivi.constants.SearchListenHistoryKey]?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
+                        val events = ids.take(9).mapNotNull { id ->
                             database.getSongByIdBlocking(id)?.let { song ->
                                 EventWithSong(
                                     com.music.vivi.db.entities.Event(songId = id, timestamp = java.time.LocalDateTime.now(), playTime = 0),
@@ -100,10 +104,14 @@ constructor(
                                 )
                             }
                         }
+                        Triple(events, pauseSearch, pauseListen)
                     }
                     .flowOn(kotlinx.coroutines.Dispatchers.IO)
-            ) { state, recentEvents ->
-                state.copy(recentEvents = recentEvents)
+            ) { state, (recentEvents, pauseSearch, _) ->
+                state.copy(
+                    recentEvents = recentEvents,
+                    history = if (pauseSearch) emptyList() else state.history,
+                )
             }.collect {
                 _viewState.value = it
             }

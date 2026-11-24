@@ -309,8 +309,11 @@ internal fun computeWipe(
     val effectiveLineIdx = if (isPartOfActiveSyl) vc.lineIdx else activeLineIdx
 
     val rawLocalX = curGX - lineStart
+    // Las palabras que vienen después no reciben el empuje: si lo recibían, al pasar a la
+    // siguiente palabra el empuje se quitaba de golpe y su inicio se apagaba un instante (parpadeo).
+    val isFutureWord = vc.syllableIndex > activeSylIdx && activeSylIdx >= 0
     val brushShift =
-        if (vc.lineIdx == effectiveLineIdx && isActiveSylLastOfLine) {
+        if (vc.lineIdx == effectiveLineIdx && isActiveSylLastOfLine && !isFutureWord) {
             activeSylProgress * halfGradientWidth
         } else {
             0f

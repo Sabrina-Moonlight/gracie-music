@@ -19,7 +19,7 @@ enum class LyricsAnimationStyle {
     ;
 
     companion object {
-        val Default = APPLE
+        val Default = EXPRESSIVE
 
         fun fromString(value: String?): LyricsAnimationStyle {
             if (value == null) return Default

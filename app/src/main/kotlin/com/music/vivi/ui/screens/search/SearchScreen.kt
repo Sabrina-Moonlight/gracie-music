@@ -77,6 +77,7 @@ import com.music.vivi.LocalIsPlayerExpanded
 import com.music.vivi.LocalPlayerAwareWindowInsets
 import com.music.vivi.LocalPlayerConnection
 import com.music.vivi.R
+import com.music.vivi.constants.PauseListenHistoryKey
 import com.music.vivi.constants.PauseSearchHistoryKey
 import com.music.vivi.constants.SearchSource
 import com.music.vivi.constants.SearchSourceKey
@@ -117,6 +118,7 @@ fun SearchScreen(
         mutableStateOf(TextFieldValue())
     }
     val pauseSearchHistory by rememberPreference(PauseSearchHistoryKey, defaultValue = false)
+    val pauseListenHistory by rememberPreference(PauseListenHistoryKey, defaultValue = false)
     var isFirstLaunch by rememberSaveable { mutableStateOf(true) }
     
     var searchActive by rememberSaveable { mutableStateOf(false) }
@@ -313,7 +315,9 @@ fun SearchScreen(
                 .fillMaxSize()
         ) {
             val tabPadding = PaddingValues(bottom = bottomPadding)
-            SuggestionsTabContent(navController = navController, contentPadding = tabPadding)
+            if (!(pauseSearchHistory && pauseListenHistory)) {
+                SuggestionsTabContent(navController = navController, contentPadding = tabPadding)
+            }
         }
     }
 
