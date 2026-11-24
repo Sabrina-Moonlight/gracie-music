@@ -5,6 +5,7 @@
 package com.music.innertube
 
 import com.music.innertube.models.AccountInfo
+import com.music.innertube.models.ElementRenderer
 import com.music.innertube.models.YTItem
 import com.music.innertube.models.AlbumItem
 import com.music.innertube.models.Artist
@@ -1550,6 +1551,42 @@ object YouTube {
     }
 
     suspend fun lyrics(endpoint: BrowseEndpoint): Result<String?> = runCatching {
+        // 1) Cliente Android de YouTube Music: trae la letra con tiempos por línea (si existe)
+        val timedLyrics = runCatching {
+            innerTube.browse(
+                client = YouTubeClient.ANDROID_MUSIC,
+                browseId = endpoint.browseId,
+                params = endpoint.params,
+                setLogin = true,
+            ).body<BrowseResponse>()
+        }.getOrNull()
+            ?.contents?.elementRenderer?.newElement?.type?.componentType?.model
+            ?.timedLyricsModel?.lyricsData?.timedLyricsData
+
+        if (!timedLyrics.isNullOrEmpty()) {
+            fun startMs(item: ElementRenderer.NewElement.ElementType.ComponentType.ElementModel.TimedLyricsModel.LyricsData.TimedLyricItem) =
+                item.cueRange?.startTimeMilliseconds?.contentOrNull?.toLongOrNull()
+            val formatted = if (timedLyrics.any { startMs(it) != null }) {
+                timedLyrics.joinToString("\n") { item ->
+                    val line = item.lyricLine.orEmpty()
+                    val ms = startMs(item)
+                    if (ms == null) {
+                        line
+                    } else {
+                        String.format(
+                            java.util.Locale.ROOT, "[%02d:%02d.%02d]%s",
+                            ms / 60000, (ms / 1000) % 60, (ms % 1000) / 10,
+                            if (line.isEmpty()) "" else " $line",
+                        )
+                    }
+                }
+            } else {
+                timedLyrics.joinToString("\n") { it.lyricLine.orEmpty() }
+            }
+            if (formatted.isNotBlank()) return@runCatching formatted
+        }
+
+        // 2) Si no hay letra con tiempos: la letra normal de siempre (WEB_REMIX)
         val response = innerTube.browse(WEB_REMIX, endpoint.browseId, endpoint.params).body<BrowseResponse>()
         response.contents?.sectionListRenderer?.contents
             ?.firstOrNull { it.musicDescriptionShelfRenderer != null }
