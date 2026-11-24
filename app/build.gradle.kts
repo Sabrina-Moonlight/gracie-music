@@ -21,7 +21,7 @@ android {
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.vivi.vivimusic"
+        applicationId = "com.gracie.graciemusic"
         minSdk = 26
         targetSdk = 37
         versionCode = 81
