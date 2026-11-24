@@ -230,7 +230,7 @@ object LyricsSyllables {
     private fun splitOne(word: WordTimestamp, songLang: Lang): List<WordTimestamp>? {
         val text = word.text
         val duration = word.endTime - word.startTime
-        if (text.length < 2 || duration <= 0.0) return null
+        if (text.length < 4 || duration <= 0.0) return null
 
         // Quitar signos de puntuación del principio y del final ("(love," -> "love")
         var start = 0
@@ -243,8 +243,7 @@ object LyricsSyllables {
         ) {
             end++
         }
-        // "TV" es la única palabra de menos de 4 letras que se parte (t-v)
-        if (end - start < 4 && !text.substring(start, end).equals("tv", ignoreCase = true)) return null
+        if (end - start < 4) return null
         // Vocales con raya (Satānās, Ghost, latín): para calcular los cortes valen como la letra normal
         val core = foldMacrons(text.substring(start, end))
         if (!core.all { isAllowedChar(it) }) return null
@@ -427,10 +426,8 @@ object LyricsSyllables {
                     val tail = stem.substring(t)
                     // Dos vocales seguidas antes de la consonante (dream-ing, feel-ing, wait-ing):
                     // la consonante se queda con su sílaba.
-                    // "th" suena con el "ing" aunque haya dos vocales (brea-thing, ba-thing, soo-thing);
-                    // "sh" se queda con su sílaba (crush-ing, wash-ing, push-ing).
-                    val vowelRun = t >= 2 && stem[t - 2] in EN_VOWELS && tail != "th"
-                    if (t > 0 && tail.isNotEmpty() && !vowelRun && tail !in CODA_UNITS && tail != "sh" &&
+                    val vowelRun = t >= 2 && stem[t - 2] in EN_VOWELS
+                    if (t > 0 && tail.isNotEmpty() && !vowelRun && tail !in CODA_UNITS &&
                         (tail.length == 1 || tail in EN_DIGRAPHS)
                     ) {
                         cut = t
@@ -461,6 +458,7 @@ object LyricsSyllables {
                 DE_PREFIX_REGEX.containsMatchIn(w) -> 2
                 CRE_PREFIX_REGEX.containsMatchIn(w) -> 3
                 REACT_REGEX.containsMatchIn(w) -> 2
+                RE_A_PREFIX_REGEX.containsMatchIn(w) -> 2
                 else -> 0
             }
             if (pre > 0 && n > pre + 1) {
@@ -523,7 +521,9 @@ object LyricsSyllables {
             }
         }
 
-        if (!es && groups.size > 1) {
+        // Palabras prestadas donde la "e" final sí suena: na-mas-te, re-ci-pe, ka-ra-te (y su plural)
+        val soundedE = !es && (w in SOUNDED_FINAL_E || (w.endsWith("s") && w.dropLast(1) in SOUNDED_FINAL_E))
+        if (!es && !soundedE && groups.size > 1) {
             val last = groups[groups.size - 1]
             // "e" muda al final: love, make, alone (pero no "-le": table, little)
             if (last[1] == n && last[1] - last[0] == 1 && w[n - 1] == 'e') {
@@ -531,7 +531,7 @@ object LyricsSyllables {
                 if (!prevIsL) groups.removeAt(groups.size - 1)
             }
         }
-        if (!es && groups.size > 1 && w.endsWith("es")) {
+        if (!es && !soundedE && groups.size > 1 && w.endsWith("es")) {
             // "-es" mudo: makes, loves, clothes, breathes (pero kis-ses, wan-ces, wish-es, watch-es)
             val last = groups[groups.size - 1]
             if (last[1] == n - 1 && last[0] == n - 2 && n >= 3 && !isVowel[n - 3] &&
@@ -666,22 +666,25 @@ object LyricsSyllables {
 
     private val NOISY_GUE = setOf("ague", "segue", "segues")
 
+    /** Palabras (casi todas prestadas) donde la "e" final sí se canta: no se aplica la regla de la "e" muda. */
+    private val SOUNDED_FINAL_E = setOf(
+        "namaste", "recipe", "karate", "karaoke", "sesame", "simile", "forte", "finale", "adobe", "guacamole",
+        "anemone", "epitome", "hyperbole", "ukulele", "apostrophe", "catastrophe", "acne", "cafe", "nike",
+    )
+
     private fun isOnset(first: String, second: String): Boolean = (first + second) in ONSET_PAIRS
 
     /** Cortes a mano: solo lo que no tiene regla. Palabra en minúscula -> sílabas separadas por guiones. */
     private val EXCEPTIONS = mapOf(
         "ever" to "ev-er", "every" to "ev-ery", "crooked" to "crook-ed", "beware" to "be-ware",
-        "lightning" to "light-ning", "diamond" to "dia-mond", "diamonds" to "dia-monds",
-        "gateway" to "gate-way", "gateways" to "gate-ways", "makeup" to "make-up",
-        "everybody" to "every-body", "everybody's" to "every-body's", "paranoia" to "pa-ra-no-ia",
-        "tv" to "t-v",
+        "lightning" to "light-ning", "body" to "bod-y", "body's" to "bod-y's", "coyote" to "coy-o-te",
     )
 
     private val COMPOUND_HEADS = listOf(
         "week", "life", "no", "wher", "any", "every", "some", "when", "where", "what", "who", "how", "fire", "drive",
     )
     private val COMPOUND_TAILS = setOf(
-        "one", "body", "thing", "where", "more", "time", "times", "day", "ever", "how", "way",
+        "one", "body", "body's", "thing", "where", "more", "time", "times", "day", "ever", "how", "way",
         "fly", "what", "work", "works", "long", "line", "lines", "end", "ends", "days", "night", "nights", "ly",
     )
 
@@ -692,4 +695,11 @@ object LyricsSyllables {
     private val DE_PREFIX_REGEX = Regex("^de(str|scr|spr)")
     private val CRE_PREFIX_REGEX = Regex("^(cre(ate|ation|ative|ating|ated|ator)|scien)")
     private val REACT_REGEX = Regex("^reac(t|tion|tions|ted)$")
+
+    /** "re-" + palabra que empieza por "a" (re-ap-ply, re-as-sure): "ea" aquí NO es una sola vocal. */
+    private val RE_A_PREFIX_REGEX = Regex(
+        "^rea(ppl(y|ies|ied|ying)|ppear(s|ed|ing)?|ppraise(s|d)?|ssur(e|es|ed|ing)|ssess(es|ed|ing|ment)?|" +
+            "ssign(s|ed|ing|ment)?|ssembl(e|es|ed|ing)|ffirm(s|ed|ing)?|waken(s|ed|ing)?|nimat(e|es|ed|ing)|" +
+            "bsorb(s|ed|ing)?|cquir(e|es|ed|ing)|ctivat(e|es|ed|ing)|rrang(e|es|ed|ing)|lign(s|ed|ing|ment)?)$",
+    )
 }
