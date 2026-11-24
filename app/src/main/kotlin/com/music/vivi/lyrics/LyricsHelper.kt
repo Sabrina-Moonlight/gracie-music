@@ -92,6 +92,12 @@ constructor(
         _cacheClearCount.value = _cacheClearCount.value + 1
     }
 
+    /** Borra del caché solo la letra de esta canción y cancela su búsqueda en curso, si la hay. */
+    suspend fun clearCache(mediaId: String) {
+        cache.remove(mediaId)
+        fetchesMutex.withLock { activeFetches.remove(mediaId)?.cancel() }
+    }
+
     /**
      * Para la precarga en segundo plano: prueba los proveedores UNO A UNO, en el orden que la
      * persona configuró, y se queda con la primera letra que encuentre. No compara ni elige por

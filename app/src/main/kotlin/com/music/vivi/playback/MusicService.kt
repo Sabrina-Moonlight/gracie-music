@@ -136,6 +136,8 @@ import com.music.vivi.constants.ShufflePlaylistFirstKey
 import com.music.vivi.constants.PreventDuplicateTracksInQueueKey
 import com.music.vivi.constants.SimilarContent
 import com.music.vivi.constants.SkipSilenceInstantKey
+import com.music.vivi.constants.PlaybackPitchKey
+import com.music.vivi.constants.PlaybackTempoKey
 import com.music.vivi.constants.SkipSilenceKey
 import com.music.vivi.constants.EnableSponsorBlockKey
 import com.music.vivi.constants.SponsorBlockServerUrlKey
@@ -200,6 +202,7 @@ import com.music.vivi.utils.reportException
 import com.music.vivi.widget.vivimusicWidgetManager
 import com.music.vivi.widget.MusicWidgetReceiver
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.math.pow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1224,6 +1227,9 @@ class MusicService :
                     val crossfade = dataStore.get(CrossfadeEnabledKey, false)
                     setOffloadEnabled(if (crossfade) false else offload)
                     skipSilenceEnabled = dataStore.get(SkipSilenceKey, false)
+                    val tempo = dataStore.get(PlaybackTempoKey, 1.0f)
+                    val pitchSemitones = dataStore.get(PlaybackPitchKey, 0)
+                    playbackParameters = PlaybackParameters(tempo, 2f.pow(pitchSemitones.toFloat() / 12))
                 }
                 addAnalyticsListener(PlaybackStatsListener(false, this@MusicService))
 
@@ -3777,40 +3783,43 @@ class MusicService :
                 playbackState = player.playbackState
             )
 
-            runCatching {
-                filesDir.resolve(PERSISTENT_QUEUE_FILE).outputStream().use { fos ->
-                    ObjectOutputStream(fos).use { oos ->
-                        oos.writeObject(persistQueue)
+            // Los datos ya están copiados arriba; solo la escritura del archivo va en segundo plano
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    filesDir.resolve(PERSISTENT_QUEUE_FILE).outputStream().use { fos ->
+                        ObjectOutputStream(fos).use { oos ->
+                            oos.writeObject(persistQueue)
+                        }
                     }
+                    Timber.tag(TAG).d("Queue saved successfully")
+                }.onFailure {
+                    Timber.tag(TAG).e(it, "Failed to save queue")
+                    reportException(it)
                 }
-                Timber.tag(TAG).d("Queue saved successfully")
-            }.onFailure {
-                Timber.tag(TAG).e(it, "Failed to save queue")
-                reportException(it)
-            }
 
-            runCatching {
-            filesDir.resolve(PERSISTENT_AUTOMIX_FILE).outputStream().use { fos ->
-                ObjectOutputStream(fos).use { oos ->
-                        oos.writeObject(persistAutomix)
+                runCatching {
+                    filesDir.resolve(PERSISTENT_AUTOMIX_FILE).outputStream().use { fos ->
+                        ObjectOutputStream(fos).use { oos ->
+                            oos.writeObject(persistAutomix)
+                        }
                     }
+                    Timber.tag(TAG).d("Automix saved successfully")
+                }.onFailure {
+                    Timber.tag(TAG).e(it, "Failed to save automix")
+                    reportException(it)
                 }
-                Timber.tag(TAG).d("Automix saved successfully")
-            }.onFailure {
-                Timber.tag(TAG).e(it, "Failed to save automix")
-                reportException(it)
-            }
 
-            runCatching {
-                filesDir.resolve(PERSISTENT_PLAYER_STATE_FILE).outputStream().use { fos ->
-                    ObjectOutputStream(fos).use { oos ->
-                        oos.writeObject(persistPlayerState)
+                runCatching {
+                    filesDir.resolve(PERSISTENT_PLAYER_STATE_FILE).outputStream().use { fos ->
+                        ObjectOutputStream(fos).use { oos ->
+                            oos.writeObject(persistPlayerState)
+                        }
                     }
+                    Timber.tag(TAG).d("Player state saved successfully")
+                }.onFailure {
+                    Timber.tag(TAG).e(it, "Failed to save player state")
+                    reportException(it)
                 }
-                Timber.tag(TAG).d("Player state saved successfully")
-            }.onFailure {
-                Timber.tag(TAG).e(it, "Failed to save player state")
-                reportException(it)
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error during queue save operation")

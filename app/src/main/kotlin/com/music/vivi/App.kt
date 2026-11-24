@@ -71,6 +71,12 @@ class App : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         context = this
 
+        // En el proceso :crash solo se muestra la pantalla de error; no se arranca nada más
+        if (isCrashProcess()) {
+            Timber.plant(Timber.DebugTree())
+            return
+        }
+
         // Install crash handler first
         CrashHandler.install(this)
 
@@ -97,6 +103,21 @@ class App : Application(), SingletonImageLoader.Factory {
         applicationScope.launch(Dispatchers.IO) {
             runCatching { InnerTubeXPlayer.prewarm() }
         }
+    }
+
+    private fun isCrashProcess(): Boolean {
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getProcessName()
+        } else {
+            try {
+                val pid = android.os.Process.myPid()
+                val am = getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                am?.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
+            } catch (_: Exception) {
+                null
+            }
+        }
+        return processName?.endsWith(":crash") == true
     }
 
     private suspend fun initializeSettings() {
@@ -234,16 +255,26 @@ class App : Application(), SingletonImageLoader.Factory {
                         ?.let { Locale.forLanguageTag(it) }
                         ?: systemLocale
 
-                    YouTube.locale = YouTubeLocale(
-                        gl = contentCountry?.takeIf { it != SYSTEM_DEFAULT && it != "system" }
-                            ?: effectiveAppLocale.country.takeIf { it in CountryCodeToName }
-                            ?: systemLocale.country.takeIf { it in CountryCodeToName }
-                            ?: "US",
-                        hl = contentLanguage?.takeIf { it != SYSTEM_DEFAULT && it != "system" }
-                            ?: effectiveAppLocale.toLanguageTag().takeIf { it in LanguageCodeToName }
-                            ?: effectiveAppLocale.language.takeIf { it in LanguageCodeToName }
-                            ?: "en"
-                    )
+                    val previousGl = YouTube.locale.gl
+                    val newGl = contentCountry?.takeIf { it != SYSTEM_DEFAULT && it != "system" }
+                        ?: effectiveAppLocale.country.takeIf { it in CountryCodeToName }
+                        ?: systemLocale.country.takeIf { it in CountryCodeToName }
+                        ?: "US"
+                    val newHl = contentLanguage?.takeIf { it != SYSTEM_DEFAULT && it != "system" }
+                        ?: effectiveAppLocale.toLanguageTag().takeIf { it in LanguageCodeToName }
+                        ?: effectiveAppLocale.language.takeIf { it in LanguageCodeToName }
+                        ?: "en"
+
+                    YouTube.locale = YouTubeLocale(gl = newGl, hl = newHl)
+
+                    // Si cambia el país, se renueva visitorData para que los resultados sean los de ese país
+                    if (previousGl != newGl) {
+                        YouTube.refreshVisitorData().onSuccess { newVisitorData ->
+                            dataStore.edit { prefs ->
+                                prefs[VisitorDataKey] = newVisitorData
+                            }
+                        }
+                    }
                 }
         }
 
@@ -321,6 +352,9 @@ class App : Application(), SingletonImageLoader.Factory {
     companion object {
         lateinit var context: Context
             private set
+
+        val applicationScope: CoroutineScope
+            get() = (context as App).applicationScope
 
         suspend fun forgetAccount(context: Context) {
             Timber.d("forgetAccount: Starting logout process")

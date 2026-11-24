@@ -855,8 +855,9 @@ class SyncUtils @Inject constructor(
                         return@onSuccess
                     }
 
+                    val localSongs = database.playlistSongs(playlistId).first()
                     val remoteIds = songs.map { it.id }
-                    val localIds = database.playlistSongs(playlistId).first()
+                    val localIds = localSongs
                         .sortedBy { it.map.position }
                         .map { it.song.id }
 
@@ -865,6 +866,14 @@ class SyncUtils @Inject constructor(
                         return@onSuccess
                     }
 
+                    // Canciones locales que aún no están en YouTube: se conservan al final
+                    val remoteIdSet = remoteIds.toSet()
+                    val missingFromRemote = localSongs
+                        .sortedBy { it.map.position }
+                        .filter { it.song.id !in remoteIdSet }
+                    if (missingFromRemote.isNotEmpty()) {
+                        Timber.w("syncPlaylist: ${missingFromRemote.size} local song(s) missing from remote, keeping them at end of playlist")
+                    }
                     Timber.d("syncPlaylist: Updating local playlist (remote: ${remoteIds.size}, local: ${localIds.size})")
 
                     database.withTransaction {
@@ -879,6 +888,16 @@ class SyncUtils @Inject constructor(
                                     playlistId = playlistId,
                                     position = idx,
                                     setVideoId = song.setVideoId
+                                )
+                            )
+                        }
+                        missingFromRemote.forEachIndexed { idx, localSong ->
+                            database.insert(
+                                PlaylistSongMap(
+                                    songId = localSong.song.id,
+                                    playlistId = playlistId,
+                                    position = songs.size + idx,
+                                    setVideoId = localSong.map.setVideoId
                                 )
                             )
                         }

@@ -509,9 +509,15 @@ object LyricsUtils {
                 val nextFractionPart = if (nextMatch.groupValues[3].length == 3) nextFraction / 1000.0 else nextFraction / 100.0
                 nextMinutes * 60.0 + nextSeconds + nextFractionPart
             } else {
-                // For last word, try to get next line's start time or add a default duration
+                // Última palabra SIN marca de cierre de línea (con marca, el cierre ya se toma arriba).
+                // Si la línea siguiente empieza pronto, la palabra dura hasta ella; si hay un hueco
+                // largo, dura solo lo que pide su largo, para que la pausa se vea como pausa.
                 val nextLineTime = getNextLineStartTime(currentIndex, allLines)
-                nextLineTime ?: (startTimeSeconds + 0.5) // Default 500ms duration for last word
+                if (nextLineTime != null && (nextLineTime - startTimeSeconds) < 4.0) {
+                    nextLineTime
+                } else {
+                    startTimeSeconds + (wordText.length * 0.15).coerceIn(0.6, 2.5)
+                }
             }
             
             if (wordText.isNotBlank()) {

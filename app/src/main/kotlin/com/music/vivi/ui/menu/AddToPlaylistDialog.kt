@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.music.innertube.YouTube
+import com.music.vivi.App
 import com.music.innertube.utils.parseCookieString
 import com.music.vivi.LocalDatabase
 import com.music.vivi.R
@@ -60,6 +61,19 @@ import com.music.vivi.utils.rememberPreference
 import com.music.vivi.viewmodels.PlaylistsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
+/**
+ * Envía las canciones a la playlist de YouTube en un proceso de la app,
+ * para que el envío no se corte si el diálogo se cierra.
+ */
+private fun syncSongsToYouTube(browseId: String, songIds: List<String>) {
+    if (songIds.isEmpty()) return
+    App.applicationScope.launch(Dispatchers.IO) {
+        songIds.forEach { songId ->
+            YouTube.addToPlaylist(browseId, songId)
+        }
+    }
+}
 
 @Composable
 fun AddToPlaylistDialog(
@@ -238,9 +252,7 @@ fun AddToPlaylistDialog(
                                 database.addSongToPlaylist(playlist, songIds!!)
 
                                 playlist.playlist.browseId?.let { plist ->
-                                    songIds?.forEach {
-                                        YouTube.addToPlaylist(plist, it)
-                                    }
+                                    syncSongsToYouTube(plist, songIds!!.toList())
                                 }
                             }
                         }
@@ -267,13 +279,12 @@ fun AddToPlaylistDialog(
                         onClick = {
                             showDuplicateDialog = false
                             onDismiss()
+                            val filteredIds = songIds!!.filter { !duplicates.contains(it) }
                             database.transaction {
-                                addSongToPlaylist(
-                                    selectedPlaylist!!,
-                                    songIds!!.filter {
-                                        !duplicates.contains(it)
-                                    }
-                                )
+                                addSongToPlaylist(selectedPlaylist!!, filteredIds)
+                            }
+                            selectedPlaylist?.playlist?.browseId?.let { plist ->
+                                syncSongsToYouTube(plist, filteredIds)
                             }
                         }
                     ) {
@@ -284,8 +295,12 @@ fun AddToPlaylistDialog(
                         onClick = {
                             showDuplicateDialog = false
                             onDismiss()
+                            val idsToSync = songIds!!.toList()
                             database.transaction {
-                                addSongToPlaylist(selectedPlaylist!!, songIds!!)
+                                addSongToPlaylist(selectedPlaylist!!, idsToSync)
+                            }
+                            selectedPlaylist?.playlist?.browseId?.let { plist ->
+                                syncSongsToYouTube(plist, idsToSync)
                             }
                         }
                     ) {
