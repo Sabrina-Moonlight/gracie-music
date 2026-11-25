@@ -14,7 +14,6 @@ import com.music.vivi.constants.MixSortDescendingKey
 import com.music.vivi.constants.MixSortType
 import com.music.vivi.constants.MixSortTypeKey
 import com.music.vivi.constants.PlaylistSortType
-import com.music.vivi.constants.SongSortType
 import com.music.vivi.db.MusicDatabase
 import com.music.vivi.db.entities.Album
 import com.music.vivi.db.entities.Artist
@@ -88,14 +87,6 @@ constructor(
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     val debouncedSearchQuery = searchQuery.debounce { if (it.isEmpty()) 0L else 250L }
 
-    val recentLikedThumbnails = database.likedSongs(SongSortType.CREATE_DATE, true)
-        .map { songs -> songs.take(3).mapNotNull { it.thumbnailUrl } }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    val recentDownloadedThumbnails = database.downloadedSongs(SongSortType.CREATE_DATE, true)
-        .map { songs -> songs.take(3).mapNotNull { it.thumbnailUrl } }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
     var artists =
         database
             .artistsBookmarked(
@@ -109,22 +100,6 @@ constructor(
         .flatMapLatest { hideExplicit ->
             database.albumsLiked(AlbumSortType.CREATE_DATE, true).map { it.filterExplicitAlbums(hideExplicit) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-    val recentAlbumsThumbnails = context.dataStore.data
-        .map { it[HideExplicitKey] ?: false }
-        .distinctUntilChanged()
-        .flatMapLatest { hideExplicit ->
-            database.albumsLiked(AlbumSortType.CREATE_DATE, true)
-                .map { albums ->
-                    albums.filter { !hideExplicit || it.album.explicit != true }.take(3).mapNotNull { it.album.thumbnailUrl }
-                }
-        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    val recentArtistsThumbnails = database.artistsBookmarked(ArtistSortType.CREATE_DATE, true)
-        .map { artists ->
-            artists.take(3).mapNotNull { it.artist.thumbnailUrl }
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val playlists = database.playlists(PlaylistSortType.CREATE_DATE, true)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

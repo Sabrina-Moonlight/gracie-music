@@ -10,12 +10,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.innertube.YouTube
-import com.music.innertube.models.AlbumItem
-import com.music.innertube.models.Artist
-import com.music.innertube.models.ArtistItem
 import com.music.innertube.models.PlaylistItem
-import com.music.innertube.models.SongItem
-import kotlinx.coroutines.flow.combine
 import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.models.BrowseEndpoint
 import com.music.innertube.models.YTItem
@@ -37,7 +32,6 @@ import com.music.vivi.db.MusicDatabase
 import com.music.vivi.db.entities.Album
 import com.music.vivi.db.entities.LocalItem
 import com.music.vivi.db.entities.Song
-import com.music.vivi.db.entities.SpeedDialItem
 import com.music.vivi.extensions.filterVideoSongs
 import com.music.vivi.extensions.toEnum
 import com.music.vivi.models.SimilarRecommendation
@@ -102,79 +96,6 @@ class HomeViewModel @Inject constructor(
     val allLocalItems = MutableStateFlow<List<LocalItem>>(emptyList())
     val allYtItems = MutableStateFlow<List<YTItem>>(emptyList())
 
-    val speedDialItems: StateFlow<List<YTItem>> =
-        combine(
-            database.speedDialDao.getAll(),
-            keepListening,
-            quickPicks
-        ) { pinned, keepListening, quick ->
-            val pinnedItems = pinned.map { it.toYTItem() }
-            val filled = pinnedItems.toMutableList()
-            val targetSize = 27
-
-            if (filled.size < targetSize) {
-                // Keep Listening (History/Heavy Rotation)
-                keepListening?.let { k ->
-                    val needed = targetSize - filled.size
-                    val available = k.filter { item ->
-                        filled.none { p -> p.id == item.id }
-                    }.mapNotNull { item ->
-                        when (item) {
-                            is Song -> SongItem(
-                                id = item.id,
-                                title = item.title,
-                                artists = item.artists.map { Artist(name = it.name, id = it.id) },
-                                thumbnail = item.thumbnailUrl ?: "",
-                                explicit = false
-                            )
-                            is Album -> AlbumItem(
-                                browseId = item.id,
-                                playlistId = item.album.playlistId ?: "",
-                                title = item.title,
-                                artists = item.artists.map { Artist(name = it.name, id = it.id) },
-                                year = item.album.year,
-                                thumbnail = item.thumbnailUrl ?: ""
-                            )
-                            is com.music.vivi.db.entities.Artist -> ArtistItem(
-                                id = item.id,
-                                title = item.title,
-                                thumbnail = item.thumbnailUrl,
-                                shuffleEndpoint = null,
-                                radioEndpoint = null
-                            )
-                            else -> null
-                        }
-                    }
-                    filled.addAll(available.take(needed))
-                }
-            }
-
-            if (filled.size < targetSize) {
-                // Quick Picks
-                quick?.let { q ->
-                    val needed = targetSize - filled.size
-                    val available = q.filter { song ->
-                        filled.none { p -> p.id == song.id }
-                    }.map { song ->
-                        SongItem(
-                            id = song.id,
-                            title = song.title,
-                            artists = song.artists.map { Artist(name = it.name, id = it.id) },
-                            thumbnail = song.thumbnailUrl ?: "",
-                            explicit = false
-                        )
-                    }
-                    filled.addAll(available.take(needed))
-                }
-            }
-
-            filled.take(targetSize)
-        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    val pinnedSpeedDialItems: StateFlow<List<SpeedDialItem>> =
-        database.speedDialDao.getAll()
-            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
     val accountName = MutableStateFlow("Guest")
     val accountImageUrl = MutableStateFlow<String?>(null)
 
@@ -184,10 +105,6 @@ class HomeViewModel @Inject constructor(
         val isBeforeDate = LocalDate.now().isBefore(LocalDate.of(2026, 2, 1))
 
         isBeforeDate && (!seen || showWrappedPref)
-    }.stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    val wrappedSeen: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[WrappedSeenKey] ?: false
     }.stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun markWrappedAsSeen() {

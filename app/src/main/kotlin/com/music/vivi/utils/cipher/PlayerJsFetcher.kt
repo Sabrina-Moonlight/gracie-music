@@ -72,18 +72,6 @@ object PlayerJsFetcher {
         }
     }
 
-    fun invalidateCache() {
-        try {
-            val cacheDir = getCacheDir()
-            if (cacheDir.exists()) {
-                cacheDir.listFiles()?.forEach { it.delete() }
-            }
-            Timber.tag(TAG).d("Cache invalidated")
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to invalidate cache: ${e.message}")
-        }
-    }
-
     private fun readFromCache(): Pair<String, String>? {
         try {
             val hashFile = getHashFile()

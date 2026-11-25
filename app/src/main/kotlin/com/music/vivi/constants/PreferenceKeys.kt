@@ -148,7 +148,6 @@ val SponsorBlockSkipIntroOutroKey = booleanPreferencesKey("sponsorBlockSkipIntro
 val SponsorBlockSkipPreviewFillerKey = booleanPreferencesKey("sponsorBlockSkipPreviewFiller")
 val SponsorBlockShowToastKey = booleanPreferencesKey("sponsorBlockShowToast")
 
-val CipherLastUpdatedKey = longPreferencesKey("cipher_last_updated")
 
 val AutoBackupEnabledKey = booleanPreferencesKey("autoBackupEnabled")
 val AutoBackupWeeklyKey = booleanPreferencesKey("autoBackupWeekly")
