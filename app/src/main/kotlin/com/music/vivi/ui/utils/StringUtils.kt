@@ -5,7 +5,6 @@
 
 package com.music.vivi.ui.utils
 
-import java.text.DecimalFormat
 import kotlin.math.absoluteValue
 
 fun formatFileSize(sizeBytes: Long): String {
@@ -34,8 +33,3 @@ fun formatFileSize(sizeBytes: Long): String {
     }
     return "$prefix$result $suffix"
 }
-
-fun numberFormatter(n: Int) =
-    DecimalFormat("#,###")
-        .format(n)
-        .replace(",", ".")

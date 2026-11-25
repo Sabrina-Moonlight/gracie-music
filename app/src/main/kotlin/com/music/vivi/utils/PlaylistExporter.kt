@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
-import com.music.innertube.models.SongItem
 import com.music.vivi.db.entities.PlaylistSong
 import java.io.File
 import java.io.FileWriter
@@ -85,70 +84,6 @@ object PlaylistExporter {
             Result.failure(e)
         }
 }
-
-fun exportYouTubePlaylistAsCSV(
-    context: Context,
-    playlistName: String,
-    songs: List<SongItem>,
-): Result<File> =
-    try {
-        val csvContent =
-            buildString {
-                // Add CSV header
-                append("Title,Artist,Album,YouTube Video ID\n")
-
-                // Add each song as a CSV row
-                songs.forEach { songItem ->
-                    append("\"${songItem.title.replace("\"", "\"\"")}\"")
-                    append(",")
-                    append("\"${songItem.artists.joinToString("; ") { it.name.replace("\"", "\"\"") }}\"")
-                    append(",")
-                    append("\"${songItem.album?.name?.replace("\"", "\"\"") ?: ""}\"")
-                    append(",")
-                    append("${songItem.id}")
-                    append("\n")
-                }
-            }
-
-        // Save to file
-        val file = createExportFile(context, "$playlistName.csv")
-        FileWriter(file).use { it.write(csvContent) }
-
-        Result.success(file)
-    } catch (e: IOException) {
-        Result.failure(e)
-    }
-
-fun exportYouTubePlaylistAsM3U(
-    context: Context,
-    playlistName: String,
-    songs: List<SongItem>,
-): Result<File> =
-    try {
-        val m3uContent =
-            buildString {
-                // Add M3U header
-                append("#EXTM3U\n")
-
-                // Add each song as M3U entry
-                songs.forEach { songItem ->
-                    append("#EXTINF:${songItem.duration},")
-                    append("${songItem.artists.joinToString(" - ") { it.name }} - ${songItem.title}")
-                    append("\n")
-                    // For M3U, we would typically include a URL, but since we don't have direct URLs,
-                    // we'll use a placeholder that indicates this is a YouTube Music track
-                    append("#YTM:${songItem.id}\n")
-                }
-            }
-
-        // Save to file
-        val file = createExportFile(context, "$playlistName.m3u")
-        FileWriter(file).use { it.write(m3uContent) }
-
-        Result.success(file)
-    } catch (e: IOException) {
-        Result.failure(e)
-    }
 
 private fun createExportFile(
     context: Context,

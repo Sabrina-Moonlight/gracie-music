@@ -26,11 +26,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -147,10 +144,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.delay
 
-
-data class OnboardingPageInfo(
-    val content: @Composable (onUpdateScrollState: (Boolean) -> Unit) -> Unit
-)
 
 class WelcomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -358,118 +351,6 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
 }
 
 @Composable
-fun BlobClusterLoading(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "blobClusterRotation")
-    
-    val rotation1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(25000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation1"
-    )
-    val rotation2 by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(30000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation2"
-    )
-    val rotation3 by infiniteTransition.animateFloat(
-        initialValue = 180f,
-        targetValue = 540f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation3"
-    )
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        // Blob 1 (large, primary)
-        Icon(
-            painter = painterResource(id = com.music.vivi.R.drawable.ic_ten_sided_cookie),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier
-                .size(140.dp)
-                .rotate(rotation1)
-        )
-        // Blob 2 (medium, secondary, offset)
-        Icon(
-            painter = painterResource(id = com.music.vivi.R.drawable.ic_ten_sided_cookie),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier
-                .size(100.dp)
-                .rotate(rotation2)
-                .align(Alignment.TopStart)
-                .padding(top = 16.dp, start = 16.dp)
-        )
-        // Blob 3 (small, tertiary, offset)
-        Icon(
-            painter = painterResource(id = com.music.vivi.R.drawable.ic_ten_sided_cookie),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.tertiaryContainer,
-            modifier = Modifier
-                .size(80.dp)
-                .rotate(rotation3)
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 8.dp, end = 8.dp)
-        )
-    }
-}
-
-@Composable
-fun RotatingShapeContainer(modifier: Modifier = Modifier, rotate: Boolean = true) {
-    val rotation = if (rotate) {
-        val infiniteTransition = rememberInfiniteTransition(label = "shapeRotation")
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(20000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "rotation"
-        ).value
-    } else {
-        0f
-    }
-
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val backgroundColor = MaterialTheme.colorScheme.background
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            painter = painterResource(id = com.music.vivi.R.drawable.ic_ten_sided_cookie),
-            contentDescription = null,
-            tint = primaryColor,
-            modifier = Modifier
-                .fillMaxSize()
-                .rotate(rotation)
-        )
-
-        Icon(
-            painter = painterResource(com.music.vivi.R.mipmap.ic_launcher_monochrome),
-            contentDescription = null,
-            modifier = Modifier.size(220.dp),
-            tint = backgroundColor
-        )
-    }
-}
-
-@Composable
 fun PermissionCard(
     icon: Painter,
     iconColor: Color,
@@ -569,59 +450,6 @@ fun PermissionCard(
                 }
             },
             trailingContent = control,
-            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
-        )
-    }
-}
-
-@Composable
-fun FeatureCard(
-    icon: Painter,
-    iconColor: Color,
-    iconTint: Color,
-    title: String,
-    description: String,
-    shape: Shape
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape),
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        ListItem(
-            headlineContent = {
-                Text(
-                    text = title,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = GoogleSansFlex
-                )
-            },
-            supportingContent = {
-                Text(
-                    text = description,
-                    fontFamily = GoogleSansFlex,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            leadingContent = {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = iconColor,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            painter = icon,
-                            contentDescription = null,
-                            tint = iconTint,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            },
             colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
         )
     }

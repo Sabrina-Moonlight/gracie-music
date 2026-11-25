@@ -230,10 +230,6 @@ class SyncUtils @Inject constructor(
         }
     }
 
-    fun runAllSyncs() {
-        performFullSync()
-    }
-
     /**
      * Force-sync all library categories IN PARALLEL, bypassing the 30-min auto-sync cooldown.
      * Unlike performFullSync() which sequences every operation, this launches all 5 categories
@@ -337,24 +333,6 @@ class SyncUtils @Inject constructor(
         }
     }
 
-    fun syncAllAlbums() {
-        syncScope.launch {
-            syncChannel.send(SyncOperation.LikedAlbums)
-        }
-    }
-
-    fun syncAllArtists() {
-        syncScope.launch {
-            syncChannel.send(SyncOperation.ArtistsSubscriptions)
-        }
-    }
-
-    fun cleanupDuplicatePlaylists() {
-        syncScope.launch {
-            syncChannel.send(SyncOperation.CleanupDuplicates)
-        }
-    }
-
     fun clearAllSyncedContent() {
         syncScope.launch {
             syncChannel.send(SyncOperation.ClearAllSynced)
@@ -364,21 +342,9 @@ class SyncUtils @Inject constructor(
     // Suspend versions for direct calls
 
     suspend fun syncLikedSongsSuspend() = executeSyncLikedSongs()
-    suspend fun syncLibrarySongsSuspend() = executeSyncLibrarySongs()
     suspend fun syncLikedAlbumsSuspend() = executeSyncLikedAlbums()
     suspend fun syncArtistsSubscriptionsSuspend() = executeSyncArtistsSubscriptions()
     suspend fun syncSavedPlaylistsSuspend() = executeSyncSavedPlaylists()
-    suspend fun syncAutoSyncPlaylistsSuspend() = executeSyncAutoSyncPlaylists()
-    suspend fun cleanupDuplicatePlaylistsSuspend() = executeCleanupDuplicatePlaylists()
-    suspend fun clearAllSyncedContentSuspend() = executeClearAllSyncedContent()
-
-    suspend fun syncAllAlbumsSuspend() {
-        executeSyncLikedAlbums()
-    }
-
-    suspend fun syncAllArtistsSuspend() {
-        executeSyncArtistsSubscriptions()
-    }
 
     suspend fun updateLastSyncTime() {
         context.dataStore.edit { settings ->
@@ -1011,11 +977,5 @@ class SyncUtils @Inject constructor(
             Timber.e(e, "clearAllSyncedContent: Error during cleanup")
             updateState { copy(overallStatus = SyncStatus.Error(e.message ?: "Unknown error"), currentOperation = "") }
         }
-    }
-
-    fun cancelAllSyncs() {
-        processingJob?.cancel()
-        startProcessingQueue()
-        updateState { SyncState() }
     }
 }
