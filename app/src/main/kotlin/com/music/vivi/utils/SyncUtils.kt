@@ -23,7 +23,6 @@ import com.music.vivi.db.entities.ArtistEntity
 import com.music.vivi.db.entities.PlaylistEntity
 import com.music.vivi.db.entities.PlaylistSongMap
 import com.music.vivi.db.entities.SongEntity
-import com.music.vivi.extensions.collectLatest
 import com.music.vivi.extensions.isInternetConnected
 import com.music.vivi.extensions.isSyncEnabled
 import com.music.vivi.models.toMediaMetadata
@@ -42,7 +41,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -50,7 +48,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDateTime
-import java.time.ZoneOffset
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -64,7 +61,6 @@ sealed class SyncOperation {
     data object AutoSyncPlaylists : SyncOperation()
     data class SinglePlaylist(val browseId: String, val playlistId: String) : SyncOperation()
     data class LikeSong(val song: SongEntity) : SyncOperation()
-    data object CleanupDuplicates : SyncOperation()
     data object ClearAllSynced : SyncOperation()
 }
 
@@ -145,7 +141,6 @@ class SyncUtils @Inject constructor(
             is SyncOperation.AutoSyncPlaylists -> executeSyncAutoSyncPlaylists()
             is SyncOperation.SinglePlaylist -> executeSyncPlaylist(operation.browseId, operation.playlistId)
             is SyncOperation.LikeSong -> executeLikeSong(operation.song)
-            is SyncOperation.CleanupDuplicates -> executeCleanupDuplicatePlaylists()
             is SyncOperation.ClearAllSynced -> executeClearAllSyncedContent()
         }
     }
@@ -888,35 +883,6 @@ class SyncUtils @Inject constructor(
             }
         }.onFailure { e ->
             Timber.e(e, "syncPlaylist: Failed after retries")
-        }
-    }
-
-    private suspend fun executeCleanupDuplicatePlaylists() = withContext(Dispatchers.IO) {
-        try {
-            val allPlaylists = database.playlistsByNameAsc().first()
-            val browseIdGroups = allPlaylists
-                .filter { it.playlist.browseId != null }
-                .groupBy { it.playlist.browseId }
-
-            for ((browseId, playlists) in browseIdGroups) {
-                if (playlists.size > 1) {
-                    Timber.w("Found ${playlists.size} duplicate playlists for browseId: $browseId")
-                    val toKeep = playlists.maxByOrNull { it.songCount } ?: playlists.first()
-
-                    playlists.filter { it.id != toKeep.id }.forEach { duplicate ->
-                        try {
-                            Timber.d("Removing duplicate playlist: ${duplicate.playlist.name} (${duplicate.id})")
-                            database.clearPlaylist(duplicate.id)
-                            database.delete(duplicate.playlist)
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to remove duplicate playlist: ${duplicate.id}")
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Error cleaning up duplicate playlists")
         }
     }
 

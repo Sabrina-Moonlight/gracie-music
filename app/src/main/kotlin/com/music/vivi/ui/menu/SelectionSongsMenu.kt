@@ -38,7 +38,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -64,7 +63,6 @@ import com.music.vivi.ui.component.NewAction
 import com.music.vivi.ui.component.NewActionGrid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 
@@ -552,10 +550,8 @@ fun SelectionMediaMetadataMenu(
         isVisible = showChoosePlaylistDialog,
         onGetSong = {
             songSelection.map {
-                runBlocking {
-                    withContext(Dispatchers.IO) {
-                        database.insert(it)
-                    }
+                withContext(Dispatchers.IO) {
+                    database.insert(it)
                 }
                 it.id
             }

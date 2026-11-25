@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.plus
 import javax.inject.Inject
+import timber.log.Timber
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class MediaLibrarySessionCallback
@@ -412,6 +413,7 @@ constructor(
                         try {
                             database.query { insert(songItem.toMediaMetadata()) }
                         } catch (e: Exception) {
+                            Timber.w(e, "No se pudo guardar un resultado de búsqueda")
                         }
                         
                         searchResults.add(songItem.toMediaItem("${MusicService.SEARCH}/$query"))
@@ -604,6 +606,7 @@ constructor(
                                     searchResults.add(newSong)
                                 }
                             } catch (e: Exception) {
+                                Timber.w(e, "No se pudo guardar un resultado de búsqueda")
                             }
                         }
                     } catch (e: Exception) {

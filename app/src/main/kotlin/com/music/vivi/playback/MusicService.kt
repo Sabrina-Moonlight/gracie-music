@@ -13,11 +13,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.database.SQLException
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -108,7 +106,6 @@ import com.music.vivi.constants.CrossfadeGaplessKey
 import com.music.vivi.constants.CrossfadeManualSkipKey
 import com.music.vivi.constants.DisableLoadMoreWhenRepeatAllKey
 import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import com.music.vivi.constants.HideExplicitKey
 import com.music.vivi.constants.HideVideoSongsKey
@@ -149,7 +146,6 @@ import com.music.vivi.constants.SponsorBlockSkipIntroOutroKey
 import com.music.vivi.constants.SponsorBlockSkipPreviewFillerKey
 import com.music.vivi.constants.SponsorBlockShowToastKey
 import com.music.vivi.sponsorblock.SponsorBlockApi
-import com.music.vivi.sponsorblock.SponsorSegment
 import com.music.vivi.constants.IpVersionKey
 import com.music.innertube.models.IpVersion
 import okhttp3.Dns
@@ -3710,6 +3706,11 @@ class MusicService :
             database.query {
                 incrementTotalPlayTime(mediaItem.mediaId, playbackStats.totalPlayTimeMs)
                 try {
+                    incrementPlayCount(mediaItem.mediaId)
+                } catch (e: Exception) {
+                    Timber.tag(TAG).w(e, "No se pudo subir el conteo de reproducciones")
+                }
+                try {
                     insert(
                         Event(
                             songId = mediaItem.mediaId,
@@ -3717,7 +3718,8 @@ class MusicService :
                             playTime = playbackStats.totalPlayTimeMs,
                         ),
                     )
-                } catch (_: SQLException) {
+                } catch (e: SQLException) {
+                    Timber.tag(TAG).w(e, "No se pudo guardar el evento de reproducción")
                 }
             }
         }
@@ -4548,7 +4550,9 @@ class MusicService :
             player.pauseAtEndOfMediaItems = false
             player.playWhenReady = true
             player.play()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "finalizeCrossfadeSwap: no se pudo reanudar la reproducción")
+        }
 
         // Emit new player FIRST so PlayerConnection attaches to newPlayer before oldPlayer is cleared
         _playerFlow.value = null
